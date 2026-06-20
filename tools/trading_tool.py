@@ -184,7 +184,7 @@ def set_risk_params(
         cfg["max_open_positions"] = int(max_open_positions)
         changes.append(f"max positions -> {max_open_positions}")
     if not changes:
-        return "No parameters provided -- nothing changed."
+        return "No parameters provided — nothing changed."
     _save_config(cfg)
     return "Risk params updated: " + ", ".join(changes)
 
