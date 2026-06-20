@@ -1,0 +1,94 @@
+# Core AI
+anthropic>=0.109.1
+
+# Speech-to-text — three backends, best available is used automatically
+# NOTE: Install AFTER torch to get CPU-only build
+openai-whisper>=20250625       # always installed; fallback of last resort
+faster-whisper>=1.1.0          # local 4–6× speed boost; preferred over openai-whisper
+groq>=0.18.0                   # cloud Whisper API (< 1 s); set GROQ_API_KEY in .env to enable
+
+# Text-to-speech
+edge-tts>=7.2.8
+
+# UI
+PyQt6>=6.11.0
+
+# System tray
+pystray>=0.19.5
+pillow>=10.0.0
+
+# Audio capture
+sounddevice>=0.5.5
+
+# Audio playback — pygame has NO wheel for Python 3.14; pygame-ce is the maintained fork
+# with identical API (same `import pygame` name)
+pygame-ce>=2.5.7
+
+# Global hotkey
+keyboard>=0.13.5
+
+# Vector memory
+chromadb>=1.5.9
+sentence-transformers>=5.5.1
+
+# Env config
+python-dotenv>=1.2.2
+
+# numpy (pulled in by whisper + sounddevice, pinned for CPU torch compat)
+numpy>=1.24.0,<3.0.0
+
+# Phase 2A deps
+duckduckgo-search>=6.0.0
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+pyperclip>=1.9.0
+winotify>=1.1.0
+
+# Phase 2B deps
+mss>=9.0.1
+pytesseract>=0.3.13
+
+# Phase 2D deps
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.0.0
+tzdata>=2024.1
+
+# Phase 3A deps — wake word detection
+# NOTE: pyaudio has no Python 3.14 wheel; sounddevice (already listed above) is used instead
+openwakeword>=0.6.0
+onnxruntime>=1.16.0
+
+# Phase 3B deps — document intelligence (PDF, Word, Excel)
+pymupdf>=1.24.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+
+# Phase 3D deps — Spotify control
+spotipy>=2.23.0
+
+# Phase 4B deps — Notion integration
+notion-client>=2.2.1
+
+# Phase 4C deps — Todoist task manager
+todoist-api-python>=2.1.7
+
+# Phase 5B deps — YouTube transcript
+youtube-transcript-api>=0.6.0
+
+# Phase 6B deps — News reader
+feedparser>=6.0.11
+
+# Phase 6D deps — AI image generation (DALL-E 3)
+openai>=1.0.0
+
+# Phase 6G deps — Smart home (TP-Link Kasa)
+python-kasa>=0.7.0
+
+# Phase 6 deps
+psutil>=5.9.0      # battery status, process manager
+pycaw>=20230710    # Windows system volume control
+
+# Phase 7A — Proactive Scheduler
+apscheduler>=3.10.0
