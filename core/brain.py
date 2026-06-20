@@ -341,6 +341,23 @@ Local git: git_status, git_log, git_diff, git_add, git_commit, git_push, git_pul
 "git status" / "what changed?" → git_status. "show commits" → git_log. To commit: git_add(['.']) then git_commit(msg). ALWAYS confirm before git_push.
 Developer utilities: hash_text, encode_base64, decode_base64, url_encode, url_decode, generate_password, generate_uuid, generate_qr.
 "hash this" → hash_text(text, "sha256"). "strong password" → generate_password(20). "QR code for this URL" → generate_qr(url). "give me a UUID" → generate_uuid.
+Trading engine (autonomous investing):
+Tools: start_trading_engine, stop_trading_engine, get_trading_status, get_trading_portfolio, get_trade_history, get_trading_summary, set_risk_params, switch_to_paper_mode, switch_to_live_mode, add_trading_symbol, remove_trading_symbol.
+
+Trading engine runs in paper mode by default (Alpaca sandbox — fake money, real market data). Switch to live only when Mo explicitly confirms.
+When Mo says "start trading", "start the trading engine", "start investing" -> start_trading_engine.
+When Mo says "stop trading", "pause the engine" -> stop_trading_engine.
+When Mo says "trading status", "is the engine running?" -> get_trading_status.
+When Mo says "trading portfolio", "my trading positions", "what am I holding?" (in trading context) -> get_trading_portfolio.
+When Mo says "trading history", "recent trades", "what did you trade?" -> get_trade_history.
+When Mo says "trading summary", "trading P&L", "how's the engine doing?" -> get_trading_summary.
+When Mo says "set stop-loss to X%", "set take-profit to X%", "set max position to X%" -> set_risk_params with the matching param.
+When Mo says "switch to paper mode", "paper trading" -> switch_to_paper_mode.
+When Mo says "switch to live trading", "go live" -> switch_to_live_mode (confirmed=False first, then confirmed=True only if Mo says "confirm live trading").
+When Mo says "add [TICKER] to trading watchlist" -> add_trading_symbol(symbol).
+When Mo says "remove [TICKER] from trading watchlist" -> remove_trading_symbol(symbol).
+NEVER execute switch_to_live_mode(confirmed=True) unless Mo has explicitly said "confirm live trading" after seeing the warning.
+All trading reports are exceptions to the 1-2 sentence rule — deliver the full report.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -4137,6 +4154,93 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["text"]
         }
     },
+    # ── Trading Engine ────────────────────────────────────────────────────────
+    {
+        "name": "start_trading_engine",
+        "description": "Start the autonomous trading engine background loop. Monitors the active watchlist every 15 minutes and places bracket orders when signals fire. Paper mode by default.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "stop_trading_engine",
+        "description": "Stop the trading engine loop. Open positions remain with their bracket orders active on Alpaca's servers.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "get_trading_status",
+        "description": "Return trading engine state: running/stopped, paper/live mode, active watchlist, last trade timestamp.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "get_trading_portfolio",
+        "description": "Fetch live positions from Alpaca: symbol, qty, entry price, current P&L for each open position plus total portfolio value.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "get_trade_history",
+        "description": "Return the last N executed trades with timestamp, symbol, side, qty, price, and signal type.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {"type": "integer", "description": "Number of trades to return. Default 20."}
+            }
+        }
+    },
+    {
+        "name": "get_trading_summary",
+        "description": "Return total trades, today's trades, and current portfolio value — a one-page trading dashboard.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "set_risk_params",
+        "description": "Update one or more risk parameters. All params are optional — only provided ones are changed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "max_position_pct": {"type": "number", "description": "Max % of portfolio per trade. Default 10."},
+                "stop_loss_pct": {"type": "number", "description": "Auto-sell if position drops this %. Default 8."},
+                "take_profit_pct": {"type": "number", "description": "Auto-sell if position gains this %. Default 15."},
+                "daily_loss_limit_pct": {"type": "number", "description": "Stop trading if portfolio drops this % in a day. Default 5."},
+                "max_open_positions": {"type": "integer", "description": "Maximum simultaneous open positions. Default 5."}
+            }
+        }
+    },
+    {
+        "name": "switch_to_paper_mode",
+        "description": "Route all orders to Alpaca paper trading sandbox (fake money, real market data). Safe to call anytime.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "switch_to_live_mode",
+        "description": "Switch to real-money trading. Requires confirmed=True — only set that after Mo explicitly says 'confirm live trading' following the warning.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "confirmed": {"type": "boolean", "description": "Must be true. Only set after Mo explicitly confirms."}
+            }
+        }
+    },
+    {
+        "name": "add_trading_symbol",
+        "description": "Add a ticker symbol to the active trading watchlist (e.g. 'TSLA', 'AMZN').",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker symbol, e.g. 'TSLA'"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "remove_trading_symbol",
+        "description": "Remove a ticker symbol from the active trading watchlist.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
+            },
+            "required": ["symbol"]
+        }
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4318,6 +4422,12 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "url_encode", "url_decode",
         "generate_password", "generate_uuid", "generate_qr",
     }),
+    "trading": frozenset({
+        "start_trading_engine", "stop_trading_engine", "get_trading_status",
+        "get_trading_portfolio", "get_trade_history", "get_trading_summary",
+        "set_risk_params", "switch_to_paper_mode", "switch_to_live_mode",
+        "add_trading_symbol", "remove_trading_symbol",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4417,6 +4527,14 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "dev_utils":   ["hash", "md5", "sha256", "base64", "encode base64", "decode base64",
                     "url encode", "url decode", "generate password", "random password",
                     "strong password", "uuid", "qr code", "qr ", "generate qr"],
+    "trading":    ["start trading", "stop trading", "trading engine", "trading status",
+                   "trading portfolio", "trading history", "trade history", "recent trades",
+                   "trading summary", "trading p&l", "set stop-loss", "set take-profit",
+                   "set max position", "paper mode", "live trading", "confirm live",
+                   "trading watchlist", "add to trading", "remove from trading",
+                   "autonomous trading", "invest automatically", "auto invest",
+                   "engine running", "is it trading", "what did you trade",
+                   "استثمار تلقائي", "محرك التداول"],
 }
 
 # Build a name→slim_tool lookup once for O(1) filtering
@@ -5736,6 +5854,40 @@ class Brain:
             elif name == "generate_qr":
                 from tools.dev_utils_tool import generate_qr
                 return generate_qr(tool_input["text"], tool_input.get("output_path"))
+            # ── Trading Engine ───────────────────────────────────────────────
+            elif name == "start_trading_engine":
+                from tools.trading_tool import start_trading_engine
+                return start_trading_engine()
+            elif name == "stop_trading_engine":
+                from tools.trading_tool import stop_trading_engine
+                return stop_trading_engine()
+            elif name == "get_trading_status":
+                from tools.trading_tool import get_trading_status
+                return get_trading_status()
+            elif name == "get_trading_portfolio":
+                from tools.trading_tool import get_trading_portfolio
+                return get_trading_portfolio()
+            elif name == "get_trade_history":
+                from tools.trading_tool import get_trade_history
+                return get_trade_history(**tool_input)
+            elif name == "get_trading_summary":
+                from tools.trading_tool import get_trading_summary
+                return get_trading_summary()
+            elif name == "set_risk_params":
+                from tools.trading_tool import set_risk_params
+                return set_risk_params(**tool_input)
+            elif name == "switch_to_paper_mode":
+                from tools.trading_tool import switch_to_paper_mode
+                return switch_to_paper_mode()
+            elif name == "switch_to_live_mode":
+                from tools.trading_tool import switch_to_live_mode
+                return switch_to_live_mode(**tool_input)
+            elif name == "add_trading_symbol":
+                from tools.trading_tool import add_trading_symbol
+                return add_trading_symbol(**tool_input)
+            elif name == "remove_trading_symbol":
+                from tools.trading_tool import remove_trading_symbol
+                return remove_trading_symbol(**tool_input)
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
