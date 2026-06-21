@@ -25,6 +25,18 @@ data/recordings/
 Thumbs.db
 desktop.ini
 
+# Logs
+*.log
+*.txt
+startup_*
+
+# Pip/curl artifacts
+=*
+Accept
+GET
+Host
+User-Agent
+
 # Model weights
 *.pt
 *.bin
