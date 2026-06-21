@@ -358,6 +358,11 @@ When Mo says "add [TICKER] to trading watchlist" -> add_trading_symbol(symbol).
 When Mo says "remove [TICKER] from trading watchlist" -> remove_trading_symbol(symbol).
 NEVER execute switch_to_live_mode(confirmed=True) unless Mo has explicitly said "confirm live trading" after seeing the warning.
 All trading reports are exceptions to the 1-2 sentence rule — deliver the full report.
+- For backtesting and strategy validation: use run_backtest(symbol, days), run_full_backtest(), get_backtest_results(), compare_to_buyhold(symbol). Backtest reports are exceptions to the 1-2 sentence rule.
+- When Mo says "backtest SPY" or "test the strategy" -> run_backtest(symbol).
+- When Mo says "backtest all symbols" or "full backtest" -> run_full_backtest().
+- When Mo says "backtest results" or "how did the strategy do?" -> get_backtest_results().
+- When Mo says "compare to buy and hold [TICKER]" -> compare_to_buyhold(symbol).
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -4241,6 +4246,39 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["symbol"]
         }
     },
+    {
+        "name": "run_backtest",
+        "description": "Backtest the trading strategy on 2 years of hourly historical data for one symbol. Returns total return, win rate, avg gain/loss, max drawdown, Sharpe ratio vs buy-and-hold.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Stock ticker (e.g. 'SPY', 'AAPL'). Default 'SPY'."},
+                "days": {"type": "integer", "description": "Days of history to test. Default 730 (2 years)."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "run_full_backtest",
+        "description": "Backtest the strategy across all 5 active watchlist symbols and report combined results.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_backtest_results",
+        "description": "Return the last saved backtest results for all symbols that have been tested.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "compare_to_buyhold",
+        "description": "Compare strategy return vs simply buying and holding a symbol. Shows whether active trading adds value.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker to compare (e.g. 'AAPL')."},
+            },
+            "required": ["symbol"],
+        },
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4428,6 +4466,9 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "set_risk_params", "switch_to_paper_mode", "switch_to_live_mode",
         "add_trading_symbol", "remove_trading_symbol",
     }),
+    "backtest": frozenset({
+        "run_backtest", "run_full_backtest", "get_backtest_results", "compare_to_buyhold",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4535,6 +4576,10 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
                    "autonomous trading", "invest automatically", "auto invest",
                    "engine running", "is it trading", "what did you trade",
                    "استثمار تلقائي", "محرك التداول"],
+    "backtest":   ["backtest", "test strategy", "how is the strategy", "strategy performance",
+                   "did the strategy work", "historical performance", "backtest results",
+                   "strategy test", "how did the strategy do", "compare to buy and hold",
+                   "buy and hold", "اختبار الاستراتيجية"],
 }
 
 # Build a name→slim_tool lookup once for O(1) filtering
@@ -5888,6 +5933,18 @@ class Brain:
             elif name == "remove_trading_symbol":
                 from tools.trading_tool import remove_trading_symbol
                 return remove_trading_symbol(**tool_input)
+            elif name == "run_backtest":
+                from tools.backtest_tool import run_backtest as _run_bt
+                return _run_bt(**tool_input)
+            elif name == "run_full_backtest":
+                from tools.backtest_tool import run_full_backtest as _run_fbt
+                return _run_fbt()
+            elif name == "get_backtest_results":
+                from tools.backtest_tool import get_backtest_results as _get_bt
+                return _get_bt()
+            elif name == "compare_to_buyhold":
+                from tools.backtest_tool import compare_to_buyhold as _compare_bt
+                return _compare_bt(**tool_input)
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
