@@ -173,6 +173,7 @@ def _fetch_bars(symbol: str, days: int, api_key: str, secret_key: str) -> list[d
     from alpaca.data.historical.stock import StockHistoricalDataClient
     from alpaca.data.requests import StockBarsRequest
     from alpaca.data.timeframe import TimeFrame
+    from alpaca.data.enums import DataFeed
 
     client = StockHistoricalDataClient(api_key, secret_key)
     end = datetime.now(timezone.utc)
@@ -182,6 +183,7 @@ def _fetch_bars(symbol: str, days: int, api_key: str, secret_key: str) -> list[d
         timeframe=TimeFrame.Hour,
         start=start,
         end=end,
+        feed=DataFeed.IEX,
     )
     try:
         bars_resp = client.get_stock_bars(req)

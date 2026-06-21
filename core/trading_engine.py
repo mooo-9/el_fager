@@ -93,11 +93,13 @@ class TradingEngine:
     def _fetch_closes(self, data_client, symbol: str) -> list[float]:
         from alpaca.data.requests import StockBarsRequest
         from alpaca.data.timeframe import TimeFrame
+        from alpaca.data.enums import DataFeed
         request = StockBarsRequest(
             symbol_or_symbols=symbol,
             timeframe=TimeFrame.Hour,
             start=datetime.now(timezone.utc) - timedelta(days=10),
             limit=100,
+            feed=DataFeed.IEX,
         )
         bars = data_client.get_stock_bars(request)
         df = bars.df
