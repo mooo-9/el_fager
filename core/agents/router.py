@@ -1,5 +1,5 @@
 # Keywords that map to each agent.
-# Priority: first match wins — order of checks in classify_intent matters.
+# Priority: first match wins -- order of checks in classify_intent matters.
 _SCREEN_KEYWORDS = [
     "click", "double click", "right click", "scroll up", "scroll down",
     "type in", "press enter", "press tab", "press escape", "drag",
@@ -19,6 +19,27 @@ _BROWSER_KEYWORDS = [
     "search on google", "search on amazon",
 ]
 
+# StocksAgent handles ANALYTICAL and AGENTIC stock tasks.
+# Checked BEFORE _STOCKS_KEYWORDS so these take priority.
+_STOCKS_AGENT_KEYWORDS = [
+    "analyze", "thesis on", "your thesis",
+    "should i buy", "should i sell", "should we buy",
+    "your view on", "your opinion on",
+    "what do you think about", "what's your take on",
+    "conviction on", "outlook for", "stock outlook",
+    "deep analysis", "deep dive",
+    "why did you buy", "why did we buy",
+    "why did you sell", "why did we sell",
+    "how are we doing trading", "my trading stats", "trading performance",
+    "scan my watchlist", "scan portfolio", "scan watchlist",
+    "pause trading", "resume trading", "unpause trading",
+    "stop auto-trade", "start auto-trade",
+    "set auto-trade threshold", "set threshold",
+    "auto-trade threshold", "auto trade threshold",
+    "explain my portfolio", "explain my trades",
+]
+
+# Instant-lane stock tools: price lookups, watchlist, alerts, market overview.
 _STOCKS_KEYWORDS = [
     "stock", "stocks", "trade", "trading", "portfolio", "ticker",
     "buy shares", "sell shares", "invest", "investing", "investment",
@@ -49,6 +70,7 @@ _FILE_KEYWORDS = [
 _LABEL_KEYWORDS = [
     ("screen", _SCREEN_KEYWORDS),
     ("browser", _BROWSER_KEYWORDS),
+    ("stocks_agent", _STOCKS_AGENT_KEYWORDS),  # checked before "stocks"
     ("stocks", _STOCKS_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),
@@ -58,17 +80,16 @@ _LABEL_KEYWORDS = [
 def classify_intent(message: str) -> str:
     """Return the agent label that should handle this message.
 
-    Returns one of: 'screen', 'browser', 'stocks', 'research', 'file', 'instant'.
-    Uses keyword matching — same approach as _select_tools in brain.py.
-    First match wins; falls back to 'instant' if nothing matches.
+    Returns one of: 'screen', 'browser', 'stocks_agent', 'stocks',
+    'research', 'file', 'instant'.
+    Uses keyword matching. First match wins.
     """
     import re
     msg = message.lower()
     for label, keywords in _LABEL_KEYWORDS:
         for kw in keywords:
-            # For short keywords (3 chars or less), use word boundaries to avoid false matches
             if len(kw) <= 3:
-                pattern = r'\b' + re.escape(kw) + r'\b'
+                pattern = r"\b" + re.escape(kw) + r"\b"
                 if re.search(pattern, msg):
                     return label
             elif kw in msg:

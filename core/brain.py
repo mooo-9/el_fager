@@ -5960,7 +5960,10 @@ class Brain:
         if intent == "browser":
             from core.agents.browser_agent import BrowserAgent
             return BrowserAgent().run(task)
-        return None  # stocks / research / file not yet implemented -- fall through
+        if intent == "stocks_agent":
+            from core.agents.stocks_agent import StocksAgent
+            return StocksAgent().run(task)
+        return None  # research / file not yet implemented -- fall through
 
     def chat(self, user_message: str, memory_context: str = "") -> str:
         # Log user turn

@@ -32,3 +32,42 @@ def test_case_insensitive():
 
 def test_stocks_ticker_only():
     assert classify_intent("How is BTC doing today?") == "stocks"
+
+
+class TestStocksAgentRouting:
+    def test_analyze_keyword_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("analyze NVDA for me") == "stocks_agent"
+
+    def test_thesis_keyword_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("what's your thesis on AAPL?") == "stocks_agent"
+
+    def test_should_i_buy_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("should I buy MSFT right now?") == "stocks_agent"
+
+    def test_why_did_you_buy_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("why did you buy NVDA?") == "stocks_agent"
+
+    def test_pause_trading_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("pause trading please") == "stocks_agent"
+
+    def test_set_threshold_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("set auto-trade threshold to 90%") == "stocks_agent"
+
+    def test_price_query_stays_instant_stocks(self):
+        from core.agents.router import classify_intent
+        result = classify_intent("what's the price of AAPL?")
+        assert result == "stocks"
+
+    def test_scan_watchlist_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("scan my watchlist") == "stocks_agent"
+
+    def test_scan_my_watchlist_routes_to_stocks_agent(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("scan my watchlist for opportunities") == "stocks_agent"
