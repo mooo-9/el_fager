@@ -1,0 +1,135 @@
+"""
+StrategyEngine -- detects market regime and weights 3 trading strategies.
+Returns a (strategy_name, confidence_modifier) pair used by StocksAgent
+to scale MarketAnalyst conviction score.
+"""
+import os
+from datetime import datetime, timedelta, timezone
+
+
+class StrategyEngine:
+    def select_strategy(self, symbol: str, closes: list[float]) -> tuple[str, float]:
+        """Return (strategy_name, modifier).
+
+        modifier 0.8-1.2 scales MarketAnalyst conviction up or down.
+        """
+        spy_closes = self._fetch_spy_closes()
+        regime = self._detect_regime(spy_closes)
+
+        momentum = self._momentum_swing_signal(closes)
+        mean_rev = self._mean_reversion_signal(closes)
+        earnings = self._earnings_momentum_signal(symbol)
+
+        if regime == "bull":
+            if momentum == "BUY":
+                return "momentum_swing", 1.2
+            if earnings == "BUY":
+                return "earnings_momentum", 1.15
+            if mean_rev == "BUY":
+                return "mean_reversion", 0.9
+        elif regime == "bear":
+            if mean_rev == "BUY":
+                return "mean_reversion", 1.1
+            if momentum == "SELL":
+                return "momentum_swing", 0.9
+        else:
+            if mean_rev == "BUY":
+                return "mean_reversion", 1.0
+            if earnings == "BUY":
+                return "earnings_momentum", 1.05
+
+        return "no_signal", 1.0
+
+    def _detect_regime(self, spy_closes: list[float]) -> str:
+        if len(spy_closes) < 20:
+            return "sideways"
+        recent = spy_closes[-20:]
+        first_half = sum(recent[:10]) / 10
+        second_half = sum(recent[10:]) / 10
+        change = (second_half - first_half) / first_half
+        if change > 0.02:
+            return "bull"
+        if change < -0.02:
+            return "bear"
+        return "sideways"
+
+    def _momentum_swing_signal(self, closes: list[float]) -> str:
+        from core.signals import rsi, macd, ema
+        rsi_result = rsi(closes)
+        rsi_val = rsi_result if rsi_result is not None else 50.0
+        macd_result = macd(closes)
+        ema20_series = ema(closes, 20)
+        ema20 = next((v for v in reversed(ema20_series) if v is not None), None)
+        price = closes[-1] if closes else 0.0
+        if (
+            rsi_val < 45
+            and macd_result
+            and macd_result.histogram > 0
+            and ema20
+            and price > ema20
+        ):
+            return "BUY"
+        if (
+            rsi_val > 55
+            and macd_result
+            and macd_result.histogram < 0
+            and ema20
+            and price < ema20
+        ):
+            return "SELL"
+        return "HOLD"
+
+    def _mean_reversion_signal(self, closes: list[float]) -> str:
+        if len(closes) < 20:
+            return "HOLD"
+        window = closes[-20:]
+        mean = sum(window) / 20
+        variance = sum((x - mean) ** 2 for x in window) / 20
+        std = variance ** 0.5
+        price = closes[-1]
+        if std == 0:
+            return "HOLD"
+        if price < mean - 1.5 * std:
+            return "BUY"
+        if price > mean + 1.5 * std:
+            return "SELL"
+        return "HOLD"
+
+    def _earnings_momentum_signal(self, symbol: str) -> str:
+        try:
+            import yfinance as yf
+            info = yf.Ticker(symbol).info
+            growth = info.get("earningsQuarterlyGrowth", None)
+            if growth is not None and growth > 0.15:
+                return "BUY"
+            if growth is not None and growth < -0.10:
+                return "SELL"
+        except Exception:
+            pass
+        return "HOLD"
+
+    def _fetch_spy_closes(self) -> list[float]:
+        try:
+            from alpaca.data.historical.stock import StockHistoricalDataClient
+            from alpaca.data.requests import StockBarsRequest
+            from alpaca.data.timeframe import TimeFrame
+            from alpaca.data.enums import DataFeed
+
+            client = StockHistoricalDataClient(
+                os.getenv("ALPACA_API_KEY", ""),
+                os.getenv("ALPACA_SECRET_KEY", ""),
+            )
+            req = StockBarsRequest(
+                symbol_or_symbols="SPY",
+                timeframe=TimeFrame.Day,
+                start=datetime.now(timezone.utc) - timedelta(days=30),
+                limit=25,
+                feed=DataFeed.IEX,
+            )
+            bars = client.get_stock_bars(req)
+            df = bars.df
+            if hasattr(df.index, "levels"):
+                df = df.loc["SPY"]
+            return df["close"].tolist()
+        except Exception:
+            return []
