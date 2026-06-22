@@ -117,12 +117,12 @@ def classify_signal(
     macd_bullish = macd_result.histogram > 0
     macd_bearish = macd_result.histogram < 0
 
-    if rsi_value < 28 and macd_bullish and price_above_ema20:
+    if rsi_value < 35 and macd_bullish and price_above_ema20:
         return SignalStrength.STRONG_BUY
-    if rsi_value > 72 and macd_bearish and price_below_ema20:
+    if rsi_value > 65 and macd_bearish and price_below_ema20:
         return SignalStrength.STRONG_SELL
-    if rsi_value < 35:
+    if rsi_value < 40:
         return SignalStrength.AMBIGUOUS_BUY
-    if rsi_value > 65:
+    if rsi_value > 60:
         return SignalStrength.AMBIGUOUS_SELL
     return SignalStrength.HOLD
