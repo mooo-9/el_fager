@@ -5950,10 +5950,30 @@ class Brain:
         except Exception as e:
             return f"Tool error ({name}): {e}"
 
+    def _try_agent_dispatch(self, task: str) -> str | None:
+        """Route complex tasks to a specialist agent. Returns None for instant-lane tasks."""
+        from core.agents.router import classify_intent
+        intent = classify_intent(task)
+        if intent == "screen":
+            from core.agents.screen_agent import ScreenAgent
+            return ScreenAgent().run(task)
+        if intent == "browser":
+            from core.agents.browser_agent import BrowserAgent
+            return BrowserAgent().run(task)
+        return None  # stocks / research / file not yet implemented -- fall through
+
     def chat(self, user_message: str, memory_context: str = "") -> str:
         # Log user turn
         if self._logger:
             self._logger.log("user", user_message)
+
+        # Agent routing — intercept complex multi-step tasks before tool loop
+        _agent_result = self._try_agent_dispatch(user_message)
+        if _agent_result is not None:
+            self.conversation_history.append({"role": "assistant", "content": _agent_result})
+            if self._logger:
+                self._logger.log("assistant", _agent_result, [])
+            return _agent_result
 
         system = SYSTEM_PROMPT
         if self.memory is not None:
