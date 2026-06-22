@@ -65,13 +65,13 @@ def test_simulate_tp_hit(monkeypatch):
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    bars[110] = _bar(114.0, 116.0, 113.0, 115.0)  # high=116 >= tp=115
+    bars[110] = _bar(114.0, 116.0, 113.0, 115.0)  # high=116 >= tp=112 (12%)
     result = bt._simulate(bars, "TEST")
     assert result.total_trades == 1
     assert result.winning_trades == 1
     assert result.losing_trades == 0
     assert result.win_rate_pct == 100.0
-    assert result.avg_gain_pct == pytest.approx(15.0, rel=0.01)
+    assert result.avg_gain_pct == pytest.approx(12.0, rel=0.01)
 
 
 def test_simulate_sl_hit(monkeypatch):
@@ -85,13 +85,13 @@ def test_simulate_sl_hit(monkeypatch):
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    bars[110] = _bar(93.0, 93.5, 91.0, 92.0)  # low=91 <= sl=92
+    bars[110] = _bar(93.0, 93.5, 91.0, 92.0)  # low=91 <= sl=95 (5%)
     result = bt._simulate(bars, "TEST")
     assert result.total_trades == 1
     assert result.winning_trades == 0
     assert result.losing_trades == 1
     assert result.win_rate_pct == 0.0
-    assert result.avg_loss_pct == pytest.approx(8.0, rel=0.01)
+    assert result.avg_loss_pct == pytest.approx(5.0, rel=0.01)
 
 
 def test_simulate_benchmark_return():
