@@ -113,7 +113,7 @@ def test_run_continues_when_vault_creds_found():
     mock_playwright_ctx = MagicMock()
     mock_playwright_ctx.chromium.launch.return_value = mock_browser
 
-    with patch.object(agent, "_get_action", side_effect=[need_login, done]), \
+    with patch.object(agent, "_get_action", side_effect=[need_login, done]) as mock_get_action, \
          patch("core.vault.Vault.get", return_value={"username": "mo", "password": "secret"}), \
          patch("time.sleep"), \
          patch("playwright.sync_api.sync_playwright") as mock_pw:
@@ -122,3 +122,8 @@ def test_run_continues_when_vault_creds_found():
         result = agent.run("check gmail")
 
     assert result == "Task complete."
+    second_call = mock_get_action.call_args_list[1]
+    injected = second_call.kwargs.get("injected_creds")
+    assert injected is not None, "_get_action not called with injected_creds on login retry"
+    assert injected["username"] == "mo"
+    assert injected["password"] == "secret"

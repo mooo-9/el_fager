@@ -55,9 +55,14 @@ class BrowserAgent(BaseAgent):
             if start_url:
                 page.goto(start_url, wait_until="domcontentloaded")
 
+            injected_creds: dict | None = None
             for _ in range(self.MAX_STEPS):
                 screenshot_b64 = self._capture(page)
-                result = self._get_action(client, task, screenshot_b64, page.url, history)
+                result = self._get_action(
+                    client, task, screenshot_b64, page.url, history,
+                    injected_creds=injected_creds,
+                )
+                injected_creds = None
                 history.append(result.get("message", ""))
 
                 if result["status"] == "done":
@@ -74,6 +79,11 @@ class BrowserAgent(BaseAgent):
                             f"add credentials first: vault set {service}"
                         )
                     history.append(f"Using saved credentials for {service}")
+                    injected_creds = {
+                        "service": service,
+                        "username": creds.get("username", ""),
+                        "password": creds.get("password", ""),
+                    }
                     continue
 
                 self._execute(page, result.get("action", {}))
@@ -92,11 +102,18 @@ class BrowserAgent(BaseAgent):
         screenshot_b64: str,
         current_url: str,
         history: list[str],
+        injected_creds: dict | None = None,
     ) -> dict:
         history_text = (
             "\n".join(f"Step {i + 1}: {h}" for i, h in enumerate(history))
             if history
             else "None yet."
+        )
+        creds_hint = (
+            f"\nCredentials available: username={injected_creds['username']} "
+            f"password={injected_creds['password']} -- fill them into the login form now."
+            if injected_creds
+            else ""
         )
         response = client.messages.create(
             model="claude-sonnet-4-6",
@@ -120,7 +137,7 @@ class BrowserAgent(BaseAgent):
                                 f"Task: {task}\n"
                                 f"Current URL: {current_url}\n\n"
                                 f"Steps so far:\n{history_text}\n\n"
-                                "What is the next action?"
+                                f"What is the next action?{creds_hint}"
                             ),
                         },
                     ],
