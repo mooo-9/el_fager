@@ -29,3 +29,6 @@ def test_instant_music():
 
 def test_case_insensitive():
     assert classify_intent("CLICK the button") == "screen"
+
+def test_stocks_ticker_only():
+    assert classify_intent("How is BTC doing today?") == "stocks"

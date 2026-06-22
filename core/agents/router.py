@@ -25,8 +25,8 @@ _STOCKS_KEYWORDS = [
     "trading engine", "trading agent", "open positions", "trade history",
     "bull", "bear", "bullish", "bearish", "earnings", "dividend",
     "p/e ratio", "rsi", "macd", "moving average",
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA",
-    "SPY", "QQQ", "BTC", "ETH", "crypto",
+    "nvda", "aapl", "msft", "amzn", "googl", "meta", "tsla",
+    "spy", "qqq", "btc", "eth", "crypto",
 ]
 
 _RESEARCH_KEYWORDS = [
@@ -62,8 +62,15 @@ def classify_intent(message: str) -> str:
     Uses keyword matching — same approach as _select_tools in brain.py.
     First match wins; falls back to 'instant' if nothing matches.
     """
+    import re
     msg = message.lower()
     for label, keywords in _LABEL_KEYWORDS:
-        if any(kw in msg for kw in keywords):
-            return label
+        for kw in keywords:
+            # For short keywords (3 chars or less), use word boundaries to avoid false matches
+            if len(kw) <= 3:
+                pattern = r'\b' + re.escape(kw) + r'\b'
+                if re.search(pattern, msg):
+                    return label
+            elif kw in msg:
+                return label
     return "instant"
