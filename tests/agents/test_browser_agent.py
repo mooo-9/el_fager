@@ -98,3 +98,27 @@ def test_run_requests_login_when_no_vault_creds():
         result = agent.run("check gmail")
 
     assert "login required" in result.lower() or "vault set" in result.lower()
+
+
+def test_run_continues_when_vault_creds_found():
+    agent = BrowserAgent()
+    need_login = {"status": "need_login", "message": "google", "action": {"type": "none"}}
+    done = {"status": "done", "message": "Task complete.", "action": {"type": "none"}}
+
+    mock_page = MagicMock()
+    mock_page.url = "https://accounts.google.com"
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_browser = MagicMock()
+    mock_browser.new_page.return_value = mock_page
+    mock_playwright_ctx = MagicMock()
+    mock_playwright_ctx.chromium.launch.return_value = mock_browser
+
+    with patch.object(agent, "_get_action", side_effect=[need_login, done]), \
+         patch("core.vault.Vault.get", return_value={"username": "mo", "password": "secret"}), \
+         patch("time.sleep"), \
+         patch("playwright.sync_api.sync_playwright") as mock_pw:
+        mock_pw.return_value.__enter__ = MagicMock(return_value=mock_playwright_ctx)
+        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+        result = agent.run("check gmail")
+
+    assert result == "Task complete."
