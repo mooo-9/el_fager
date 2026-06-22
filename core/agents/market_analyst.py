@@ -141,15 +141,13 @@ class MarketAnalyst:
 
         bb_score = max(0.0, min(100.0, (1.0 - bb_pct) * 100.0))
 
-        vol_confidence = min(vol_ratio, 2.0) / 2.0
         raw = (
             rsi_score * 0.30
             + macd_score * 0.25
             + ema_score * 0.25
             + bb_score * 0.20
         )
-        score = raw
-        score = max(0.0, min(100.0, score))
+        score = max(0.0, min(100.0, raw))
 
         macd_note = f"MACD {macd_result.histogram:+.4f}" if macd_result else "MACD n/a"
         ema_note = f"EMA20={ema20:.2f}" if ema20 else "EMA n/a"
