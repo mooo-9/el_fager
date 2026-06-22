@@ -201,7 +201,7 @@ class StocksAgent(BaseAgent):
             return f"Cannot open position: {reason}"
 
         data_client = StockHistoricalDataClient(api_key, secret)
-        quote_req = LatestStockQuoteRequest(symbol_or_symbols=symbol)
+        quote_req = LatestStockQuoteRequest(symbol_or_symbols=symbol, feed=DataFeed.IEX)
         quote = data_client.get_stock_latest_quote(quote_req)
         current_price = float(quote[symbol].ask_price)
 
