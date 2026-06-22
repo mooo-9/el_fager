@@ -54,6 +54,8 @@ class StrategyEngine:
         return "sideways"
 
     def _momentum_swing_signal(self, closes: list[float]) -> str:
+        if len(closes) < 35:
+            return "HOLD"
         from core.signals import rsi, macd, ema
         rsi_result = rsi(closes)
         rsi_val = rsi_result if rsi_result is not None else 50.0

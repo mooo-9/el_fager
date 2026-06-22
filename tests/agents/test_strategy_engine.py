@@ -54,7 +54,7 @@ class TestMomentumSwingSignal:
 
     def test_short_series_returns_hold(self):
         eng = StrategyEngine()
-        assert eng._momentum_swing_signal([100.0] * 5) in ("BUY", "SELL", "HOLD")
+        assert eng._momentum_swing_signal([100.0] * 5) == "HOLD"
 
 
 class TestSelectStrategy:
