@@ -134,7 +134,7 @@ class StocksAgent(BaseAgent):
             return f"{summary}\n\nTrading is paused -- no order placed."
 
         threshold = cfg.get("auto_trade_threshold", 85)
-        delay = cfg.get("conviction_delay_seconds", 60)
+        delay = max(1, int(cfg.get("conviction_delay_seconds", 60)))
 
         if analysis.direction != "BUY":
             return f"{summary}\n\nDirection is {analysis.direction}. No buy order placed."
@@ -160,12 +160,17 @@ class StocksAgent(BaseAgent):
         return (
             f"{summary}\n\n"
             f"Conviction {adjusted:.0f}% below 60% -- holding off. "
-            f"Confirm if you want to proceed."
+            f"Re-analyze after conditions change or adjust the threshold with "
+            f"'set threshold to <N>%'."
         )
 
     # -- Order execution -------------------------------------------------------
 
     def _place_trade(self, symbol: str) -> str:
+        cfg_check = self._load_config()
+        if cfg_check.get("auto_trade_paused", False):
+            return f"Order for {symbol} cancelled -- trading was paused."
+
         import os
         import uuid
         from datetime import datetime
@@ -269,8 +274,8 @@ class StocksAgent(BaseAgent):
                     f"{symbol}: {r.conviction:.0f}% ({r.direction}) "
                     f"[T:{r.technical_score:.0f} F:{r.fundamental_score:.0f} S:{r.sentiment_score:.0f}]"
                 )
-            except Exception as e:
-                lines.append(f"{symbol}: analysis failed ({e})")
+            except Exception:
+                lines.append(f"{symbol}: analysis failed")
         return "Watchlist scan:\n" + "\n".join(lines)
 
     # -- Config helpers --------------------------------------------------------
