@@ -50,6 +50,7 @@ class TestReadPage:
         with patch("playwright.sync_api.sync_playwright", return_value=mock_pw):
             result = ResearchAgent()._read_page("https://example.com")
         assert len(result) <= _MAX_PAGE_CHARS
+        mock_browser.close.assert_called_once()
 
 
 class TestSynthesize:

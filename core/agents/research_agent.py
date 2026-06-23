@@ -73,11 +73,13 @@ class ResearchAgent(BaseAgent):
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.goto(url, timeout=8000, wait_until="domcontentloaded")
-                text = page.inner_text("body")
-                browser.close()
-                return text[:_MAX_PAGE_CHARS]
+                try:
+                    page = browser.new_page()
+                    page.goto(url, timeout=8000, wait_until="domcontentloaded")
+                    text = page.inner_text("body")
+                    return text[:_MAX_PAGE_CHARS]
+                finally:
+                    browser.close()
         except Exception:
             return ""
 
