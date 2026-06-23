@@ -15,7 +15,6 @@ _SEARCH_DIRS = [
 ]
 
 _MAX_CONTENT_CHARS = 6000
-_SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx", ".txt", ".csv", ".md", ".png", ".jpg", ".jpeg"}
 
 
 class FileAgent(BaseAgent):
@@ -102,6 +101,7 @@ class FileAgent(BaseAgent):
             return ""
 
     def _read_docx(self, path: Path) -> str:
+        # python-docx supports .docx only; legacy .doc raises and returns ""
         try:
             from docx import Document
             doc = Document(str(path))
@@ -144,4 +144,4 @@ class FileAgent(BaseAgent):
             )
             return resp.content[0].text.strip()
         except Exception:
-            return f"{path.name}: {content[:500]}..."
+            return f"Could not get an AI answer for {path.name}. Please try again."
