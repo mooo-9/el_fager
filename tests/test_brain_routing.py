@@ -38,17 +38,10 @@ def test_instant_task_bypasses_agents():
     assert result == "Sunny in Cairo."
 
 
-def test_unimplemented_agent_falls_through_to_instant():
+def test_research_task_routes_to_research_agent():
     brain = _make_brain()
-    mock_block = MagicMock()
-    mock_block.text = "Research answer."
-    mock_block.type = "text"
-    mock_response = MagicMock()
-    mock_response.stop_reason = "end_turn"
-    mock_response.content = [mock_block]
-
     with patch("core.agents.router.classify_intent", return_value="research"), \
-         patch.object(brain.client.messages, "create", return_value=mock_response):
+         patch("core.agents.research_agent.ResearchAgent.run", return_value="Research answer."):
         result = brain.chat("research everything about Egypt")
 
     assert result == "Research answer."

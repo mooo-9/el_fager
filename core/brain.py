@@ -5963,7 +5963,13 @@ class Brain:
         if intent == "stocks_agent":
             from core.agents.stocks_agent import StocksAgent
             return StocksAgent().run(task)
-        return None  # research / file not yet implemented -- fall through
+        if intent == "research":
+            from core.agents.research_agent import ResearchAgent
+            return ResearchAgent().run(task)
+        if intent == "file":
+            from core.agents.file_agent import FileAgent
+            return FileAgent().run(task)
+        return None
 
     def chat(self, user_message: str, memory_context: str = "") -> str:
         # Log user turn

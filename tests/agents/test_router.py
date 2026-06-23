@@ -71,3 +71,37 @@ class TestStocksAgentRouting:
     def test_scan_my_watchlist_routes_to_stocks_agent(self):
         from core.agents.router import classify_intent
         assert classify_intent("scan my watchlist for opportunities") == "stocks_agent"
+
+
+class TestResearchAndFileRouting:
+    def test_research_everything_about_routes_to_research(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("research everything about tech industry trends") == "research"
+
+    def test_latest_news_routes_to_research(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("latest news about Tesla") == "research"
+
+    def test_investigate_routes_to_research(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("find out everything about the history of the internet") == "research"
+
+    def test_pdf_keyword_routes_to_file(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("summarize this pdf") == "file"
+
+    def test_pdf_extension_routes_to_file(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("what does thesis.pdf say about methodology?") == "file"
+
+    def test_docx_extension_routes_to_file(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("read contract.docx and find payment terms") == "file"
+
+    def test_this_document_routes_to_file(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("summarize this document for me") == "file"
+
+    def test_payment_terms_routes_to_file(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("what did this contract say about payment terms") == "file"
