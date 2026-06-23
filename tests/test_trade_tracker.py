@@ -43,14 +43,15 @@ class TestTradeTrackerFetchSells:
 
     def test_fetch_returns_empty_list_when_api_raises(self, monkeypatch):
         from core.trade_tracker import TradeTracker
-        def _bad(self, k, s, p):
-            raise RuntimeError("API down")
-        monkeypatch.setattr("core.trade_tracker.TradeTracker._fetch_closed_sells", _bad)
+
+        def _raise(*args, **kwargs):
+            raise ConnectionError("API down")
+
+        monkeypatch.setattr("alpaca.trading.client.TradingClient", _raise)
+
         t = TradeTracker()
-        try:
-            result = t._fetch_closed_sells("k", "s", True)
-        except Exception:
-            result = []
+        # Must not raise — the method catches all exceptions internally
+        result = t._fetch_closed_sells("key", "secret", True)
         assert result == []
 
 

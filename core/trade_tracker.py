@@ -8,7 +8,7 @@ _CONFIG_PATH = Path("data/trading_config.json")
 
 
 def _outcome_label(exit_price: float, tp_price: float, sl_price: float) -> str:
-    """Classify a closed trade as TP, SL, or MANUAL based on proximity."""
+    """Classify a closed trade as TP or SL based on proximity to bracket targets."""
     dist_tp = abs(exit_price - tp_price)
     dist_sl = abs(exit_price - sl_price)
     if dist_tp <= dist_sl:
