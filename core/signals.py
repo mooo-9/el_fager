@@ -103,11 +103,6 @@ def classify_signal(
     current_ema20 = next((v for v in reversed(ema20) if v is not None), None)
     current_price = closes[-1] if closes else None
 
-    price_above_ema20 = (
-        current_price is not None
-        and current_ema20 is not None
-        and current_price > current_ema20
-    )
     price_below_ema20 = (
         current_price is not None
         and current_ema20 is not None
@@ -117,7 +112,9 @@ def classify_signal(
     macd_bullish = macd_result.histogram > 0
     macd_bearish = macd_result.histogram < 0
 
-    if rsi_value < 35 and macd_bullish and price_above_ema20:
+    # RSI < 35 + price_above_ema20 was contradictory: deeply oversold stocks rarely stay above EMA20.
+    # Loosened to RSI < 42 + MACD bullish (momentum recovery signal, no conflicting trend filter).
+    if rsi_value < 42 and macd_bullish:
         return SignalStrength.STRONG_BUY
     if rsi_value > 65 and macd_bearish and price_below_ema20:
         return SignalStrength.STRONG_SELL
