@@ -88,12 +88,7 @@ def classify_intent(message: str) -> str:
     msg = message.lower()
     for label, keywords in _LABEL_KEYWORDS:
         for kw in keywords:
-            if len(kw) <= 3:
-                pattern = r"\b" + re.escape(kw) + r"\b"
-                if re.search(pattern, msg):
-                    return label
-            else:
-                pattern = r"\b" + re.escape(kw) + r"\b"
-                if re.search(pattern, msg):
-                    return label
+            pattern = r"\b" + re.escape(kw) + r"\b"
+            if re.search(pattern, msg):
+                return label
     return "instant"
