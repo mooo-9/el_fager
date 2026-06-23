@@ -59,6 +59,23 @@ _GATE_CHECK_KEYWORDS = [
     "how are we doing trading",
 ]
 
+_CONFIRM_LIVE_KEYWORDS = [
+    "confirm real trading",
+    "confirm live trading",
+    "activate real trading",
+    "activate live trading",
+    "go live with trading",
+    "switch to real trading",
+    "switch to live trading",
+]
+
+_CANCEL_LIVE_KEYWORDS = [
+    "cancel live trading",
+    "cancel real trading",
+    "abort live trading",
+    "stop live trading activation",
+]
+
 _RESEARCH_KEYWORDS = [
     "research everything", "deep dive into", "find out everything about",
     "investigate", "comprehensive analysis of", "tell me everything about",
@@ -80,7 +97,9 @@ _LABEL_KEYWORDS = [
     ("screen", _SCREEN_KEYWORDS),
     ("browser", _BROWSER_KEYWORDS),
     ("stocks_agent", _STOCKS_AGENT_KEYWORDS),  # checked before "stocks"
-    ("gate_check", _GATE_CHECK_KEYWORDS),       # checked before generic "stocks"
+    ("confirm_live", _CONFIRM_LIVE_KEYWORDS),  # checked before gate_check and stocks
+    ("cancel_live", _CANCEL_LIVE_KEYWORDS),    # checked before gate_check and stocks
+    ("gate_check", _GATE_CHECK_KEYWORDS),      # checked before generic "stocks"
     ("stocks", _STOCKS_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),
@@ -90,8 +109,8 @@ _LABEL_KEYWORDS = [
 def classify_intent(message: str) -> str:
     """Return the agent label that should handle this message.
 
-    Returns one of: 'screen', 'browser', 'stocks_agent', 'stocks',
-    'research', 'file', 'instant'.
+    Returns one of: 'screen', 'browser', 'stocks_agent', 'confirm_live',
+    'cancel_live', 'gate_check', 'stocks', 'research', 'file', 'instant'.
     Uses keyword matching. First match wins.
     """
     import re

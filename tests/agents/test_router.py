@@ -120,3 +120,29 @@ class TestGateCheckRouting:
         from core.agents.router import classify_intent
         # Regression: word-boundary fix -- "invest" must not match "investigate"
         assert classify_intent("how should I invest my savings?") == "stocks"
+
+
+class TestConfirmLiveRouting:
+    def test_confirm_real_trading_routes_to_confirm_live(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("confirm real trading") == "confirm_live"
+
+    def test_confirm_live_trading_routes_to_confirm_live(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("confirm live trading") == "confirm_live"
+
+    def test_cancel_live_trading_routes_to_cancel_live(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("cancel live trading") == "cancel_live"
+
+    def test_cancel_real_trading_routes_to_cancel_live(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("cancel real trading") == "cancel_live"
+
+    def test_gate_check_still_routes_correctly(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("am I ready for real trading?") == "gate_check"
+
+    def test_activate_live_routes_to_confirm_live(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("activate live trading") == "confirm_live"
