@@ -42,9 +42,13 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
+
+from ui.hud_canvas import HudCanvas
+from ui.trading_panel import TradingPanel
 
 _SETTINGS_FILE = Path("data/settings.json")
 _MAX_HISTORY = 15
@@ -330,6 +334,7 @@ class OverlayWindow(QWidget):
         self._wake_listener = None
         self._mic_muted = False
         self._history: list[tuple[str, str]] = []  # (role, text)
+        self._mode = 0
 
     def set_wake_listener(self, listener):
         self._wake_listener = listener
@@ -380,16 +385,44 @@ class OverlayWindow(QWidget):
         inner.setContentsMargins(16, 12, 16, 14)
         inner.setSpacing(8)
 
-        # ── Header ──────────────────────────────────────────────────────
+        # ── Header (shared across all modes) ───────────────────────────
         inner.addLayout(self._build_header())
 
-        # ── Separator ───────────────────────────────────────────────────
         sep = QWidget()
         sep.setFixedHeight(1)
         sep.setStyleSheet("background-color: rgba(255,255,255,18);")
         inner.addWidget(sep)
 
-        # ── Conversation history ─────────────────────────────────────────
+        # ── Stacked pages ───────────────────────────────────────────────
+        self._stack = QStackedWidget(self._card)
+        inner.addWidget(self._stack)
+
+        # Page 0: voice bubble UI
+        self._voice_page = QWidget(self._stack)
+        self._build_voice_page(self._voice_page)
+        self._stack.addWidget(self._voice_page)
+
+        # Page 1: JARVIS HUD
+        self._hud = HudCanvas(self._stack)
+        self._stack.addWidget(self._hud)
+
+        # Page 2: trading terminal
+        self._trading = TradingPanel(self._stack)
+        self._trading.set_callback(
+            on_start=lambda: self._start_pipeline(text_input="scan my watchlist"),
+            on_stop=lambda: self._start_pipeline(text_input="pause trading"),
+            on_backtest=None,
+        )
+        self._stack.addWidget(self._trading)
+
+        self._stack.setCurrentIndex(0)
+
+    def _build_voice_page(self, page: QWidget):
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # ── Conversation history ──────────────────────────────────────
         self._history_scroll = QScrollArea()
         self._history_scroll.setWidgetResizable(True)
         self._history_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -422,11 +455,10 @@ class OverlayWindow(QWidget):
         self._history_layout.setContentsMargins(0, 4, 0, 4)
         self._history_layout.setSpacing(4)
         self._history_layout.addStretch()
-
         self._history_scroll.setWidget(self._history_container)
-        inner.addWidget(self._history_scroll)
+        layout.addWidget(self._history_scroll)
 
-        # ── Active transcript ────────────────────────────────────────────
+        # ── Active transcript ─────────────────────────────────────────
         self._transcript_label = QLabel("")
         self._transcript_label.setWordWrap(True)
         self._transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -438,9 +470,9 @@ class OverlayWindow(QWidget):
         """)
         self._transcript_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._transcript_label.setVisible(False)
-        inner.addWidget(self._transcript_label)
+        layout.addWidget(self._transcript_label)
 
-        # ── Status bar ───────────────────────────────────────────────────
+        # ── Status bar ───────────────────────────────────────────────
         self._status_bar = QLabel("")
         self._status_bar.setStyleSheet("""
             color: rgba(100, 200, 255, 160);
@@ -450,15 +482,15 @@ class OverlayWindow(QWidget):
         """)
         self._status_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_bar.setVisible(False)
-        inner.addWidget(self._status_bar)
+        layout.addWidget(self._status_bar)
 
-        # ── Separator ───────────────────────────────────────────────────
+        # ── Separator ─────────────────────────────────────────────────
         sep2 = QWidget()
         sep2.setFixedHeight(1)
         sep2.setStyleSheet("background-color: rgba(255,255,255,12);")
-        inner.addWidget(sep2)
+        layout.addWidget(sep2)
 
-        # ── Input + quick actions ────────────────────────────────────────
+        # ── Input + quick actions ─────────────────────────────────────
         input_row = QHBoxLayout()
         input_row.setSpacing(6)
 
@@ -483,10 +515,9 @@ class OverlayWindow(QWidget):
         self._text_input.returnPressed.connect(self._on_text_entered)
         self._text_input.installEventFilter(self)
         input_row.addWidget(self._text_input)
+        layout.addLayout(input_row)
 
-        inner.addLayout(input_row)
-
-        # ── Quick action strip ───────────────────────────────────────────
+        # ── Quick action strip ────────────────────────────────────────
         actions_row = QHBoxLayout()
         actions_row.setSpacing(4)
         actions_row.addStretch()
@@ -508,31 +539,31 @@ class OverlayWindow(QWidget):
             }
         """
 
-        self._mic_btn = QPushButton("🎤")
+        self._mic_btn = QPushButton("[M]")
         self._mic_btn.setToolTip("Mute/unmute mic")
         self._mic_btn.setStyleSheet(_qa_style)
         self._mic_btn.clicked.connect(self._toggle_mute)
         actions_row.addWidget(self._mic_btn)
 
-        stop_btn = QPushButton("⏹")
+        stop_btn = QPushButton("[S]")
         stop_btn.setToolTip("Stop speaking")
         stop_btn.setStyleSheet(_qa_style)
         stop_btn.clicked.connect(self._stop_tts)
         actions_row.addWidget(stop_btn)
 
-        clear_btn = QPushButton("🧹")
+        clear_btn = QPushButton("[C]")
         clear_btn.setToolTip("Clear conversation history")
         clear_btn.setStyleSheet(_qa_style)
         clear_btn.clicked.connect(self._clear_history)
         actions_row.addWidget(clear_btn)
 
-        settings_btn = QPushButton("⚙️")
+        settings_btn = QPushButton("[G]")
         settings_btn.setToolTip("Settings")
         settings_btn.setStyleSheet(_qa_style)
         settings_btn.clicked.connect(self._open_settings)
         actions_row.addWidget(settings_btn)
 
-        inner.addLayout(actions_row)
+        layout.addLayout(actions_row)
 
     def _build_header(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -567,6 +598,13 @@ class OverlayWindow(QWidget):
         """
         _close_btn = _btn + "QPushButton:hover { background: rgba(232,17,35,210); color: white; border-radius: 3px; }"
 
+        self._mode_btn = QPushButton("[V]")
+        self._mode_btn.setFixedSize(28, 20)
+        self._mode_btn.setToolTip("Switch mode: Voice / HUD / Trading")
+        self._mode_btn.setStyleSheet(_btn)
+        self._mode_btn.clicked.connect(self.cycle_mode)
+        row.addWidget(self._mode_btn)
+
         min_btn = QPushButton("─")
         min_btn.setFixedSize(22, 20)
         min_btn.setStyleSheet(_btn)
@@ -590,6 +628,26 @@ class OverlayWindow(QWidget):
 
         return row
 
+    # ------------------------------------------------------------------ #
+    #  Mode switching                                                      #
+    # ------------------------------------------------------------------ #
+
+    def cycle_mode(self) -> None:
+        self._mode = (self._mode + 1) % 3
+        self._stack.setCurrentIndex(self._mode)
+        labels = {0: "[V]", 1: "[H]", 2: "[T]"}
+        self._mode_btn.setText(labels[self._mode])
+        if self._mode == 2:
+            self._trading.refresh()
+
+    @property
+    def mode_name(self) -> str:
+        return {0: "voice", 1: "hud", 2: "trading"}[self._mode]
+
+    def _refresh_trading_if_active(self):
+        if self._mode == 2:
+            self._trading.refresh()
+
     def _apply_theme(self):
         settings = _load_settings()
         theme = settings.get("theme", "dark")
@@ -606,6 +664,12 @@ class OverlayWindow(QWidget):
         self._status_poll_timer.setInterval(1000)
         self._status_poll_timer.timeout.connect(self._update_status_bar)
         self._status_poll_timer.start()
+
+        # Trading panel refresh every 30 seconds
+        self._trading_refresh_timer = QTimer(self)
+        self._trading_refresh_timer.setInterval(30000)
+        self._trading_refresh_timer.timeout.connect(self._refresh_trading_if_active)
+        self._trading_refresh_timer.start()
 
     # ------------------------------------------------------------------ #
     #  Conversation history bubbles                                        #
@@ -705,7 +769,7 @@ class OverlayWindow(QWidget):
 
     def _toggle_mute(self):
         self._mic_muted = not self._mic_muted
-        self._mic_btn.setText("🔇" if self._mic_muted else "🎤")
+        self._mic_btn.setText("[X]" if self._mic_muted else "[M]")
         try:
             if self._mic_muted:
                 self.voice_in.stop_recording()
@@ -778,6 +842,11 @@ class OverlayWindow(QWidget):
             if response:
                 self._add_bubble("assistant", response)
                 self._transcript_label.setVisible(False)
+
+        if self._mode == 1:
+            self._hud.set_state(state)
+            if response:
+                self._hud.set_response_text(response)
 
     @pyqtSlot(str)
     def on_error(self, message: str):
