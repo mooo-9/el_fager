@@ -84,7 +84,7 @@ class TestResearchAndFileRouting:
 
     def test_investigate_routes_to_research(self):
         from core.agents.router import classify_intent
-        assert classify_intent("find out everything about the history of the internet") == "research"
+        assert classify_intent("investigate what happened with SVB") == "research"
 
     def test_pdf_keyword_routes_to_file(self):
         from core.agents.router import classify_intent

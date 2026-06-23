@@ -92,6 +92,8 @@ def classify_intent(message: str) -> str:
                 pattern = r"\b" + re.escape(kw) + r"\b"
                 if re.search(pattern, msg):
                     return label
-            elif kw in msg:
-                return label
+            else:
+                pattern = r"\b" + re.escape(kw) + r"\b"
+                if re.search(pattern, msg):
+                    return label
     return "instant"
