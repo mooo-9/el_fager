@@ -30,7 +30,7 @@ _STOCKS_AGENT_KEYWORDS = [
     "deep analysis", "deep dive",
     "why did you buy", "why did we buy",
     "why did you sell", "why did we sell",
-    "how are we doing trading", "my trading stats", "trading performance",
+    "my trading stats", "trading performance",
     "scan my watchlist", "scan portfolio", "scan watchlist",
     "pause trading", "resume trading", "unpause trading",
     "stop auto-trade", "start auto-trade",
@@ -48,6 +48,15 @@ _STOCKS_KEYWORDS = [
     "p/e ratio", "rsi", "macd", "moving average",
     "nvda", "aapl", "msft", "amzn", "googl", "meta", "tsla",
     "spy", "qqq", "btc", "eth", "crypto",
+]
+
+_GATE_CHECK_KEYWORDS = [
+    "ready for real trading",
+    "passed the paper trading",
+    "paper trading gate",
+    "paper trading results",
+    "am i ready to go live",
+    "how are we doing trading",
 ]
 
 _RESEARCH_KEYWORDS = [
@@ -71,6 +80,7 @@ _LABEL_KEYWORDS = [
     ("screen", _SCREEN_KEYWORDS),
     ("browser", _BROWSER_KEYWORDS),
     ("stocks_agent", _STOCKS_AGENT_KEYWORDS),  # checked before "stocks"
+    ("gate_check", _GATE_CHECK_KEYWORDS),       # checked before generic "stocks"
     ("stocks", _STOCKS_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),

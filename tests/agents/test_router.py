@@ -105,3 +105,18 @@ class TestResearchAndFileRouting:
     def test_payment_terms_routes_to_file(self):
         from core.agents.router import classify_intent
         assert classify_intent("what did this contract say about payment terms") == "file"
+
+
+class TestGateCheckRouting:
+    def test_ready_for_real_trading_routes_to_gate_check(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("am I ready for real trading?") == "gate_check"
+
+    def test_paper_trading_gate_routes_to_gate_check(self):
+        from core.agents.router import classify_intent
+        assert classify_intent("check my paper trading gate") == "gate_check"
+
+    def test_invest_still_routes_to_stocks(self):
+        from core.agents.router import classify_intent
+        # Regression: word-boundary fix -- "invest" must not match "investigate"
+        assert classify_intent("how should I invest my savings?") == "stocks"

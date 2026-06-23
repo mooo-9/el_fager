@@ -5969,6 +5969,11 @@ class Brain:
         if intent == "file":
             from core.agents.file_agent import FileAgent
             return FileAgent().run(task)
+        if intent == "gate_check":
+            from core.trade_tracker import TradeTracker
+            from core.paper_metrics import PaperMetrics
+            TradeTracker().sync()
+            return PaperMetrics().gate_summary()
         return None
 
     def chat(self, user_message: str, memory_context: str = "") -> str:
