@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -222,8 +222,7 @@ class TradingPanel(QWidget):
             self._signal_table.setItem(row, 3, QTableWidgetItem(str(s.get("status", ""))))
 
     def refresh(self) -> None:
-        import ui.trading_panel as _mod
-        trades_path = _mod._TRADES_PATH
+        trades_path = _TRADES_PATH
         try:
             raw = Path(trades_path).read_text(encoding="utf-8")
             trades = json.loads(raw)
