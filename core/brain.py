@@ -4596,6 +4596,29 @@ def _select_tools(message: str) -> list:
     return [t for t in _SLIM_TOOLS if t["name"] in names]
 
 
+_LIVE_CONFIG_PATH = "data/trading_config.json"
+
+
+def _write_live_config(config_path: str) -> str:
+    """Write mode: live to trading_config.json. Returns cp1252-safe confirmation."""
+    import json
+    from pathlib import Path
+    p = Path(config_path)
+    cfg: dict = {}
+    if p.exists():
+        try:
+            cfg = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    cfg["mode"] = "live"
+    p.parent.mkdir(exist_ok=True)
+    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return (
+        "LIVE TRADING ACTIVATED. El Fager will now trade with real money. "
+        "Say 'pause trading' at any time to halt all autonomous trading."
+    )
+
+
 class Brain:
     def __init__(self, profile: dict, memory=None):
         self.client = anthropic.Anthropic()
@@ -4614,6 +4637,8 @@ class Brain:
             self._logger = ConversationLogger()
         except Exception:
             self._logger = None
+        self._live_pending: bool = False
+        self._live_pending_ts: float = 0.0
 
     def _dispatch_tool(self, name: str, tool_input: dict) -> str:
         from tools.files_tool import search_files, open_file, read_file_content
@@ -5974,6 +5999,32 @@ class Brain:
             from core.paper_metrics import PaperMetrics
             TradeTracker().sync()
             return PaperMetrics().gate_summary()
+        if intent == "confirm_live":
+            import time as _time
+            if not self._live_pending:
+                self._live_pending = True
+                self._live_pending_ts = _time.monotonic()
+                return (
+                    "CAUTION: You are about to switch to REAL money trading. "
+                    "Say 'confirm live trading' again within 60 seconds to activate. "
+                    "Say 'cancel live trading' to abort."
+                )
+            elapsed = _time.monotonic() - self._live_pending_ts
+            self._live_pending = False
+            self._live_pending_ts = 0.0
+            if elapsed > 60.0:
+                return (
+                    "Live trading activation timed out. "
+                    "Say 'confirm live trading' to start over."
+                )
+            from core.paper_metrics import PaperMetrics
+            if not PaperMetrics().compute()["gate_pass"]:
+                return PaperMetrics().gate_summary()
+            return _write_live_config(_LIVE_CONFIG_PATH)
+        if intent == "cancel_live":
+            self._live_pending = False
+            self._live_pending_ts = 0.0
+            return "Live trading activation cancelled."
         return None
 
     def chat(self, user_message: str, memory_context: str = "") -> str:
