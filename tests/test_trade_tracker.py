@@ -109,6 +109,34 @@ class TestTradeTrackerSync:
         count = TradeTracker().sync()
         assert count == 0
 
+    def test_sync_skips_pre_entry_fill_and_matches_later_fill(self, tmp_path, monkeypatch):
+        """Pre-entry fill for the same symbol must not be consumed before matching the correct post-entry fill."""
+        from core.trade_tracker import TradeTracker
+        path = tmp_path / "trades.json"
+        _write_trades(path, [
+            {"symbol": "SPY", "timestamp": "2026-06-20T10:00:00", "price": 500.0,
+             "sl_price": 475.0, "tp_price": 560.0},
+        ])
+        monkeypatch.setattr("core.trade_tracker._TRADES_PATH", path)
+        monkeypatch.setattr("core.trade_tracker._CONFIG_PATH", tmp_path / "cfg.json")
+
+        # pre-entry fill (09:00 < 10:00) followed by the real post-entry fill (11:00)
+        sells = [
+            {"symbol": "SPY", "price": 490.0, "filled_at": "2026-06-20T09:00:00"},
+            {"symbol": "SPY", "price": 560.0, "filled_at": "2026-06-20T11:00:00"},
+        ]
+        monkeypatch.setattr(
+            "core.trade_tracker.TradeTracker._fetch_closed_sells",
+            lambda self, k, s, p: sells,
+        )
+
+        count = TradeTracker().sync()
+        assert count == 1
+        updated = json.loads(path.read_text())
+        # Must match the post-entry fill at 560.0, not the pre-entry fill at 490.0
+        assert updated[0]["exit_price"] == pytest.approx(560.0)
+        assert updated[0]["outcome"] == "TP"
+
     def test_sync_never_raises_on_api_exception(self, tmp_path, monkeypatch):
         from core.trade_tracker import TradeTracker
         path = tmp_path / "trades.json"

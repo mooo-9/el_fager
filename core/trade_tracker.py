@@ -120,7 +120,7 @@ class TradeTracker:
                 float(trade.get("sl_price", exit_price - 1)),
             )
             # Consume this fill so it is not matched to a second trade
-            sell_map[symbol] = sell_map[symbol][1:]
+            sell_map[symbol].remove(fill)
             updated += 1
 
         self._save_trades(trades)
