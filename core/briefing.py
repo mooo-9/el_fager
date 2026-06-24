@@ -42,6 +42,8 @@ def get_briefing_prompt() -> str:
     return (
         f"{greeting} Mo! Give me my daily briefing: "
         "check Cairo weather, list my events for today, "
-        "check for unread emails, and check my deadline facts from memory. "
-        "Keep it short — 3-5 spoken sentences covering all four."
+        "check for unread emails, check my deadline facts from memory, "
+        "and check my paper trading status including open positions, "
+        "today's P&L, and how close I am to the 30-trade live trading gate. "
+        "Keep it short — 4-6 spoken sentences covering all five."
     )
