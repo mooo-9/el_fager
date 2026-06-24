@@ -88,6 +88,27 @@ class TradingEngine:
         close_t = now.replace(hour=16, minute=0, second=0, microsecond=0)
         return open_t <= now < close_t
 
+    # ── Sleep prevention ───────────────────────────────────────────────────────
+
+    _ES_CONTINUOUS      = 0x80000000
+    _ES_SYSTEM_REQUIRED = 0x00000001
+
+    def _prevent_sleep(self) -> None:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                self._ES_CONTINUOUS | self._ES_SYSTEM_REQUIRED
+            )
+        except Exception:
+            pass
+
+    def _allow_sleep(self) -> None:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(self._ES_CONTINUOUS)
+        except Exception:
+            pass
+
     # ── Price data ─────────────────────────────────────────────────────────────
 
     def _fetch_closes(self, data_client, symbol: str) -> list[float]:
@@ -326,13 +347,23 @@ class TradingEngine:
     # ── Loop ───────────────────────────────────────────────────────────────────
 
     def _loop(self) -> None:
+        _awake = False
         while not self._stop_event.is_set():
             today = datetime.now().date()
             if self._last_day != today:
                 self._day_open_value = None
                 self._last_day = today
 
-            if self._is_market_open():
+            market_open = self._is_market_open()
+
+            if market_open and not _awake:
+                self._prevent_sleep()
+                _awake = True
+            elif not market_open and _awake:
+                self._allow_sleep()
+                _awake = False
+
+            if market_open:
                 try:
                     self._run_cycle()
                 except Exception as e:
@@ -341,3 +372,5 @@ class TradingEngine:
             cfg = self._load_config()
             interval = cfg.get("cycle_interval_minutes", 15) * 60
             self._stop_event.wait(timeout=interval)
+
+        self._allow_sleep()
