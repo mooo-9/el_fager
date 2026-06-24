@@ -261,8 +261,9 @@ def main():
     # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
     from tools.macro_tool import set_speak_callback as _macro_speak_cb
     _macro_speak_cb(voice_out.speak)
-    from tools.trading_tool import set_trading_speak_callback as _trading_speak_cb
+    from tools.trading_tool import set_trading_speak_callback as _trading_speak_cb, start_trading_engine as _start_trading
     _trading_speak_cb(voice_out.speak)
+    _start_trading()   # auto-start paper trading on every launch
 
     # ── Daily briefing ────────────────────────────────────────────────────────
     from core.briefing import already_briefed_today, mark_briefed_today, get_briefing_prompt
