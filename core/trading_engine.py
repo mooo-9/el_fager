@@ -225,6 +225,8 @@ class TradingEngine:
             get_take_profit_price,
             is_daily_limit_hit,
         )
+        from core.trade_tracker import TradeTracker
+        TradeTracker().sync()
 
         trading_client, data_client = self._get_clients()
         account = trading_client.get_account()
