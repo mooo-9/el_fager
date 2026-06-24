@@ -118,7 +118,7 @@ class TestConvictionGating:
                 with patch.object(agent, "_place_trade") as mock_trade:
                     result = agent._analyze_and_decide("NVDA")
                     mock_trade.assert_not_called()
-        assert "below 60" in result or "confirm" in result.lower()
+        assert "below" in result.lower() or "holding off" in result.lower()
 
     def test_sell_direction_skips_buy(self, tmp_path, monkeypatch):
         config_file = tmp_path / "trading_config.json"

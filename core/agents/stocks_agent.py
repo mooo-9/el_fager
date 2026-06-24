@@ -133,11 +133,11 @@ class StocksAgent(BaseAgent):
         if cfg.get("auto_trade_paused", False):
             return f"{summary}\n\nTrading is paused -- no order placed."
 
-        threshold = cfg.get("auto_trade_threshold", 85)
+        threshold = cfg.get("auto_trade_threshold", 72)
         delay = max(1, int(cfg.get("conviction_delay_seconds", 60)))
 
-        if analysis.direction != "BUY":
-            return f"{summary}\n\nDirection is {analysis.direction}. No buy order placed."
+        if analysis.direction == "SELL":
+            return f"{summary}\n\nSELL signal -- no buy order placed."
 
         if adjusted >= threshold:
             trade_result = self._place_trade(symbol)
@@ -147,7 +147,7 @@ class StocksAgent(BaseAgent):
                 f"Auto-executing buy.\n{trade_result}"
             )
 
-        if adjusted >= 60:
+        if adjusted >= 57:
             t = threading.Timer(delay, self._place_trade, args=(symbol,))
             t.daemon = True
             t.start()
@@ -159,7 +159,7 @@ class StocksAgent(BaseAgent):
 
         return (
             f"{summary}\n\n"
-            f"Conviction {adjusted:.0f}% below 60% -- holding off. "
+            f"Conviction {adjusted:.0f}% below threshold -- holding off. "
             f"Re-analyze after conditions change or adjust the threshold with "
             f"'set threshold to <N>%'."
         )

@@ -37,9 +37,9 @@ class MarketAnalyst:
 
         conviction = tech_score * 0.50 + fund_score * 0.30 + sent_score * 0.20
 
-        if conviction >= 60:
+        if conviction >= 57:
             direction = "BUY"
-        elif conviction <= 40:
+        elif conviction <= 43:
             direction = "SELL"
         else:
             direction = "HOLD"
@@ -121,7 +121,8 @@ class MarketAnalyst:
             vol_ratio = 1.0
 
         # Component scores (0-100 scale, higher = more bullish)
-        rsi_score = max(0.0, min(100.0, (80.0 - rsi_val) * 1.25))
+        # RSI 50 = neutral (50), RSI 30 = bullish (70), RSI 70 = bearish (30)
+        rsi_score = max(0.0, min(100.0, 100.0 - rsi_val))
 
         if macd_result:
             macd_score = 50.0 + min(50.0, max(-50.0, macd_result.histogram * 1000.0))
@@ -139,13 +140,14 @@ class MarketAnalyst:
             elif price < ema20:
                 ema_score = 35.0
 
-        bb_score = max(0.0, min(100.0, (1.0 - bb_pct) * 100.0))
+        # Neutral point at 0.65 of band: trending stocks in upper half not penalised
+        bb_score = max(0.0, min(100.0, (0.65 - bb_pct) * 100.0 + 50.0))
 
         raw = (
-            rsi_score * 0.30
+            rsi_score * 0.35
             + macd_score * 0.25
             + ema_score * 0.25
-            + bb_score * 0.20
+            + bb_score * 0.15
         )
         score = max(0.0, min(100.0, raw))
 

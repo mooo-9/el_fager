@@ -49,6 +49,22 @@ class TestScoreTechnical:
         score, rationale = analyst._score_technical(closes, volumes)
         assert 0.0 <= score <= 100.0
 
+    def test_deeply_oversold_scores_above_65(self):
+        # RSI ~10 after steep decline; should produce rsi_score ~90, overall score >> 65
+        analyst = MarketAnalyst()
+        closes = [200.0 - i * 4.0 for i in range(55)]
+        volumes = [2_000_000] * len(closes)
+        score, _ = analyst._score_technical(closes, volumes)
+        assert score >= 65, f"Deeply oversold (RSI~10) should score >= 65, got {score}"
+
+    def test_neutral_rsi_scores_near_50(self):
+        # Alternating +0.5/-0.5 keeps RSI near 50 -> overall near 50
+        analyst = MarketAnalyst()
+        closes = [100.0 + (0.5 if i % 2 == 0 else -0.5) * (i % 6 + 1) for i in range(35)]
+        volumes = [1_000_000] * len(closes)
+        score, _ = analyst._score_technical(closes, volumes)
+        assert 35.0 <= score <= 70.0, f"Neutral RSI should land 35-70, got {score}"
+
 
 class TestScoreFundamental:
     def test_low_pe_and_strong_growth_scores_above_60(self, monkeypatch):
