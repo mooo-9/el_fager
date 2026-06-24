@@ -373,12 +373,13 @@ add_autonomous_task(description, delay_hours, recurring_hours):
   - description should be a complete, self-contained instruction El Fager can execute.
 "what tasks do you have queued?" / "show my background tasks" -> list_autonomous_tasks.
 "cancel task X" / "remove task X" -> delete_autonomous_task(task_id) where task_id is the 8-char id from list_autonomous_tasks.
-Phone notifications (El Fager pushes alerts to Mo's Telegram bot):
+Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
-El Fager automatically sends phone alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
-When Mo says "send my phone a message", "ping me on Telegram", "notify my phone about X" -> send_notification(message).
-When Mo asks "is Telegram set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
-Setup: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in .env. Tell Mo the 3-step bot setup if he asks.
+El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
+When Mo says "send my phone a message", "ping me on WhatsApp", "send me a WhatsApp", "notify my phone about X" -> send_notification(message).
+When Mo asks "is WhatsApp set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
+Setup: WHATSAPP_PHONE (number with country code, no +) + WHATSAPP_CALLMEBOT_KEY in .env.
+If Mo asks how to set it up: 1) Save +34 644 64 87 48 as CallMeBot on WhatsApp. 2) Send "I allow callmebot to send me messages" to that contact. 3) Copy the API key you receive. 4) Add WHATSAPP_PHONE and WHATSAPP_CALLMEBOT_KEY to .env and restart.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -4335,18 +4336,18 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "send_notification",
-        "description": "Send a message to Mo's phone via Telegram bot. Use when Mo asks to be pinged, notified, or sent a message on his phone.",
+        "description": "Send a message to Mo's WhatsApp via CallMeBot. Use when Mo asks to be pinged, notified, or sent a WhatsApp from El Fager.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "message": {
                     "type": "string",
-                    "description": "The message to send to Mo's phone."
+                    "description": "The message to send to Mo's WhatsApp."
                 },
                 "channel": {
                     "type": "string",
-                    "description": "Notification channel. Default: 'telegram'. Use 'all' to send to all configured channels.",
-                    "enum": ["telegram", "all"],
+                    "description": "Notification channel. Default: 'whatsapp'. Use 'all' to send to all configured channels.",
+                    "enum": ["whatsapp", "all"],
                 },
             },
             "required": ["message"],
@@ -4673,9 +4674,10 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     ],
     "notifications": [
         "send my phone", "ping me", "notify my phone", "send notification",
-        "telegram notification", "phone notification", "notification status",
-        "is telegram set up", "set up notifications", "phone alerts",
-        "how do i set up notifications", "push to my phone",
+        "whatsapp notification", "whatsapp alert", "phone notification", "notification status",
+        "is whatsapp set up", "set up notifications", "phone alerts",
+        "how do i set up notifications", "push to my phone", "send me a whatsapp",
+        "ping me on whatsapp", "whatsapp me",
     ],
 }
 
