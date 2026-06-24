@@ -411,7 +411,7 @@ class OverlayWindow(QWidget):
         self._trading.set_callback(
             on_start=lambda: self._start_pipeline(text_input="scan my watchlist"),
             on_stop=lambda: self._start_pipeline(text_input="pause trading"),
-            on_backtest=None,
+            on_backtest=lambda: self._start_pipeline(text_input="backtest all symbols"),
         )
         self._stack.addWidget(self._trading)
 
