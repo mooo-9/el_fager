@@ -92,8 +92,8 @@ class ProactiveEngine:
 
     # ── Delivery ──────────────────────────────────────────────────────────────
 
-    def _deliver(self, text: str) -> None:
-        """Show a Windows toast AND speak the message."""
+    def _deliver(self, text: str, remote: bool = False) -> None:
+        """Show a Windows toast, speak the message, and optionally push to phone."""
         try:
             from winotify import Notification
             Notification(
@@ -107,10 +107,16 @@ class ProactiveEngine:
         if self._speak_fn:
             try:
                 self._speak_fn(text)
-                return
             except Exception:
                 pass
-        print(f"[Proactive] {text}")
+        else:
+            print(f"[Proactive] {text}")
+        if remote:
+            try:
+                from core.notifier import get_notifier
+                get_notifier().send(text)
+            except Exception:
+                pass
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
@@ -161,7 +167,7 @@ class ProactiveEngine:
             pct = batt.percent
             if pct < 15:
                 if not self._cooldown("battery_critical", 0.5):
-                    self._deliver(f"Battery critical — {pct:.0f}%! Plug in now, Mo.")
+                    self._deliver(f"Battery critical -- {pct:.0f}%! Plug in now, Mo.", remote=True)
             elif pct < 25:
                 if not self._cooldown("battery_low", 0.5):
                     self._deliver(f"Mo, battery at {pct:.0f}%. Plug in soon.")
@@ -349,7 +355,7 @@ class ProactiveEngine:
             from tools.stocks_tool import check_price_alerts
             messages = check_price_alerts()
             for msg in messages:
-                self._deliver(msg)
+                self._deliver(msg, remote=True)
         except Exception:
             pass
 
@@ -397,7 +403,7 @@ class ProactiveEngine:
                     short = (result or "Done.")[:200]
                     mgr.complete(task["id"], short)
                     announcement = f"Background task done: {task['description'][:50]}. {short[:100]}"
-                    self._deliver(announcement)
+                    self._deliver(announcement, remote=True)
                 except Exception as e:
                     mgr.fail(task["id"], str(e))
         except Exception as e:

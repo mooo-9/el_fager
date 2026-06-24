@@ -254,10 +254,19 @@ class StocksAgent(BaseAgent):
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        return (
+        result_msg = (
             f"Bought {qty:.4f} {symbol} @ ~${current_price:.2f}. "
             f"SL: ${sl_price:.2f} | TP: ${tp_price:.2f}."
         )
+        try:
+            from core.notifier import get_notifier
+            get_notifier().send(
+                f"[El Fager Trade] BUY {qty:.4f} {symbol} at ${current_price:.2f}"
+                f" | SL ${sl_price:.2f} TP ${tp_price:.2f}"
+            )
+        except Exception:
+            pass
+        return result_msg
 
     # -- Watchlist scan --------------------------------------------------------
 

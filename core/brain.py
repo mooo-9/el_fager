@@ -373,6 +373,12 @@ add_autonomous_task(description, delay_hours, recurring_hours):
   - description should be a complete, self-contained instruction El Fager can execute.
 "what tasks do you have queued?" / "show my background tasks" -> list_autonomous_tasks.
 "cancel task X" / "remove task X" -> delete_autonomous_task(task_id) where task_id is the 8-char id from list_autonomous_tasks.
+Phone notifications (El Fager pushes alerts to Mo's Telegram bot):
+Tools: send_notification, notification_status.
+El Fager automatically sends phone alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
+When Mo says "send my phone a message", "ping me on Telegram", "notify my phone about X" -> send_notification(message).
+When Mo asks "is Telegram set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
+Setup: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in .env. Tell Mo the 3-step bot setup if he asks.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -4327,6 +4333,30 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["task_id"],
         },
     },
+    {
+        "name": "send_notification",
+        "description": "Send a message to Mo's phone via Telegram bot. Use when Mo asks to be pinged, notified, or sent a message on his phone.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The message to send to Mo's phone."
+                },
+                "channel": {
+                    "type": "string",
+                    "description": "Notification channel. Default: 'telegram'. Use 'all' to send to all configured channels.",
+                    "enum": ["telegram", "all"],
+                },
+            },
+            "required": ["message"],
+        },
+    },
+    {
+        "name": "notification_status",
+        "description": "Check if phone notifications are configured and working. Returns setup instructions if not configured.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4520,6 +4550,9 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "autonomous_tasks": frozenset({
         "add_autonomous_task", "list_autonomous_tasks", "delete_autonomous_task",
     }),
+    "notifications": frozenset({
+        "send_notification", "notification_status",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4635,8 +4668,14 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "queue", "add task for yourself", "do this for me", "do this later",
         "autonomous task", "background task", "my queued tasks", "what tasks do you have",
         "what tasks have you", "tasks queued", "cancel task", "remove task",
-        "do x for me", "el fager do", "you do this", "execute later",
-        "run this later", "task queue", "مهمة تلقائية", "انجز هذا لاحقا",
+        "el fager do", "execute later", "run this later", "task queue",
+        "you do this", "do x for me", "tonight please", "مهمة تلقائية", "انجز هذا لاحقا",
+    ],
+    "notifications": [
+        "send my phone", "ping me", "notify my phone", "send notification",
+        "telegram notification", "phone notification", "notification status",
+        "is telegram set up", "set up notifications", "phone alerts",
+        "how do i set up notifications", "push to my phone",
     ],
 }
 
@@ -6037,6 +6076,12 @@ class Brain:
             elif name == "delete_autonomous_task":
                 from tools.autonomous_task_tool import delete_autonomous_task as _del_at
                 return _del_at(**tool_input)
+            elif name == "send_notification":
+                from tools.notify_tool import send_notification as _send_notif
+                return _send_notif(**tool_input)
+            elif name == "notification_status":
+                from tools.notify_tool import notification_status as _notif_status
+                return _notif_status()
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
