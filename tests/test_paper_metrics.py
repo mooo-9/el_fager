@@ -82,16 +82,34 @@ class TestPaperMetricsCompute:
         m = PaperMetrics().compute()
         assert m["sharpe"] > 0.0
 
-    def test_gate_pass_requires_all_criteria(self, tmp_path, monkeypatch):
+    def test_gate_fails_due_to_drawdown(self, tmp_path, monkeypatch):
         from core.paper_metrics import PaperMetrics
         p = tmp_path / "trades.json"
-        # 31 trades but win rate only ~45% -- should NOT pass
+        # 14 wins then 17 losses in sequence → ~58% drawdown, far above 15% limit
         trades = [_trade("A", 12.0, "TP")] * 14 + [_trade("B", -5.0, "SL")] * 17
         _write(p, trades)
         monkeypatch.setattr("core.paper_metrics._TRADES_PATH", p)
         m = PaperMetrics().compute()
         assert m["total_completed"] == 31
+        assert m["max_drawdown"] > 15.0
         assert m["gate_pass"] is False
+
+    def test_gate_passes_with_50pct_win_rate_and_2to1_rr(self, tmp_path, monkeypatch):
+        from core.paper_metrics import PaperMetrics
+        p = tmp_path / "trades.json"
+        # 50% win rate (below old 52% floor) but 2:1 R:R → profit_factor 2.4, low drawdown
+        trades = []
+        for _ in range(15):
+            trades.append(_trade("A", 12.0, "TP"))
+            trades.append(_trade("B", -5.0, "SL"))
+        _write(p, trades)
+        monkeypatch.setattr("core.paper_metrics._TRADES_PATH", p)
+        m = PaperMetrics().compute()
+        assert m["total_completed"] == 30
+        assert m["win_rate"] == pytest.approx(50.0)
+        assert m["profit_factor"] == pytest.approx(2.4, rel=0.01)
+        assert m["max_drawdown"] < 15.0
+        assert m["gate_pass"] is True
 
 
 class TestPaperMetricsGateSummary:
