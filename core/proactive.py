@@ -29,9 +29,10 @@ _STATE_FILE = Path("data/proactive_state.json")
 class ProactiveEngine:
     CHECK_INTERVAL = 60  # seconds between check cycles
 
-    def __init__(self, speak_fn: Callable[[str], None], memory=None):
+    def __init__(self, speak_fn: Callable[[str], None], memory=None, brain_fn=None):
         self._speak_fn  = speak_fn
         self._memory    = memory
+        self._brain_fn  = brain_fn   # brain.chat callable for autonomous task execution
         self._running   = False
         self._thread: threading.Thread | None = None
         self._state: dict = self._load_state()
@@ -129,10 +130,11 @@ class ProactiveEngine:
         if not (6 <= hour <= 23):
             return          # sleep hours — stay quiet
 
-        self._check_battery()           # all hours
-        self._check_prayer_times()      # all waking hours
-        self._check_upcoming_events()   # all waking hours
-        self._check_price_alerts()      # all waking hours
+        self._check_battery()               # all hours
+        self._check_prayer_times()          # all waking hours
+        self._check_upcoming_events()       # all waking hours
+        self._check_price_alerts()          # all waking hours
+        self._check_autonomous_tasks()      # all waking hours
 
         if 7 <= hour <= 11:
             self._check_deadlines()
@@ -377,6 +379,29 @@ class ProactiveEngine:
                 )
         except Exception:
             pass
+
+    def _check_autonomous_tasks(self) -> None:
+        """Pick up and execute pending autonomous tasks (max 2 per cycle)."""
+        if self._brain_fn is None:
+            return
+        try:
+            from core.autonomous_tasks import AutonomousTaskManager
+            mgr = AutonomousTaskManager()
+            due = mgr.get_due()
+            if not due:
+                return
+            for task in due[:2]:
+                mgr.mark_running(task["id"])
+                try:
+                    result = self._brain_fn(task["description"])
+                    short = (result or "Done.")[:200]
+                    mgr.complete(task["id"], short)
+                    announcement = f"Background task done: {task['description'][:50]}. {short[:100]}"
+                    self._deliver(announcement)
+                except Exception as e:
+                    mgr.fail(task["id"], str(e))
+        except Exception as e:
+            print(f"[Proactive] autonomous task check error: {e}")
 
     def _check_budget_exceeded(self) -> None:
         """Evening budget check — alert if any budgets are over limit."""

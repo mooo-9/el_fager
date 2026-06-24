@@ -255,7 +255,7 @@ def main():
 
     # ── Proactive engine (condition-based, autonomous checks) ─────────────────
     from core.proactive import ProactiveEngine
-    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory)
+    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat)
     proactive.start()
 
     # ── Macro speak callback (enables mid-macro TTS announcements) ────────────

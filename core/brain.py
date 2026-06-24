@@ -363,6 +363,16 @@ All trading reports are exceptions to the 1-2 sentence rule — deliver the full
 - When Mo says "backtest all symbols" or "full backtest" -> run_full_backtest().
 - When Mo says "backtest results" or "how did the strategy do?" -> get_backtest_results().
 - When Mo says "compare to buy and hold [TICKER]" -> compare_to_buyhold(symbol).
+Autonomous tasks (El Fager executes on its own, proactively):
+Tools: add_autonomous_task, list_autonomous_tasks, delete_autonomous_task.
+Use when Mo delegates future work: "research X tonight", "check NVDA RSI every morning", "do X for me later", "queue: X", "El Fager, tonight please X".
+add_autonomous_task(description, delay_hours, recurring_hours):
+  - delay_hours=0 -> runs within 60s (next proactive check cycle).
+  - delay_hours=8 -> runs in 8 hours (useful for overnight tasks).
+  - recurring_hours=24 -> runs daily (monitoring tasks like "check RSI every day").
+  - description should be a complete, self-contained instruction El Fager can execute.
+"what tasks do you have queued?" / "show my background tasks" -> list_autonomous_tasks.
+"cancel task X" / "remove task X" -> delete_autonomous_task(task_id) where task_id is the 8-char id from list_autonomous_tasks.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -4279,6 +4289,44 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["symbol"],
         },
     },
+    {
+        "name": "add_autonomous_task",
+        "description": "Queue a task for El Fager to execute autonomously in the background. Use when Mo delegates work: 'research X tonight', 'check NVDA RSI every day', 'do X for me later'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Full natural-language description of what El Fager should do. Be specific — El Fager will call brain.chat(description) to execute it."
+                },
+                "delay_hours": {
+                    "type": "number",
+                    "description": "Hours from now to wait before running. 0 = run immediately on next check (within 60s). 8 = tonight if queued in morning."
+                },
+                "recurring_hours": {
+                    "type": "number",
+                    "description": "If > 0, re-queue automatically every N hours after each completion. Use for daily/weekly monitoring tasks."
+                },
+            },
+            "required": ["description"],
+        },
+    },
+    {
+        "name": "list_autonomous_tasks",
+        "description": "Show all queued, running, done, and failed autonomous tasks.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "delete_autonomous_task",
+        "description": "Remove an autonomous task from the queue by its id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The 8-char task id shown in list_autonomous_tasks."},
+            },
+            "required": ["task_id"],
+        },
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4469,6 +4517,9 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "backtest": frozenset({
         "run_backtest", "run_full_backtest", "get_backtest_results", "compare_to_buyhold",
     }),
+    "autonomous_tasks": frozenset({
+        "add_autonomous_task", "list_autonomous_tasks", "delete_autonomous_task",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4580,6 +4631,13 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
                    "did the strategy work", "historical performance", "backtest results",
                    "strategy test", "how did the strategy do", "compare to buy and hold",
                    "buy and hold", "اختبار الاستراتيجية"],
+    "autonomous_tasks": [
+        "queue", "add task for yourself", "do this for me", "do this later",
+        "autonomous task", "background task", "my queued tasks", "what tasks do you have",
+        "what tasks have you", "tasks queued", "cancel task", "remove task",
+        "do x for me", "el fager do", "you do this", "execute later",
+        "run this later", "task queue", "مهمة تلقائية", "انجز هذا لاحقا",
+    ],
 }
 
 # Build a name→slim_tool lookup once for O(1) filtering
@@ -5970,6 +6028,15 @@ class Brain:
             elif name == "compare_to_buyhold":
                 from tools.backtest_tool import compare_to_buyhold as _compare_bt
                 return _compare_bt(**tool_input)
+            elif name == "add_autonomous_task":
+                from tools.autonomous_task_tool import add_autonomous_task as _add_at
+                return _add_at(**tool_input)
+            elif name == "list_autonomous_tasks":
+                from tools.autonomous_task_tool import list_autonomous_tasks as _list_at
+                return _list_at()
+            elif name == "delete_autonomous_task":
+                from tools.autonomous_task_tool import delete_autonomous_task as _del_at
+                return _del_at(**tool_input)
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
