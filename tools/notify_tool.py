@@ -1,8 +1,8 @@
-"""Brain-callable notification tools for sending alerts to Mo's WhatsApp."""
+"""Brain-callable notification tools for sending alerts to Mo's WhatsApp (Twilio)."""
 
 
 def send_notification(message: str, channel: str = "whatsapp") -> str:
-    """Send a message to Mo's WhatsApp via CallMeBot."""
+    """Send a message to Mo's WhatsApp via Twilio sandbox."""
     from core.notifier import get_notifier
     notifier = get_notifier()
 
@@ -10,11 +10,12 @@ def send_notification(message: str, channel: str = "whatsapp") -> str:
         if not notifier.whatsapp_ready:
             return (
                 "WhatsApp not configured. "
-                "Add WHATSAPP_PHONE and WHATSAPP_CALLMEBOT_KEY to .env, then restart El Fager."
+                "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, "
+                "and WHATSAPP_PHONE to .env, then restart El Fager."
             )
         ok = notifier.send_whatsapp(message)
         if not ok:
-            return "WhatsApp send failed -- check WHATSAPP_PHONE and WHATSAPP_CALLMEBOT_KEY in .env."
+            return "WhatsApp send failed -- check your Twilio credentials in .env."
 
     return f"Notification sent: {message[:80]}"
 

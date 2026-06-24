@@ -378,8 +378,8 @@ Tools: send_notification, notification_status.
 El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
 When Mo says "send my phone a message", "ping me on WhatsApp", "send me a WhatsApp", "notify my phone about X" -> send_notification(message).
 When Mo asks "is WhatsApp set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
-Setup: WHATSAPP_PHONE (number with country code, no +) + WHATSAPP_CALLMEBOT_KEY in .env.
-If Mo asks how to set it up: 1) Save +34 644 64 87 48 as CallMeBot on WhatsApp. 2) Send "I allow callmebot to send me messages" to that contact. 3) Copy the API key you receive. 4) Add WHATSAPP_PHONE and WHATSAPP_CALLMEBOT_KEY to .env and restart.
+Setup: TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_FROM + WHATSAPP_PHONE in .env.
+If Mo asks how to set it up: 1) Sign up free at twilio.com. 2) Go to Messaging -> Try it out -> Send a WhatsApp message. 3) Send the join code shown to the sandbox number from your WhatsApp. 4) Copy Account SID and Auth Token from the Twilio dashboard. 5) Add all four env vars to .env and restart El Fager.
 """
 
 TOOLS: list[dict[str, Any]] = [

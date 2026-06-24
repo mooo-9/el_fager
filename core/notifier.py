@@ -1,14 +1,18 @@
 """
-ElFagerNotifier -- sends alerts to Mo's WhatsApp via CallMeBot (free, personal use).
+ElFagerNotifier -- sends alerts to Mo's WhatsApp via Twilio sandbox (free).
 
-Setup (one-time, ~2 minutes):
-  1. Save +34 644 64 87 48 in your WhatsApp contacts as "CallMeBot".
-  2. Send this exact message to that contact: I allow callmebot to send me messages
-  3. You will receive your API key in a reply from CallMeBot.
-  4. Add to .env:
-       WHATSAPP_PHONE=201234567890        (your number with country code, no + sign)
-       WHATSAPP_CALLMEBOT_KEY=<key from step 3>
-  5. Restart El Fager. Stock trades, price alerts, and task completions will reach your WhatsApp.
+One-time setup (~10 minutes):
+  1. Sign up at twilio.com/try-twilio (free, no credit card for sandbox).
+  2. In the Twilio Console go to: Messaging -> Try it out -> Send a WhatsApp message.
+  3. You will see a sandbox number (e.g. +14155238886) and a join code like "join silver-tiger".
+  4. From YOUR WhatsApp, send that join message to the sandbox number to opt in.
+  5. From the Twilio Console dashboard copy your Account SID and Auth Token.
+  6. Add to .env:
+       TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+       TWILIO_AUTH_TOKEN=your_auth_token
+       TWILIO_WHATSAPP_FROM=+14155238886   (the sandbox number from step 3)
+       WHATSAPP_PHONE=+201152215125        (your number, WITH + sign)
+  7. Restart El Fager. Trades, alerts, and task completions will arrive on WhatsApp.
 """
 
 import os
@@ -16,33 +20,42 @@ from typing import Optional
 
 import httpx
 
-_CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php"
 _INSTANCE: Optional["ElFagerNotifier"] = None
 
 
 class ElFagerNotifier:
     def __init__(self) -> None:
-        self._wa_phone = os.getenv("WHATSAPP_PHONE", "").strip()
-        self._wa_key   = os.getenv("WHATSAPP_CALLMEBOT_KEY", "").strip()
+        self._account_sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+        self._auth_token  = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+        self._from_number = os.getenv("TWILIO_WHATSAPP_FROM", "").strip()
+        self._to_number   = os.getenv("WHATSAPP_PHONE", "").strip()
 
     @property
     def whatsapp_ready(self) -> bool:
-        return bool(self._wa_phone and self._wa_key)
+        return bool(
+            self._account_sid
+            and self._auth_token
+            and self._from_number
+            and self._to_number
+        )
 
     def send_whatsapp(self, text: str) -> bool:
         if not self.whatsapp_ready:
             return False
+        url = (
+            f"https://api.twilio.com/2010-04-01/Accounts/"
+            f"{self._account_sid}/Messages.json"
+        )
+        from_wa = f"whatsapp:{self._from_number}"
+        to_wa   = f"whatsapp:{self._to_number}"
         try:
-            resp = httpx.get(
-                _CALLMEBOT_URL,
-                params={
-                    "phone":  self._wa_phone,
-                    "text":   text[:1600],
-                    "apikey": self._wa_key,
-                },
+            resp = httpx.post(
+                url,
+                data={"From": from_wa, "To": to_wa, "Body": text[:1600]},
+                auth=(self._account_sid, self._auth_token),
                 timeout=10,
             )
-            return resp.status_code == 200
+            return resp.status_code in (200, 201)
         except Exception:
             return False
 
@@ -51,11 +64,18 @@ class ElFagerNotifier:
 
     def status(self) -> str:
         if self.whatsapp_ready:
-            return "WhatsApp: ready -- alerts will be sent to your phone."
+            return f"WhatsApp (Twilio): ready -- alerts go to {self._to_number}."
+        missing = [
+            v for v, k in [
+                ("TWILIO_ACCOUNT_SID",  self._account_sid),
+                ("TWILIO_AUTH_TOKEN",   self._auth_token),
+                ("TWILIO_WHATSAPP_FROM", self._from_number),
+                ("WHATSAPP_PHONE",      self._to_number),
+            ] if not k
+        ]
         return (
-            "WhatsApp: not configured. "
-            "Add WHATSAPP_PHONE and WHATSAPP_CALLMEBOT_KEY to .env. "
-            "Ask El Fager 'how do I set up WhatsApp notifications' for step-by-step instructions."
+            f"WhatsApp not configured. Missing in .env: {', '.join(missing)}. "
+            "Ask El Fager 'how do I set up WhatsApp notifications' for setup steps."
         )
 
 
