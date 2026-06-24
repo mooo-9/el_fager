@@ -26,6 +26,17 @@ from typing import Callable
 _STATE_FILE = Path("data/proactive_state.json")
 
 
+def _fmt12(hhmm: str) -> str:
+    """Convert 'HH:MM' (24h) to '12:30 PM' format."""
+    try:
+        h, m = map(int, hhmm.split(":"))
+        suffix = "AM" if h < 12 else "PM"
+        h12 = h % 12 or 12
+        return f"{h12}:{m:02d} {suffix}"
+    except Exception:
+        return hhmm
+
+
 class ProactiveEngine:
     CHECK_INTERVAL = 60  # seconds between check cycles
 
@@ -205,7 +216,7 @@ class ProactiveEngine:
                     if 7 <= delta_min <= 18:
                         key = f"prayer_{name}_{today}"
                         if not self._cooldown(key, 23):
-                            self._deliver(f"Mo, {name} is in {int(delta_min)} minutes — {t_str}.")
+                            self._deliver(f"Mo, {name} is in {int(delta_min)} minutes — {_fmt12(t_str)}.")
                 except ValueError:
                     pass
         except Exception:
