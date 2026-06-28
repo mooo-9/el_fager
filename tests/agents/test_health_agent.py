@@ -193,3 +193,20 @@ def test_chef_mode_suggests_based_on_macros():
     with patch("core.agents.browser_agent.BrowserAgent.run", return_value=browser_response):
         result = agent.run("what can i make for dinner? something easy and high protein")
     assert len(result) > 20
+
+
+def test_router_food_keywords():
+    from core.agents.router import classify_intent
+    assert classify_intent("I just ate 200g chicken breast") == "health"
+    assert classify_intent("give me a recipe for pasta") == "health"
+    assert classify_intent("what can i cook tonight?") == "health"
+    assert classify_intent("nutrition summary") == "health"
+    assert classify_intent("how many calories today?") == "health"
+
+
+def test_router_gym_keywords():
+    from core.agents.router import classify_intent
+    assert classify_intent("just finished chest day bench press 4x8") == "health"
+    assert classify_intent("what's my workout today?") == "health"
+    assert classify_intent("my split is Monday chest Tuesday back") == "health"
+    assert classify_intent("how's my bench press progress?") == "health"

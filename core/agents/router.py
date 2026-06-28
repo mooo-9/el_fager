@@ -76,6 +76,30 @@ _CANCEL_LIVE_KEYWORDS = [
     "stop live trading activation",
 ]
 
+_HEALTH_FOOD_KEYWORDS = [
+    "i just ate", "i ate", "i had", "log meal", "log food",
+    "nutrition", "calories today", "how many calories", "macro", "macros",
+    "protein today", "what did i eat", "log what i ate",
+    "recipe", "give me a recipe", "how do i make", "how to make",
+    "what can i make", "what can i cook", "suggest a meal", "chef",
+    "cook", "cooking", "ingredient", "ingredients",
+    "my stats", "daily target", "set my daily",
+    "calorie target",
+    "breakfast", "lunch", "dinner", "snack", "meal",
+]
+
+_HEALTH_GYM_KEYWORDS = [
+    "gym", "workout", "training", "exercise",
+    "chest day", "back day", "leg day", "push day", "pull day",
+    "shoulder day", "arm day", "upper body", "lower body",
+    "bench press", "squat", "deadlift", "sets", "reps",
+    "progressive overload", "my split", "training split",
+    "just finished", "finished chest", "finished back", "finished leg",
+    "rest day", "how's my bench", "bench progress",
+    "what should i do today", "today's workout", "today's session",
+    "generate a program", "create a program", "training plan",
+]
+
 _RESEARCH_KEYWORDS = [
     "research everything", "deep dive into", "find out everything about",
     "investigate", "comprehensive analysis of", "tell me everything about",
@@ -101,6 +125,7 @@ _LABEL_KEYWORDS = [
     ("cancel_live", _CANCEL_LIVE_KEYWORDS),    # checked before gate_check and stocks
     ("gate_check", _GATE_CHECK_KEYWORDS),      # checked before generic "stocks"
     ("stocks", _STOCKS_KEYWORDS),
+    ("health", _HEALTH_FOOD_KEYWORDS + _HEALTH_GYM_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),
 ]

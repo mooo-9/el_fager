@@ -381,6 +381,12 @@ When Mo says "send my phone a message", "ping me on WhatsApp", "send me a WhatsA
 When Mo asks "is WhatsApp set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
 Setup: TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_FROM + WHATSAPP_PHONE in .env.
 If Mo asks how to set it up: 1) Sign up free at twilio.com. 2) Go to Messaging -> Try it out -> Send a WhatsApp message. 3) Send the join code shown to the sandbox number from your WhatsApp. 4) Copy Account SID and Auth Token from the Twilio dashboard. 5) Add all four env vars to .env and restart El Fager.
+Health & Nutrition tools: log_meal, log_workout, nutrition_summary, gym_program, chef_suggest.
+When Mo says "I ate X", "I just ate", "log meal" -- call log_meal.
+When Mo says "finished [day] day" or "just finished workout" -- call log_workout.
+When Mo says "nutrition summary", "how am I doing", "calories today" -- call nutrition_summary.
+When Mo asks for a recipe or "what can I cook" -- HealthAgent handles it (chef mode).
+When Mo says "my split is", "generate a program", "what's today's workout" -- HealthAgent handles it.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -6109,6 +6115,9 @@ class Brain:
         if intent == "file":
             from core.agents.file_agent import FileAgent
             return FileAgent().run(task)
+        if intent == "health":
+            from core.agents.health_agent import HealthAgent
+            return HealthAgent().run(task)
         if intent == "gate_check":
             from core.trade_tracker import TradeTracker
             from core.paper_metrics import PaperMetrics
