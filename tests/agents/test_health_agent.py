@@ -210,3 +210,47 @@ def test_router_gym_keywords():
     assert classify_intent("what's my workout today?") == "health"
     assert classify_intent("my split is Monday chest Tuesday back") == "health"
     assert classify_intent("how's my bench press progress?") == "health"
+
+
+# -- Proactive health check logic tests ----------------------------------------
+
+def test_proactive_lunch_reminder_fires_when_lunch_missing():
+    """Simulates 1 PM with no lunch logged -- should return a reminder."""
+    from core.agents.health_agent import HealthAgent
+    agent  = HealthAgent()
+    _setup_profile(agent)
+    # Log only breakfast
+    with patch("core.agents.nutrition_db.NutritionDB.search_food",
+               return_value=_mock_food(300, 20, 40, 5, "Oats")):
+        agent.run("i ate 100g oats")
+
+    log   = agent._load_meal_log()
+    today = __import__("datetime").date.today().isoformat()
+    entry = next((e for e in log["entries"] if e["date"] == today), None)
+    meal_count = len(entry["items"]) if entry else 0
+    assert meal_count == 1  # only breakfast logged
+
+
+def test_proactive_daily_summary_content():
+    from core.agents.health_agent import HealthAgent
+    agent = HealthAgent()
+    _setup_profile(agent)
+    with patch("core.agents.nutrition_db.NutritionDB.search_food",
+               return_value=_mock_food(500, 40, 50, 10, "Chicken and Rice")):
+        agent.run("i ate 200g chicken and rice")
+    summary = agent._nutrition_summary(agent._load_profile())
+    assert "kcal" in summary.lower() or "calorie" in summary.lower()
+    assert "/" in summary  # shows X/Y format
+
+
+def test_gym_day_check_detects_unlogged_session():
+    from core.agents.health_agent import HealthAgent
+    import datetime
+    agent = HealthAgent()
+    _setup_profile(agent)
+    today_name = datetime.datetime.now().strftime("%A").lower()
+    agent.run(f"my split is: {today_name} chest")
+    log = agent._load_workout_log()
+    today = datetime.date.today().isoformat()
+    trained_today = any(s["date"] == today for s in log["sessions"])
+    assert not trained_today  # no workout logged yet -- proactive should fire

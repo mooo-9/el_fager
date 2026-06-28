@@ -166,6 +166,20 @@ class ProactiveEngine:
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
             self._check_weekly_review()
 
+        if hour == 13:
+            self._check_lunch_logged()
+
+        if hour == 18:
+            self._check_daily_nutrition()
+
+        if hour == 20:
+            self._check_gym_session()
+
+        if now.weekday() == 0:  # Monday
+            self._check_weekly_gym_report()
+
+        self._check_rest_day()
+
     # ── Individual checks ─────────────────────────────────────────────────────
 
     def _check_battery(self) -> None:
@@ -440,5 +454,98 @@ class ProactiveEngine:
             self._deliver(
                 "Mo, budget alert — " + " | ".join(parts) + ". Want a full budget breakdown?"
             )
+        except Exception:
+            pass
+
+    def _check_lunch_logged(self) -> None:
+        """Remind Mo if no food logged around lunch time."""
+        if self._cooldown("health_lunch_reminder", 20):
+            return
+        try:
+            from core.agents.health_agent import HealthAgent
+            from datetime import date
+            log   = HealthAgent()._load_meal_log()
+            today = date.today().isoformat()
+            entry = next((e for e in log.get("entries", []) if e["date"] == today), None)
+            if entry is None or len(entry.get("items", [])) == 0:
+                self._deliver("Mo, you haven't logged any meals today -- don't skip lunch.")
+        except Exception:
+            pass
+
+    def _check_daily_nutrition(self) -> None:
+        """6 PM nutrition summary -- how close Mo is to daily targets."""
+        if self._cooldown("health_daily_summary", 20):
+            return
+        try:
+            from core.agents.health_agent import HealthAgent
+            agent   = HealthAgent()
+            profile = agent._load_profile()
+            if profile is None:
+                return
+            summary = agent._nutrition_summary(profile)
+            if "nothing logged" not in summary.lower():
+                self._deliver(f"Nutrition check -- {summary}")
+        except Exception:
+            pass
+
+    def _check_gym_session(self) -> None:
+        """8 PM: if today is a gym day and no workout logged, nudge Mo."""
+        if self._cooldown("health_gym_reminder", 20):
+            return
+        try:
+            from core.agents.health_agent import HealthAgent
+            from pathlib import Path
+            import json, datetime
+            gym_path = Path("data/gym_program.json")
+            if not gym_path.exists():
+                return
+            program    = json.loads(gym_path.read_text())
+            today_name = datetime.datetime.now().strftime("%A").lower()
+            session    = program.get("split", {}).get(today_name)
+            if not session:
+                return
+            log   = HealthAgent()._load_workout_log()
+            today = datetime.date.today().isoformat()
+            if not any(s["date"] == today for s in log.get("sessions", [])):
+                self._deliver(f"Mo, it's {session} day -- did you train? Log it when you're done.")
+        except Exception:
+            pass
+
+    def _check_weekly_gym_report(self) -> None:
+        """Monday: weekly gym report."""
+        if self._cooldown("health_weekly_report", 144):  # 6 days
+            return
+        try:
+            from core.agents.health_agent import HealthAgent
+            from datetime import date, timedelta
+            log      = HealthAgent()._load_workout_log()
+            week_ago = (date.today() - timedelta(days=7)).isoformat()
+            sessions = [s for s in log.get("sessions", []) if s["date"] >= week_ago]
+            count    = len(sessions)
+            if count == 0:
+                self._deliver("Weekly gym report -- no sessions logged last week. Get back on track, Mo.")
+            else:
+                days = ", ".join(s["session"].capitalize() for s in sessions[-3:])
+                self._deliver(f"Weekly gym report -- {count} sessions last week. Latest: {days}.")
+        except Exception:
+            pass
+
+    def _check_rest_day(self) -> None:
+        """Suggest rest after 4 consecutive training days."""
+        if self._cooldown("health_rest_suggestion", 20):
+            return
+        try:
+            from core.agents.health_agent import HealthAgent
+            from datetime import date, timedelta
+            log = HealthAgent()._load_workout_log()
+            consecutive = 0
+            for i in range(4):
+                check_date = (date.today() - timedelta(days=i)).isoformat()
+                if any(s["date"] == check_date for s in log.get("sessions", [])):
+                    consecutive += 1
+                else:
+                    break
+            if consecutive >= 4:
+                self._deliver("Mo, you've trained 4 days straight -- consider a rest day for recovery.")
         except Exception:
             pass
