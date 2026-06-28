@@ -273,7 +273,10 @@ class HealthAgent(BaseAgent):
 
     def _save_workout_log(self, log: dict) -> None:
         _WORKOUT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _WORKOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
+        try:
+            _WORKOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
+        except Exception:
+            pass
 
     def _chef_mode(self, task: str, profile: dict) -> str:
         targets = self._effective_targets(profile)
@@ -351,12 +354,18 @@ class HealthAgent(BaseAgent):
 
     def _save_meal_log(self, log: dict) -> None:
         _MEAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _MEAL_LOG_PATH.write_text(json.dumps(log, indent=2))
+        try:
+            _MEAL_LOG_PATH.write_text(json.dumps(log, indent=2))
+        except Exception:
+            pass
 
     def _todays_workout(self, profile: dict) -> str:
         if not _GYM_PROGRAM_PATH.exists():
             return "No program set up yet. Tell me your split or ask me to generate one."
-        program = json.loads(_GYM_PROGRAM_PATH.read_text())
+        try:
+            program = json.loads(_GYM_PROGRAM_PATH.read_text())
+        except Exception:
+            return "Could not read gym program -- it may be corrupted. Try setting your split again."
         today   = _datetime.now().strftime("%A").lower()
         session = program.get("split", {}).get(today)
         if not session:

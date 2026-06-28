@@ -157,6 +157,7 @@ class ProactiveEngine:
             self._check_deadlines()
             self._check_weather()
             self._check_overdue_invoices()
+            self._check_rest_day()
 
         if 19 <= hour <= 22:
             self._check_journal()
@@ -177,8 +178,6 @@ class ProactiveEngine:
 
         if now.weekday() == 0:  # Monday
             self._check_weekly_gym_report()
-
-        self._check_rest_day()
 
     # ── Individual checks ─────────────────────────────────────────────────────
 
@@ -493,10 +492,8 @@ class ProactiveEngine:
         if self._cooldown("health_gym_reminder", 20):
             return
         try:
-            from core.agents.health_agent import HealthAgent
-            from pathlib import Path
-            import json, datetime
-            gym_path = Path("data/gym_program.json")
+            from core.agents.health_agent import HealthAgent, _GYM_PROGRAM_PATH as gym_path
+            import datetime
             if not gym_path.exists():
                 return
             program    = json.loads(gym_path.read_text())
