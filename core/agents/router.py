@@ -77,7 +77,7 @@ _CANCEL_LIVE_KEYWORDS = [
 ]
 
 _HEALTH_FOOD_KEYWORDS = [
-    "i just ate", "i ate", "i had", "log meal", "log food",
+    "i just ate", "i ate", "i just had", "log meal", "log food",
     "nutrition", "calories today", "how many calories", "macro", "macros",
     "protein today", "what did i eat", "log what i ate",
     "recipe", "give me a recipe", "how do i make", "how to make",
