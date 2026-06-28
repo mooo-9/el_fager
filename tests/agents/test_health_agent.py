@@ -163,3 +163,33 @@ def test_todays_workout_with_program():
     result = agent.run("what should i do today?")
     # Should return some workout info (day name + exercises or a message)
     assert len(result) > 10
+
+
+# -- Chef mode tests -----------------------------------------------------------
+
+def test_chef_mode_returns_recipe_and_youtube():
+    agent = _make_agent()
+    _setup_profile(agent)
+    browser_response = (
+        "Recipe: Shakshuka\n"
+        "Ingredients: 2 eggs, 1 can tomatoes, onion, garlic\n"
+        "Steps: 1. Saute onion 2. Add tomatoes 3. Crack eggs 4. Simmer\n"
+        "YouTube: https://youtube.com/watch?v=abc123"
+    )
+    with patch("core.agents.browser_agent.BrowserAgent.run", return_value=browser_response):
+        result = agent.run("give me a recipe for shakshuka")
+    assert "shakshuka" in result.lower() or "recipe" in result.lower()
+    assert "youtube" in result.lower() or "http" in result.lower()
+
+
+def test_chef_mode_suggests_based_on_macros():
+    agent = _make_agent()
+    _setup_profile(agent)
+    # Log a small meal so remaining macros are high protein need
+    with patch("core.agents.nutrition_db.NutritionDB.search_food",
+               return_value=_mock_food(200, 15, 20, 5, "Oats")):
+        agent.run("i ate 100g oats")
+    browser_response = "Recipe: Grilled Chicken\nIngredients: chicken\nSteps: grill it\nYouTube: https://youtube.com/watch?v=xyz"
+    with patch("core.agents.browser_agent.BrowserAgent.run", return_value=browser_response):
+        result = agent.run("what can i make for dinner? something easy and high protein")
+    assert len(result) > 20

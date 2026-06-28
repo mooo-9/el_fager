@@ -276,7 +276,29 @@ class HealthAgent(BaseAgent):
         _WORKOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
 
     def _chef_mode(self, task: str, profile: dict) -> str:
-        return "Chef mode not yet implemented."
+        targets = self._effective_targets(profile)
+        log     = self._load_meal_log()
+        today   = _date.today().isoformat()
+        entry   = next((e for e in log["entries"] if e["date"] == today), None)
+        totals  = entry["totals"] if entry else {"kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0}
+
+        remaining_protein = max(0, targets["protein_g"] - totals["protein_g"])
+        remaining_kcal    = max(0, targets["kcal"] - totals["kcal"])
+
+        context = (
+            f"Mo needs easy beginner-friendly recipes. "
+            f"He still needs {remaining_kcal:.0f} kcal and {remaining_protein:.0f}g protein today. "
+            f"Original request: {task}. "
+            f"Find a recipe, list ingredients and steps simply, then search YouTube for a video tutorial and include the link."
+        )
+
+        try:
+            from core.agents.browser_agent import BrowserAgent
+            result = BrowserAgent().run(context)
+        except Exception as exc:
+            return f"Couldn't fetch a recipe right now: {exc}"
+
+        return result
 
     def _setup_gym_program(self, task: str, profile: dict) -> str:
         task_lower = task.lower()
