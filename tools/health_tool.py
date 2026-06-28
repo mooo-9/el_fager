@@ -1,6 +1,4 @@
 """Instant-lane health tools -- thin wrappers over HealthAgent methods."""
-from pathlib import Path
-import json
 
 
 def log_meal(description: str) -> str:
