@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime
 from pathlib import Path
 
 from core.agents.base_agent import BaseAgent
@@ -195,13 +195,114 @@ class HealthAgent(BaseAgent):
         return [(name.strip(), float(grams)) for grams, name in matches]
 
     def _log_workout(self, task: str, profile: dict) -> str:
-        return "Workout logging not yet implemented."
+        session_name = self._parse_session_name(task)
+        exercises    = self._parse_exercises(task)
+
+        if not exercises:
+            return "I couldn't parse any exercises. Try: finished chest day: bench press 4x8 at 80kg"
+
+        log   = self._load_workout_log()
+        today = _date.today().isoformat()
+        session = {
+            "date": today,
+            "session": session_name,
+            "exercises": exercises,
+        }
+        log["sessions"].append(session)
+        self._save_workout_log(log)
+
+        overload_hint = self._check_overload(session_name, exercises, log)
+        names = ", ".join(e["name"] for e in exercises)
+        reply = f"Logged {session_name} day -- {names}."
+        if overload_hint:
+            reply += f" {overload_hint}"
+        return reply
+
+    def _parse_session_name(self, task: str) -> str:
+        for day_type in ["chest", "back", "legs", "leg", "shoulders", "shoulder",
+                         "arms", "push", "pull", "upper", "lower", "full body"]:
+            if day_type in task.lower():
+                return day_type.replace("leg", "legs").replace("shoulder", "shoulders")
+        return "workout"
+
+    def _parse_exercises(self, task: str) -> list:
+        """Parse 'bench press 4x8 at 80kg' patterns."""
+        pattern = r"([a-zA-Z ]+?)\s+(\d+)x(\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*kg"
+        matches = re.findall(pattern, task, re.IGNORECASE)
+        exercises = []
+        for name, sets_count, reps, weight in matches:
+            sets = [{"reps": int(reps), "weight_kg": float(weight)}] * int(sets_count)
+            exercises.append({"name": name.strip(), "sets": sets})
+        return exercises
+
+    def _check_overload(self, session: str, exercises: list, log: dict) -> str:
+        """If the same exercise was logged at same weight and same/more reps 2+ times, suggest increasing."""
+        hints = []
+        # All sessions except the last one just added (which is already appended)
+        prior_sessions = log["sessions"][:-1]
+        # Take at most the last 3 prior sessions of the same type
+        same_type_sessions = [s for s in prior_sessions if s["session"] == session]
+        last_three = same_type_sessions[-3:]
+
+        for exercise in exercises:
+            name   = exercise["name"].lower()
+            weight = exercise["sets"][0]["weight_kg"]
+            reps   = exercise["sets"][0]["reps"]
+            matches_count = 0
+            for s in last_three:
+                for e in s["exercises"]:
+                    if (e["name"].lower() == name
+                            and e["sets"][0]["weight_kg"] == weight
+                            and e["sets"][0]["reps"] >= reps):
+                        matches_count += 1
+                        break
+            if matches_count >= 2:
+                next_weight = weight + 2.5
+                hints.append(
+                    f"You've hit {weight}kg on {exercise['name']} twice -- try {next_weight}kg next session."
+                )
+        return " ".join(hints)
+
+    def _load_workout_log(self) -> dict:
+        if _WORKOUT_LOG_PATH.exists():
+            try:
+                return json.loads(_WORKOUT_LOG_PATH.read_text())
+            except Exception:
+                pass
+        return {"sessions": []}
+
+    def _save_workout_log(self, log: dict) -> None:
+        _WORKOUT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _WORKOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
 
     def _chef_mode(self, task: str, profile: dict) -> str:
         return "Chef mode not yet implemented."
 
     def _setup_gym_program(self, task: str, profile: dict) -> str:
-        return "Gym program setup not yet implemented."
+        task_lower = task.lower()
+        split = {}
+
+        if "my split is" in task_lower or "my training" in task_lower:
+            days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+            for day in days:
+                pattern = (
+                    rf"{day}\s*[:\-]?\s*([a-zA-Z /]+?)"
+                    rf"(?=,\s*(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|$)"
+                )
+                m = re.search(pattern, task_lower)
+                if m:
+                    split[day] = m.group(1).strip().rstrip(",")
+
+            if not split:
+                return "I couldn't parse your split. Try: my split is: Monday chest, Tuesday back, Wednesday legs"
+
+            program = {"type": "custom", "split": split, "exercises": {}}
+            _GYM_PROGRAM_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _GYM_PROGRAM_PATH.write_text(json.dumps(program, indent=2))
+            days_listed = ", ".join(f"{d.capitalize()} ({s})" for d, s in split.items())
+            return f"Program saved -- {days_listed}."
+
+        return "Tell me your split (e.g. my split is: Monday chest, Tuesday back) and I'll track it."
 
     def _nutrition_summary(self, profile: dict) -> str:
         log   = self._load_meal_log()
@@ -231,10 +332,29 @@ class HealthAgent(BaseAgent):
         _MEAL_LOG_PATH.write_text(json.dumps(log, indent=2))
 
     def _todays_workout(self, profile: dict) -> str:
-        return "Today's workout not yet implemented."
+        if not _GYM_PROGRAM_PATH.exists():
+            return "No program set up yet. Tell me your split or ask me to generate one."
+        program = json.loads(_GYM_PROGRAM_PATH.read_text())
+        today   = _datetime.now().strftime("%A").lower()
+        session = program.get("split", {}).get(today)
+        if not session:
+            return f"No session scheduled for {today.capitalize()} in your program -- rest day."
+        return f"Today is {session} day. Say 'finished {session} day: [exercises]' when done."
 
     def _exercise_progress(self, task: str, profile: dict) -> str:
-        return "Exercise progress not yet implemented."
+        log = self._load_workout_log()
+        stop_words = {"progress", "how", "is", "my", "how's", "doing", "strength"}
+        words      = [w for w in task.lower().split() if w not in stop_words]
+        query      = " ".join(words).strip()
+        history    = []
+        for session in log["sessions"]:
+            for exercise in session["exercises"]:
+                if query in exercise["name"].lower():
+                    top_set = max(exercise["sets"], key=lambda s: s["weight_kg"])
+                    history.append(f"{session['date']}: {top_set['weight_kg']}kg x {top_set['reps']} reps")
+        if not history:
+            return f"No history found for '{query}'."
+        return f"{query.title()} history -- " + ", ".join(history[-5:])
 
     # -- Parse helpers ---------------------------------------------------------
 

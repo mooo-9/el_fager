@@ -118,3 +118,48 @@ def test_log_meal_from_screen_delegates_to_screen_agent():
         result = agent.run("what did i just eat? log it")
     mock_screen.assert_called_once()
     assert "logged" in result.lower() or "chicken" in result.lower()
+
+
+# -- Gym tests -----------------------------------------------------------------
+
+def test_set_custom_split():
+    agent = _make_agent()
+    _setup_profile(agent)
+    result = agent.run("my split is: Monday chest, Tuesday back, Wednesday legs, Thursday shoulders")
+    assert "saved" in result.lower() or "program" in result.lower()
+    program = json.loads(Path("data/gym_program.json").read_text())
+    assert "monday" in program["split"]
+    assert "chest" in program["split"]["monday"]
+
+
+def test_log_workout_saves_session():
+    agent = _make_agent()
+    _setup_profile(agent)
+    agent.run("my split is: Monday chest, Tuesday back")
+    result = agent.run("just finished chest day: bench press 4x8 at 80kg, incline 3x10 at 60kg")
+    assert "logged" in result.lower() or "chest" in result.lower()
+    log = json.loads(Path("data/workout_log.json").read_text())
+    assert len(log["sessions"]) == 1
+    session = log["sessions"][0]
+    assert session["session"] == "chest"
+    bench = next(e for e in session["exercises"] if "bench" in e["name"].lower())
+    assert bench["sets"][0]["weight_kg"] == 80.0
+
+
+def test_progressive_overload_nudge():
+    agent = _make_agent()
+    _setup_profile(agent)
+    # Log same weight/reps twice -- should trigger overload suggestion on third
+    for _ in range(2):
+        agent.run("just finished chest day: bench press 4x8 at 80kg")
+    result = agent.run("just finished chest day: bench press 4x8 at 80kg")
+    assert "82" in result or "increase" in result.lower() or "heavier" in result.lower()
+
+
+def test_todays_workout_with_program():
+    agent = _make_agent()
+    _setup_profile(agent)
+    agent.run("my split is: Monday chest, Tuesday back, Wednesday legs")
+    result = agent.run("what should i do today?")
+    # Should return some workout info (day name + exercises or a message)
+    assert len(result) > 10
