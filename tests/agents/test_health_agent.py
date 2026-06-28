@@ -106,3 +106,15 @@ def test_food_not_found_gives_helpful_message():
                side_effect=FoodNotFoundError("not found")):
         result = agent.run("i ate 100g xyzunknownfood")
     assert "specific" in result.lower() or "couldn't find" in result.lower()
+
+
+def test_log_meal_from_screen_delegates_to_screen_agent():
+    agent = _make_agent()
+    _setup_profile(agent)
+    with patch("core.agents.screen_agent.ScreenAgent.run",
+               return_value="I can see: a plate with grilled chicken and rice") as mock_screen, \
+         patch("core.agents.nutrition_db.NutritionDB.search_food",
+               return_value=_mock_food(200, 30, 20, 5, "Grilled Chicken")):
+        result = agent.run("what did i just eat? log it")
+    mock_screen.assert_called_once()
+    assert "logged" in result.lower() or "chicken" in result.lower()

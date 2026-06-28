@@ -49,6 +49,10 @@ class HealthAgent(BaseAgent):
                 "Say something like: my stats: 22 years old, 75kg, 175cm, goal is bulk"
             )
 
+        # Screen-based meal logging (before generic "log meal" check)
+        if any(kw in task_lower for kw in ["what did i just eat", "what did i eat", "log what i ate"]):
+            return self._log_meal_from_screen(task, profile)
+
         # Routing to sub-handlers (filled in later tasks)
         if any(kw in task_lower for kw in ["log meal", "i ate", "i just ate", "i had", "ate"]):
             return self._log_meal(task, profile)
@@ -173,6 +177,16 @@ class HealthAgent(BaseAgent):
             f"protein {totals['protein_g']:.0f}/{targets['protein_g']:.0f}g."
         )
         return " ".join(p for p in parts if p)
+
+    def _log_meal_from_screen(self, task: str, profile: dict) -> str:
+        try:
+            from core.agents.screen_agent import ScreenAgent
+            screen_result = ScreenAgent().run("What food items can you see? List them with approximate portions.")
+        except Exception as exc:
+            return f"Couldn't read the screen: {exc}. Describe what you ate instead."
+
+        # Feed the screen description back through meal logging
+        return self._log_meal(screen_result, profile)
 
     def _parse_meal_items(self, task: str) -> list[tuple[str, float]]:
         """Extract (food_name, grams) pairs from a sentence like '200g chicken breast and 150g rice'."""
