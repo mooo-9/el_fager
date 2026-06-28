@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import date as _date
 from pathlib import Path
 
 from core.agents.base_agent import BaseAgent
@@ -138,7 +139,46 @@ class HealthAgent(BaseAgent):
     # -- Stubs (implemented in later tasks) ------------------------------------
 
     def _log_meal(self, task: str, profile: dict) -> str:
-        return "Meal logging not yet implemented."
+        items = self._parse_meal_items(task)
+        if not items:
+            return "I couldn't find any food items with gram amounts. Try: I ate 200g chicken breast and 150g rice"
+
+        log   = self._load_meal_log()
+        today = _date.today().isoformat()
+        entry = next((e for e in log["entries"] if e["date"] == today), None)
+        if entry is None:
+            entry = {"date": today, "items": [], "totals": {"kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0}}
+            log["entries"].append(entry)
+
+        logged, errors = [], []
+        for name, grams in items:
+            try:
+                food = self._db.search_food(name, grams)
+                entry["items"].append(food)
+                for key in ("kcal", "protein_g", "carbs_g", "fat_g"):
+                    entry["totals"][key] = round(entry["totals"][key] + food[key], 1)
+                logged.append(food["food_name"])
+            except FoodNotFoundError:
+                errors.append(name)
+
+        self._save_meal_log(log)
+
+        targets = self._effective_targets(profile)
+        totals  = entry["totals"]
+        parts   = [f"Logged: {', '.join(logged)}." if logged else ""]
+        if errors:
+            parts.append(f"Couldn't find: {', '.join(errors)} -- try being more specific.")
+        parts.append(
+            f"Today: {totals['kcal']:.0f}/{targets['kcal']:.0f} kcal, "
+            f"protein {totals['protein_g']:.0f}/{targets['protein_g']:.0f}g."
+        )
+        return " ".join(p for p in parts if p)
+
+    def _parse_meal_items(self, task: str) -> list[tuple[str, float]]:
+        """Extract (food_name, grams) pairs from a sentence like '200g chicken breast and 150g rice'."""
+        pattern = r"(\d+(?:\.\d+)?)\s*g\s+([a-zA-Z ]+?)(?=\s+and\s+\d|\s*,\s*\d|$)"
+        matches = re.findall(pattern, task, re.IGNORECASE)
+        return [(name.strip(), float(grams)) for grams, name in matches]
 
     def _log_workout(self, task: str, profile: dict) -> str:
         return "Workout logging not yet implemented."
@@ -150,7 +190,31 @@ class HealthAgent(BaseAgent):
         return "Gym program setup not yet implemented."
 
     def _nutrition_summary(self, profile: dict) -> str:
-        return "Nutrition summary not yet implemented."
+        log   = self._load_meal_log()
+        today = _date.today().isoformat()
+        entry = next((e for e in log["entries"] if e["date"] == today), None)
+        if entry is None or not entry["items"]:
+            return "Nothing logged today yet."
+        totals  = entry["totals"]
+        targets = self._effective_targets(profile)
+        return (
+            f"Today: {totals['kcal']:.0f}/{targets['kcal']:.0f} kcal -- "
+            f"protein {totals['protein_g']:.0f}/{targets['protein_g']:.0f}g, "
+            f"carbs {totals['carbs_g']:.0f}/{targets['carbs_g']:.0f}g, "
+            f"fat {totals['fat_g']:.0f}/{targets['fat_g']:.0f}g."
+        )
+
+    def _load_meal_log(self) -> dict:
+        if _MEAL_LOG_PATH.exists():
+            try:
+                return json.loads(_MEAL_LOG_PATH.read_text())
+            except Exception:
+                pass
+        return {"entries": []}
+
+    def _save_meal_log(self, log: dict) -> None:
+        _MEAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _MEAL_LOG_PATH.write_text(json.dumps(log, indent=2))
 
     def _todays_workout(self, profile: dict) -> str:
         return "Today's workout not yet implemented."
