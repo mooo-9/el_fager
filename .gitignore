@@ -44,3 +44,7 @@ User-Agent
 *.tflite
 .env
 data/
+data/health_profile.json
+data/meal_log.json
+data/workout_log.json
+data/gym_program.json
