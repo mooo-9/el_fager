@@ -265,26 +265,32 @@ class HudSceneHub(QThread):
             carbs   = round(targets.get("carbs_g", 0))
             fat     = round(targets.get("fat_g", 0))
 
-            # Check today's logged meals
+            # Check today's logged meals — HealthAgent stores
+            # {"entries": [{"date": ..., "items": [...], "totals": {kcal, protein_g, carbs_g, fat_g}}]}
             meal_log_path = _DATA_DIR / "meal_log.json"
-            logged_kcal   = 0
+            logged_kcal = logged_protein = logged_carbs = logged_fat = 0
             if meal_log_path.exists():
                 try:
                     log_data = json.loads(meal_log_path.read_text(encoding="utf-8"))
                     today_s  = date.today().isoformat()
-                    entries  = (
-                        log_data if isinstance(log_data, list)
-                        else log_data.get("entries", [])
+                    entry = next(
+                        (e for e in log_data.get("entries", []) if e.get("date") == today_s),
+                        None,
                     )
-                    logged_kcal = sum(
-                        e.get("kcal", 0) for e in entries
-                        if e.get("date", "")[:10] == today_s
-                    )
+                    if entry:
+                        totals = entry.get("totals", {})
+                        logged_kcal    = round(totals.get("kcal", 0))
+                        logged_protein = round(totals.get("protein_g", 0))
+                        logged_carbs   = round(totals.get("carbs_g", 0))
+                        logged_fat     = round(totals.get("fat_g", 0))
                 except Exception:
                     pass
 
             # Emit full macro data for buildNutri patch
-            self.nutrition_data.emit(kcal, protein, carbs, fat, logged_kcal, 0, 0, 0)
+            self.nutrition_data.emit(
+                kcal, protein, carbs, fat,
+                logged_kcal, logged_protein, logged_carbs, logged_fat,
+            )
 
             if logged_kcal:
                 remaining = max(0, kcal - logged_kcal)
@@ -308,32 +314,39 @@ class HudSceneHub(QThread):
 
     def _fetch_gym(self):
         try:
-            today      = date.today()
-            day_name   = today.strftime("%A")
-            session    = _SPLIT.get(day_name, "Training")
+            today    = date.today()
+            day_name = today.strftime("%A")
 
-            # Check workout log
-            log_path         = _DATA_DIR / "workout_log.json"
-            completed_today  = False
+            # Prefer Mo's real gym_program.json split (set via "my split is: ...")
+            program_path = _DATA_DIR / "gym_program.json"
+            session = None
+            if program_path.exists():
+                try:
+                    program = json.loads(program_path.read_text(encoding="utf-8"))
+                    session = program.get("split", {}).get(day_name.lower())
+                except Exception:
+                    pass
+            if not session:
+                session = _SPLIT.get(day_name, "Training")
+
+            # workout_log.json stores {"sessions": [{"date": ..., "session": ..., "exercises": [...]}]}
+            log_path        = _DATA_DIR / "workout_log.json"
+            completed_today = False
             if log_path.exists():
                 try:
                     log_data = json.loads(log_path.read_text(encoding="utf-8"))
                     today_s  = today.isoformat()
-                    entries  = (
-                        log_data if isinstance(log_data, list)
-                        else log_data.get("entries", [])
-                    )
                     completed_today = any(
-                        e.get("date", "")[:10] == today_s for e in entries
+                        s.get("date") == today_s for s in log_data.get("sessions", [])
                     )
                 except Exception:
                     pass
 
-            if session == "Rest":
+            if session.lower() in ("rest", "rest day"):
                 self.gym_ready.emit("Today: ", "Rest Day", "  ·  recovery & mobility", "GYM")
             elif completed_today:
-                self.gym_ready.emit(f"{session} Day ", "COMPLETE", "  ·  great work", "GYM")
+                self.gym_ready.emit(f"{session.title()} Day ", "COMPLETE", "  ·  great work", "GYM")
             else:
-                self.gym_ready.emit("Today: ", f"{session} Day", "  ·  session ready", "GYM")
+                self.gym_ready.emit("Today: ", f"{session.title()} Day", "  ·  session ready", "GYM")
         except Exception as e:
             print(f"[SceneHub] Gym: {e}", flush=True)
