@@ -4365,6 +4365,124 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Check if phone notifications are configured and working. Returns setup instructions if not configured.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "screen_agent",
+        "description": (
+            "Multi-step desktop control agent -- sees the screen and performs a sequence of "
+            "clicks, typing, and keyboard shortcuts to complete a task (up to 10 internal steps). "
+            "Use for: clicking buttons/links, dragging files, scrolling, multi-step UI automation "
+            "('open and then...', 'automate the...', 'control the app'). Do NOT use for a single "
+            "one-shot description of the screen -- use analyze_screen for that."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The user's desktop-control request, verbatim or lightly cleaned up."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "browser_agent",
+        "description": (
+            "Multi-step browser automation agent -- navigates websites, fills forms, logs in, and "
+            "completes multi-step web tasks. Use for: 'book a table/flight', 'log into', "
+            "'fill out the form', 'search on amazon/google', or any task naming a specific website "
+            "or '.com/.org/.net'. Do NOT use for one-off single actions when a simpler browser_* "
+            "instant tool suffices."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The user's web-automation request, verbatim or lightly cleaned up."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "stocks_agent",
+        "description": (
+            "Deep market analysis and conviction-gated autonomous trading agent. Use for: "
+            "'analyze NVDA', 'should I buy/sell X', 'your thesis/opinion/view on X', "
+            "'conviction on X', 'scan my watchlist', 'why did you buy/sell X', 'my trading stats', "
+            "'pause/resume trading', 'set auto-trade threshold to N'. Do NOT use for simple price "
+            "lookups -- those are instant-lane tools."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The user's stock-analysis or trading-control request."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "research_agent",
+        "description": (
+            "Deep multi-source web research agent -- searches, reads multiple pages, and "
+            "synthesizes a single coherent answer. Use for: 'research everything about X', "
+            "'tell me everything about X', 'investigate X', 'comprehensive analysis of X', "
+            "'compare and contrast X and Y', 'summarize the news about X'. Do NOT use for quick "
+            "factual lookups -- use wikipedia_lookup or web_search for those."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The research question or topic, verbatim or lightly cleaned up."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "file_agent",
+        "description": (
+            "Document intelligence agent -- reads and answers questions about PDFs, Word docs, "
+            "spreadsheets, and images. Use for: 'summarize this pdf/document/contract/invoice/"
+            "thesis/report', 'what does this file say', 'extract from this', 'what were the "
+            "payment terms'. Pass the file reference and the question together in the task string."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The file reference and question together, e.g. 'summarize my_contract.pdf'."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "health_agent",
+        "description": (
+            "Nutrition and gym tracking agent -- logs meals, calculates macros/TDEE, generates "
+            "workout programs and recipes. Use for: 'I just ate X', 'log my meal', 'calories "
+            "today', 'my macros', 'recipe for X', 'chest day', 'finished my workout', 'generate a "
+            "training program', 'what should I do today at the gym'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The user's nutrition or workout request, verbatim or lightly cleaned up."
+                }
+            },
+            "required": ["task"]
+        }
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4400,6 +4518,8 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "set_reminder", "list_reminders", "cancel_reminder",
     "get_battery_status", "get_clipboard_history",
     "analyze_screen", "ocr_screenshot",
+    "screen_agent", "browser_agent", "stocks_agent",
+    "research_agent", "file_agent", "health_agent",
 })
 
 _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
