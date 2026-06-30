@@ -47,6 +47,19 @@ class ProactiveEngine:
         self._running   = False
         self._thread: threading.Thread | None = None
         self._state: dict = self._load_state()
+        self._hud_fn: Callable | None = None  # set by main.py via set_hud_notify()
+
+    def set_hud_notify(self, fn: Callable) -> None:
+        """Register a thread-safe callback for pushing proactive banners to the HUD."""
+        self._hud_fn = fn
+
+    def _hud_notify(self, scene: int, prefix: str, highlight: str, suffix: str, tag: str) -> None:
+        """Push a proactive banner update to the HUD (non-blocking, never raises)."""
+        if self._hud_fn:
+            try:
+                self._hud_fn(scene, prefix, highlight, suffix, tag)
+            except Exception:
+                pass
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -230,6 +243,7 @@ class ProactiveEngine:
                         key = f"prayer_{name}_{today}"
                         if not self._cooldown(key, 23):
                             self._deliver(f"Mo, {name} is in {int(delta_min)} minutes — {_fmt12(t_str)}.")
+                            self._hud_notify(9, f"{name} prayer in ", f"{int(delta_min)} min", f" — {_fmt12(t_str)}", "PRAYER")
                 except ValueError:
                     pass
         except Exception:
@@ -259,6 +273,7 @@ class ProactiveEngine:
                     key = f"event_{h:02d}{mins:02d}_{today}"
                     if not self._cooldown(key, 2):
                         self._deliver(f"Mo, '{title}' starts in {int(delta_min)} minutes.")
+                        self._hud_notify(7, f"'{title}' in ", f"{int(delta_min)} min", "", "CALENDAR")
         except Exception:
             pass
 
@@ -380,6 +395,8 @@ class ProactiveEngine:
             messages = check_price_alerts()
             for msg in messages:
                 self._deliver(msg, remote=True)
+                # Show in HUD Stocks scene banner (whole message as highlight)
+                self._hud_notify(5, "", msg, "", "MARKET")
         except Exception:
             pass
 

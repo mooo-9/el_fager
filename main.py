@@ -17,15 +17,27 @@ import threading
 import winreg
 from pathlib import Path
 
+# Force line-buffered stdout so print() inside Qt callbacks flushes immediately
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ── WebEngine must be configured before QApplication is created ────────────
+# Force software rendering — avoids GPU process crashes on machines without
+# proper OpenGL virtualization (common on laptops with hybrid graphics).
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox"
+os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
 import pygame.mixer
 import pystray
 from PIL import Image, ImageDraw
 
 import keyboard
+# QWebEngineWidgets MUST be imported before QApplication is instantiated.
+from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401 — side-effect import
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
@@ -37,6 +49,7 @@ from core.voice_in import VoiceInput
 from core.voice_out import VoiceOutput
 from core.wake_word import WakeWordListener
 from ui.overlay import OverlayWindow
+from ui.hud_window import HudWindow
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -98,7 +111,32 @@ def _register_startup():
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+_INSTANCE_MUTEX = None  # kept alive at module level so GC doesn't release it
+
+
+def _acquire_instance_lock() -> None:
+    """Exit immediately if another El Fager process is already running."""
+    global _INSTANCE_MUTEX
+    import ctypes
+    _INSTANCE_MUTEX = ctypes.windll.kernel32.CreateMutexW(None, True, "ElFagerSingleInstance")
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        print("[El Fager] Already running — only one instance allowed.")
+        try:
+            from winotify import Notification
+            Notification(
+                app_id="El Fager",
+                title="El Fager",
+                msg="Already running. Check the system tray.",
+                duration="short",
+            ).show()
+        except Exception:
+            pass
+        sys.exit(0)
+
+
 def main():
+    _acquire_instance_lock()
+
     # Qt must own the main thread.
     # setQuitOnLastWindowClosed(False) is critical — the overlay hides (not closes),
     # and without this Qt would quit the app when the overlay is dismissed.
@@ -125,21 +163,25 @@ def main():
     memory = Memory()
     brain = Brain(profile, memory)   # memory reference passed for tool dispatch + facts injection
 
-    # App window
-    overlay = OverlayWindow(voice_in, brain, voice_out, memory)
-
-    # Set window icon (generate .ico once, then reuse)
+    # ── Windows icon ───────────────────────────────────────────────────────
     _icon_path = Path("data/el_fager.ico")
     if not _icon_path.exists():
         _icon_img = _make_tray_image().resize((256, 256), Image.LANCZOS)
         _icon_img.save(str(_icon_path), format="ICO", sizes=[(256,256),(64,64),(32,32),(16,16)])
+
+    # ── Primary window: full-screen JARVIS HUD ─────────────────────────────
+    hud = HudWindow(voice_in, brain, voice_out, memory)
+    hud.setWindowIcon(QIcon(str(_icon_path)))
+
+    # ── Secondary window: compact card (accessible via tray) ───────────────
+    overlay = OverlayWindow(voice_in, brain, voice_out, memory)
     overlay.setWindowIcon(QIcon(str(_icon_path)))
 
     # ── Hotkey bridge ──────────────────────────────────────────────────────
     signaler = HotkeySignaler()
-    signaler.triggered.connect(overlay.toggle)
-    signaler.analyze_triggered.connect(overlay.analyze_screen)
-    signaler.memory_query_triggered.connect(overlay.query_memory)
+    signaler.triggered.connect(hud.toggle)           # Ctrl+Space → HUD
+    signaler.analyze_triggered.connect(hud.analyze_screen)
+    signaler.memory_query_triggered.connect(hud.query_memory)
 
     def _on_memory_clear():
         from PyQt6.QtWidgets import QMessageBox
@@ -159,13 +201,19 @@ def main():
 
     # ── Wake word listener ─────────────────────────────────────────────────
     wake_listener = WakeWordListener(on_detected=signaler.wake_word_detected.emit)
-    signaler.wake_word_detected.connect(overlay.wake_word_activate)
+    signaler.wake_word_detected.connect(hud.wake_word_activate)
+    hud.set_wake_listener(wake_listener)
+    # Compact overlay still needs its wake listener set for the HUD-canvas path
     overlay.set_wake_listener(wake_listener)
     wake_listener.start()
 
     # ── System tray ────────────────────────────────────────────────────────
     def on_tray_open(icon, item):
         signaler.triggered.emit()
+
+    def on_tray_compact(icon, item):
+        """Show the compact card overlay instead of the full HUD."""
+        overlay.toggle()
 
     def on_tray_analyze(icon, item):
         signaler.analyze_triggered.emit()
@@ -205,7 +253,8 @@ def main():
         icon=_make_tray_image(),
         title="El Fager",
         menu=pystray.Menu(
-            pystray.MenuItem("Open  (Ctrl+Space)", on_tray_open),
+            pystray.MenuItem("Open JARVIS HUD  (Ctrl+Space)", on_tray_open),
+            pystray.MenuItem("Compact Mode", on_tray_compact),
             pystray.MenuItem("Analyze Screen", on_tray_analyze),
             pystray.MenuItem("Memory", pystray.Menu(
                 pystray.MenuItem("What do you know about me?", on_tray_memory_query),
@@ -256,6 +305,8 @@ def main():
     # ── Proactive engine (condition-based, autonomous checks) ─────────────────
     from core.proactive import ProactiveEngine
     proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat)
+    # Wire proactive notifications to the HUD banner (thread-safe via Qt signal)
+    proactive.set_hud_notify(hud.notify_hud)
     proactive.start()
 
     # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
@@ -272,12 +323,14 @@ def main():
         if already_briefed_today():
             return
         mark_briefed_today()
-        overlay.run_briefing(get_briefing_prompt())
+        hud.run_briefing(get_briefing_prompt())
 
     QTimer.singleShot(3000, _run_daily_briefing)
 
-    # Show window on startup — El Fager is now a persistent app, not a popup
-    overlay.show()
+    # Show HUD on startup
+    hud.show()
+    hud.raise_()
+    hud.activateWindow()
 
     print("[El Fager] Running. Press Ctrl+Space to activate.")
     sys.exit(app.exec())

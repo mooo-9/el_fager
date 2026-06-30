@@ -325,7 +325,7 @@ class TradingEngine:
 
                     current_price = closes[-1]
                     qty = calc_position_size(portfolio_value, current_price)
-                    if qty < 0.001:
+                    if qty < 1:
                         continue
 
                     sl_price = get_stop_loss_price(current_price)

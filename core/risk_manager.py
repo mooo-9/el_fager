@@ -35,12 +35,17 @@ def can_open_position(open_positions_count: int) -> tuple[bool, str]:
     return True, "ok"
 
 
-def calc_position_size(portfolio_value: float, price_per_share: float) -> float:
-    """Return fractional qty capped at max_position_pct% of portfolio_value."""
+def calc_position_size(portfolio_value: float, price_per_share: float) -> int:
+    """Return whole-share qty capped at max_position_pct% of portfolio_value.
+
+    Bracket orders on Alpaca require whole-share quantities — fractional
+    shares are only supported with simple market orders.
+    """
+    import math
     cfg = _load_config()
     max_pct = cfg.get("max_position_pct", _DEFAULTS["max_position_pct"]) / 100.0
     max_dollars = portfolio_value * max_pct
-    return round(max_dollars / price_per_share, 6)
+    return max(1, math.floor(max_dollars / price_per_share))
 
 
 def get_stop_loss_price(entry_price: float) -> float:
