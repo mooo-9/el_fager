@@ -54,8 +54,10 @@ def test_search_food_success(db):
             }
         }]
     }
-    with patch("httpx.get", return_value=mock_response):
-        result = db.search_food("chicken breast", grams=100)
+    with patch.dict("os.environ", {"EDAMAM_APP_ID": "testid", "EDAMAM_APP_KEY": "testkey"}):
+        db2 = NutritionDB()
+        with patch("httpx.get", return_value=mock_response):
+            result = db2.search_food("chicken breast", grams=100)
     assert result["food_name"] == "Chicken Breast"
     assert abs(result["kcal"] - 165.0) < 0.1
     assert abs(result["protein_g"] - 31.0) < 0.1
@@ -77,8 +79,10 @@ def test_search_food_scales_by_grams(db):
             }
         }]
     }
-    with patch("httpx.get", return_value=mock_response):
-        result = db.search_food("rice", grams=150)  # 1.5x the per-100g values
+    with patch.dict("os.environ", {"EDAMAM_APP_ID": "testid", "EDAMAM_APP_KEY": "testkey"}):
+        db2 = NutritionDB()
+        with patch("httpx.get", return_value=mock_response):
+            result = db2.search_food("rice", grams=150)  # 1.5x the per-100g values
     assert abs(result["kcal"] - 195.0) < 0.5   # 130 * 1.5
     assert abs(result["carbs_g"] - 42.0) < 0.5  # 28 * 1.5
 

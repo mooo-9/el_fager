@@ -109,25 +109,6 @@ class TradingEngine:
         except Exception:
             pass
 
-    # ── Price data ─────────────────────────────────────────────────────────────
-
-    def _fetch_closes(self, data_client, symbol: str) -> list[float]:
-        from alpaca.data.requests import StockBarsRequest
-        from alpaca.data.timeframe import TimeFrame
-        from alpaca.data.enums import DataFeed
-        request = StockBarsRequest(
-            symbol_or_symbols=symbol,
-            timeframe=TimeFrame.Hour,
-            start=datetime.now(timezone.utc) - timedelta(days=10),
-            limit=100,
-            feed=DataFeed.IEX,
-        )
-        bars = data_client.get_stock_bars(request)
-        df = bars.df
-        if hasattr(df.index, "levels"):  # MultiIndex when multiple symbols passed
-            df = df.loc[symbol]
-        return df["close"].tolist()
-
     # ── Trade logging ──────────────────────────────────────────────────────────
 
     def _log_trade(self, trade: dict) -> None:
@@ -143,41 +124,6 @@ class TradingEngine:
             json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
-    # ── Claude consultation ────────────────────────────────────────────────────
-
-    def _consult_claude(
-        self,
-        symbol: str,
-        closes: list[float],
-        rsi_val: float,
-        macd_hist: float,
-        headlines: list[str],
-        open_count: int,
-        max_pos: int,
-    ) -> str:
-        import anthropic
-        client = anthropic.Anthropic()
-        candles = " | ".join(f"{p:.2f}" for p in closes[-20:])
-        prompt = (
-            f"Trading signal decision for {symbol}.\n"
-            f"Price: ${closes[-1]:.2f} | RSI: {rsi_val:.1f} | MACD histogram: {macd_hist:.4f}\n"
-            f"Last 20 hourly closes: {candles}\n"
-            f"Open positions: {open_count}/{max_pos}\n"
-            f"News: {'; '.join(headlines) if headlines else 'none available'}\n\n"
-            "Reply with exactly one word on line 1 (BUY, SELL, or HOLD), "
-            "then one sentence of reasoning on line 2 (max 15 words)."
-        )
-        try:
-            resp = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=80,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return resp.content[0].text.strip()
-        except Exception as e:
-            logger.warning(f"Claude consultation failed for {symbol}: {e}")
-            return "HOLD"
-
     # ── Order execution ────────────────────────────────────────────────────────
 
     def _place_buy(
@@ -187,10 +133,8 @@ class TradingEngine:
         qty: float,
         sl_price: float,
         tp_price: float,
-        rsi_val: float,
-        macd_hist: float,
-        signal: str,
-        claude_reason: str | None,
+        conviction: float,
+        rationale: str,
     ) -> None:
         from alpaca.trading.requests import (
             MarketOrderRequest,
@@ -218,19 +162,18 @@ class TradingEngine:
             "qty": qty,
             "price": filled_price,
             "timestamp": datetime.now().isoformat(),
-            "signal": signal,
-            "rsi": round(rsi_val, 2),
-            "macd_histogram": round(macd_hist, 4),
+            "signal": "conviction",
+            "conviction": round(conviction, 1),
+            "rationale": rationale,
             "sl_price": sl_price,
             "tp_price": tp_price,
-            "claude_reason": claude_reason,
             "alpaca_order_id": str(order.id),
         }
         self._log_trade(trade)
 
         announcement = (
             f"Bought {qty:.2f} shares of {symbol} at ${filled_price:.2f}. "
-            f"RSI {rsi_val:.0f}, stop-loss at ${sl_price:.2f}."
+            f"Conviction {conviction:.0f}%, stop-loss at ${sl_price:.2f}."
         )
         self._speak(announcement)
         logger.info(f"[Trading] {announcement}")
@@ -238,7 +181,8 @@ class TradingEngine:
     # ── Main cycle ─────────────────────────────────────────────────────────────
 
     def _run_cycle(self) -> None:
-        from core.signals import rsi, macd, classify_signal, SignalStrength
+        from core.agents.market_analyst import MarketAnalyst
+        from core.agents.strategy_engine import StrategyEngine
         from core.risk_manager import (
             can_open_position,
             calc_position_size,
@@ -249,7 +193,7 @@ class TradingEngine:
         from core.trade_tracker import TradeTracker
         TradeTracker().sync()
 
-        trading_client, data_client = self._get_clients()
+        trading_client, _ = self._get_clients()
         account = trading_client.get_account()
         portfolio_value = float(account.portfolio_value)
 
@@ -269,7 +213,13 @@ class TradingEngine:
 
         cfg = self._load_config()
         symbols = cfg.get("active_symbols", [])
-        max_pos = cfg.get("max_open_positions", 5)
+
+        if cfg.get("auto_trade_paused", False):
+            return
+
+        threshold = cfg.get("auto_trade_threshold", 72)
+        analyst = MarketAnalyst()
+        strategy = StrategyEngine()
 
         for symbol in symbols:
             if self._stop_event.is_set():
@@ -278,68 +228,37 @@ class TradingEngine:
                 continue
 
             try:
-                closes = self._fetch_closes(data_client, symbol)
-                if len(closes) < 40:
+                analysis = analyst.analyze(symbol)
+                closes, _ = analyst._fetch_ohlcv(symbol)
+
+                try:
+                    _, modifier = strategy.select_strategy(symbol, closes)
+                    adjusted = min(100.0, analysis.conviction * modifier)
+                except Exception:
+                    adjusted = analysis.conviction
+
+                if analysis.direction == "SELL" or adjusted < threshold:
                     continue
 
-                rsi_val = rsi(closes)
-                macd_result = macd(closes)
-                signal = classify_signal(closes, rsi_val, macd_result)
-
-                if signal == SignalStrength.HOLD:
+                allowed, _ = can_open_position(open_count)
+                if not allowed:
                     continue
 
-                claude_reason: str | None = None
+                current_price = closes[-1]
+                qty = calc_position_size(portfolio_value, current_price)
+                if qty < 1:
+                    continue
 
-                if signal in (SignalStrength.AMBIGUOUS_BUY, SignalStrength.AMBIGUOUS_SELL):
-                    headlines: list[str] = []
-                    try:
-                        from tools.stocks_tool import get_stock_news
-                        raw = get_stock_news(symbol)
-                        headlines = [
-                            ln.strip()
-                            for ln in raw.split("\n")
-                            if ln.strip() and not ln.startswith("No news")
-                        ][:3]
-                    except Exception:
-                        pass
+                sl_price = get_stop_loss_price(current_price)
+                tp_price = get_take_profit_price(current_price)
 
-                    decision = self._consult_claude(
-                        symbol, closes, rsi_val or 50.0,
-                        macd_result.histogram if macd_result else 0.0,
-                        headlines, open_count, max_pos,
-                    )
-                    claude_reason = decision
-                    first_word = decision.split()[0].upper() if decision else "HOLD"
-                    if first_word == "BUY":
-                        signal = SignalStrength.STRONG_BUY
-                    elif first_word == "SELL":
-                        signal = SignalStrength.STRONG_SELL
-                    else:
-                        continue
-
-                if signal == SignalStrength.STRONG_BUY:
-                    allowed, _ = can_open_position(open_count)
-                    if not allowed:
-                        continue
-
-                    current_price = closes[-1]
-                    qty = calc_position_size(portfolio_value, current_price)
-                    if qty < 1:
-                        continue
-
-                    sl_price = get_stop_loss_price(current_price)
-                    tp_price = get_take_profit_price(current_price)
-
-                    self._place_buy(
-                        trading_client, symbol, qty,
-                        sl_price, tp_price,
-                        rsi_val or 50.0,
-                        macd_result.histogram if macd_result else 0.0,
-                        signal, claude_reason,
-                    )
-                    open_count += 1
-                    held_symbols.add(symbol)
+                self._place_buy(
+                    trading_client, symbol, qty,
+                    sl_price, tp_price,
+                    adjusted, analysis.rationale,
+                )
+                open_count += 1
+                held_symbols.add(symbol)
 
             except Exception as e:
                 logger.warning(f"[Trading] Cycle error for {symbol}: {e}")

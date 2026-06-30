@@ -120,17 +120,22 @@ class NutritionDB:
         best = self._best_usda_match(name, merged)
 
         # USDA SR Legacy / Foundation nutrient values are always per 100g.
+        # Some Foundation records name the energy field "Energy (Atwater
+        # General/Specific Factors)" instead of plain "Energy" -- match by
+        # prefix and require KCAL units (kJ entries share the same name).
         nutrients = {}
         for n in best.get("foodNutrients", []):
-            nm = n.get("nutrientName")
-            if nm == "Energy" and n.get("unitName") != "KCAL":
+            nm = n.get("nutrientName", "")
+            if nm.startswith("Energy"):
+                if n.get("unitName") == "KCAL" and "kcal" not in nutrients:
+                    nutrients["kcal"] = n.get("value", 0)
                 continue
             nutrients[nm] = n.get("value", 0)
 
         factor = grams / 100.0
         return {
             "food_name": best["description"].title(),
-            "kcal":      round(nutrients.get("Energy", 0) * factor, 1),
+            "kcal":      round(nutrients.get("kcal", 0) * factor, 1),
             "protein_g": round(nutrients.get("Protein", 0) * factor, 1),
             "carbs_g":   round(nutrients.get("Carbohydrate, by difference", 0) * factor, 1),
             "fat_g":     round(nutrients.get("Total lipid (fat)", 0) * factor, 1),
