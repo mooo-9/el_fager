@@ -6211,6 +6211,24 @@ class Brain:
             elif name == "notification_status":
                 from tools.notify_tool import notification_status as _notif_status
                 return _notif_status()
+            elif name == "screen_agent":
+                from core.agents.screen_agent import ScreenAgent
+                return ScreenAgent().run(tool_input["task"])
+            elif name == "browser_agent":
+                from core.agents.browser_agent import BrowserAgent
+                return BrowserAgent().run(tool_input["task"])
+            elif name == "stocks_agent":
+                from core.agents.stocks_agent import StocksAgent
+                return StocksAgent().run(tool_input["task"])
+            elif name == "research_agent":
+                from core.agents.research_agent import ResearchAgent
+                return ResearchAgent().run(tool_input["task"])
+            elif name == "file_agent":
+                from core.agents.file_agent import FileAgent
+                return FileAgent().run(tool_input["task"])
+            elif name == "health_agent":
+                from core.agents.health_agent import HealthAgent
+                return HealthAgent().run(tool_input["task"])
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
