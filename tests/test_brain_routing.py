@@ -128,3 +128,17 @@ def test_chat_loop_captures_text_alongside_tool_use_block():
         result = brain.chat("loop forever")
     assert result.startswith("Let me check that for you. [stopped after 15 steps")
     assert mock_create.call_count == 15
+
+
+def test_chat_can_chain_agent_tool_then_instant_tool():
+    brain = _make_brain()
+    responses = [
+        _tool_use_response("screen_agent", {"task": "what error is showing"}, tool_id="tool_1"),
+        _tool_use_response("web_search", {"query": "fix permission denied error"}, tool_id="tool_2"),
+        _end_turn_response("Found a fix and searched the web for it."),
+    ]
+    with patch.object(brain.client.messages, "create", side_effect=responses), \
+         patch("core.agents.screen_agent.ScreenAgent.run", return_value="Permission denied error visible."), \
+         patch("tools.web_tool.web_search", return_value="Fix: run as administrator."):
+        result = brain.chat("check my screen error then search the web for a fix")
+    assert result == "Found a fix and searched the web for it."
