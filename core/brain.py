@@ -6235,27 +6235,17 @@ class Brain:
             return f"Tool error ({name}): {e}"
 
     def _try_agent_dispatch(self, task: str) -> str | None:
-        """Route complex tasks to a specialist agent. Returns None for instant-lane tasks."""
+        """Intercept financial-safety state-machine commands before the tool loop.
+
+        Specialist agents (screen/browser/stocks/research/file/health) are
+        reachable as tools inside the main chat() loop instead -- see the
+        screen_agent/browser_agent/stocks_agent/research_agent/file_agent/
+        health_agent tool definitions in TOOLS. Only the live-trading
+        confirmation flow stays here: it's a deterministic 60-second
+        confirmation window that must not be left to LLM tool-use judgment.
+        """
         from core.agents.router import classify_intent
         intent = classify_intent(task)
-        if intent == "screen":
-            from core.agents.screen_agent import ScreenAgent
-            return ScreenAgent().run(task)
-        if intent == "browser":
-            from core.agents.browser_agent import BrowserAgent
-            return BrowserAgent().run(task)
-        if intent == "stocks_agent":
-            from core.agents.stocks_agent import StocksAgent
-            return StocksAgent().run(task)
-        if intent == "research":
-            from core.agents.research_agent import ResearchAgent
-            return ResearchAgent().run(task)
-        if intent == "file":
-            from core.agents.file_agent import FileAgent
-            return FileAgent().run(task)
-        if intent == "health":
-            from core.agents.health_agent import HealthAgent
-            return HealthAgent().run(task)
         if intent == "gate_check":
             from core.trade_tracker import TradeTracker
             from core.paper_metrics import PaperMetrics
