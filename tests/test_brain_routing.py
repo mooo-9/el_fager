@@ -93,3 +93,12 @@ def test_gate_check_still_intercepted_before_tool_loop():
          patch("core.paper_metrics.PaperMetrics.gate_summary", return_value="Gate status: not ready"):
         result = brain._try_agent_dispatch("am i ready to go live")
     assert result == "Gate status: not ready"
+
+
+def test_chat_loop_stops_after_max_iterations():
+    brain = _make_brain()
+    responses = [_tool_use_response("noop_tool", {})] * 20
+    with patch.object(brain.client.messages, "create", side_effect=responses) as mock_create:
+        result = brain.chat("loop forever")
+    assert "stopped after" in result.lower()
+    assert mock_create.call_count == 15

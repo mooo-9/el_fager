@@ -4845,6 +4845,9 @@ def _write_live_config(config_path: str) -> str:
     )
 
 
+_MAX_TOOL_ITERATIONS = 15
+
+
 class Brain:
     def __init__(self, profile: dict, memory=None):
         self.client = anthropic.Anthropic()
@@ -6307,9 +6310,10 @@ class Brain:
         messages = list(self.conversation_history)
 
         tools_used: list[str] = []
+        last_text = ""
 
         try:
-            while True:
+            for _iteration in range(_MAX_TOOL_ITERATIONS):
                 response = self.client.messages.create(
                     model=self._model,
                     max_tokens=1024,
@@ -6331,6 +6335,10 @@ class Brain:
 
                 elif response.stop_reason == "tool_use":
                     messages.append({"role": "assistant", "content": response.content})
+                    last_text = next(
+                        (block.text for block in response.content if block.type == "text"),
+                        last_text,
+                    )
 
                     tool_results = []
                     for block in response.content:
@@ -6347,6 +6355,15 @@ class Brain:
 
                 else:
                     return "[Response cut off — please try again]"
+
+            text = (
+                (last_text + " " if last_text else "")
+                + f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- let me know if you want me to continue]"
+            )
+            self.conversation_history.append({"role": "assistant", "content": text})
+            if self._logger:
+                self._logger.log("assistant", text, tools_used)
+            return text
 
         except anthropic.BadRequestError as e:
             msg = str(e)
