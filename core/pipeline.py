@@ -30,6 +30,7 @@ class PipelineWorker(QThread):
     """
 
     state_update = pyqtSignal(str, str, str)
+    amplitude_update = pyqtSignal(float)
     done = pyqtSignal()
     error = pyqtSignal(str)
 
@@ -63,7 +64,7 @@ class PipelineWorker(QThread):
                         return
 
                 self.state_update.emit("listening", "", "")
-                audio = self.voice_in.record_audio()
+                audio = self.voice_in.record_audio(on_chunk=self.amplitude_update.emit)
 
                 if audio is None:
                     return

@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 _TRADES_PATH = Path("data/trades.json")
+_STATUS_PATH = Path("data/trading_status.json")
 
 _BG = "#0c0c0c"
 _GREEN = "#00c864"
@@ -227,10 +228,7 @@ class TradingPanel(QWidget):
             raw = Path(trades_path).read_text(encoding="utf-8")
             trades = json.loads(raw)
         except Exception:
-            self._equity_points = []
-            self._chart.set_points([])
-            self.update()
-            return
+            trades = []
 
         # Build equity curve: cumulative entry value (simple proxy)
         cumulative = 0.0
@@ -253,7 +251,31 @@ class TradingPanel(QWidget):
             self._equity_points = [(v - base) / base * 100 for v in self._equity_points]
 
         self._chart.set_points(self._equity_points)
+        self._refresh_status()
         self.update()
+
+    def _refresh_status(self) -> None:
+        """Pull the last live-cycle snapshot (signals + open positions) written by TradingEngine."""
+        try:
+            status = json.loads(_STATUS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            self.set_signals([])
+            self._positions_label.setText("No open positions")
+            return
+
+        self.set_signals(status.get("signals", []))
+
+        positions = status.get("positions", [])
+        if not positions:
+            self._positions_label.setText("No open positions")
+        else:
+            lines = []
+            for p in positions:
+                lines.append(
+                    f"{p.get('symbol', '?')}: {p.get('qty', 0):.2f} @ ${p.get('avg_entry_price', 0):.2f} "
+                    f"| P&L: ${p.get('unrealized_pl', 0):+.2f} ({p.get('unrealized_plpc', 0):+.1f}%)"
+                )
+            self._positions_label.setText("\n".join(lines))
 
     def set_callback(self, on_start=None, on_stop=None, on_backtest=None) -> None:
         if on_start is not None:

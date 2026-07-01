@@ -1,5 +1,15 @@
 import pytest
 import core.backtester as bt
+import core.risk_manager as rm
+
+
+def _pin_risk_config(monkeypatch, stop_loss_pct: float, take_profit_pct: float) -> None:
+    """Pin SL/TP percentages for a test, independent of core/risk_manager.py's _DEFAULTS."""
+    monkeypatch.setattr(rm, "_load_config", lambda: {
+        "max_position_pct": 10,
+        "stop_loss_pct": stop_loss_pct,
+        "take_profit_pct": take_profit_pct,
+    })
 
 
 def _flat_bars(n: int, price: float = 100.0) -> list[dict]:
@@ -56,6 +66,7 @@ def test_simulate_no_signals(monkeypatch):
 
 def test_simulate_tp_hit(monkeypatch):
     """Signal at bar 100 -> fill at bar 101 open=100.0 -> TP hit at bar 110 high=116.0."""
+    _pin_risk_config(monkeypatch, stop_loss_pct=5, take_profit_pct=12)
     calls = [0]
     def mock_sig(*a):
         calls[0] += 1
@@ -76,6 +87,7 @@ def test_simulate_tp_hit(monkeypatch):
 
 def test_simulate_sl_hit(monkeypatch):
     """Signal at bar 100 -> fill at bar 101 open=100.0 -> SL hit at bar 110 low=91.0."""
+    _pin_risk_config(monkeypatch, stop_loss_pct=5, take_profit_pct=12)
     calls = [0]
     def mock_sig(*a):
         calls[0] += 1
