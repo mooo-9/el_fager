@@ -102,3 +102,29 @@ def test_chat_loop_stops_after_max_iterations():
         result = brain.chat("loop forever")
     assert "stopped after" in result.lower()
     assert mock_create.call_count == 15
+
+
+def _mixed_tool_use_response(text: str, tool_name: str, tool_input: dict, tool_id: str = "tool_1"):
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = text
+    tool_block = MagicMock()
+    tool_block.type = "tool_use"
+    tool_block.name = tool_name
+    tool_block.input = tool_input
+    tool_block.id = tool_id
+    response = MagicMock()
+    response.stop_reason = "tool_use"
+    response.content = [text_block, tool_block]
+    return response
+
+
+def test_chat_loop_captures_text_alongside_tool_use_block():
+    brain = _make_brain()
+    responses = [
+        _mixed_tool_use_response("Let me check that for you.", "noop_tool", {}),
+    ] + [_tool_use_response("noop_tool", {})] * 15
+    with patch.object(brain.client.messages, "create", side_effect=responses) as mock_create:
+        result = brain.chat("loop forever")
+    assert result.startswith("Let me check that for you. [stopped after 15 steps")
+    assert mock_create.call_count == 15

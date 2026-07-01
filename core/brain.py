@@ -6325,7 +6325,7 @@ class Brain:
 
                 if response.stop_reason == "end_turn":
                     text = next(
-                        (block.text for block in response.content if hasattr(block, "text")),
+                        (block.text for block in response.content if block.type == "text"),
                         "",
                     )
                     self.conversation_history.append({"role": "assistant", "content": text})
