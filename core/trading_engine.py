@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _TRADES_PATH = Path("data/trades.json")
 _CONFIG_PATH = Path("data/trading_config.json")
+_STATUS_PATH = Path("data/trading_status.json")
 _ET = ZoneInfo("America/New_York")
 
 
@@ -143,6 +144,26 @@ class TradingEngine:
             json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
+    def _write_status_snapshot(
+        self,
+        portfolio_value: float,
+        cash: float,
+        positions: list[dict],
+        signals: list[dict],
+    ) -> None:
+        """Snapshot the last cycle's positions + signal matrix for the Trading Terminal UI."""
+        snapshot = {
+            "updated_at": datetime.now().isoformat(),
+            "portfolio_value": portfolio_value,
+            "cash": cash,
+            "positions": positions,
+            "signals": signals,
+        }
+        _STATUS_PATH.parent.mkdir(exist_ok=True)
+        _STATUS_PATH.write_text(
+            json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
     # ── Claude consultation ────────────────────────────────────────────────────
 
     def _consult_claude(
@@ -266,20 +287,39 @@ class TradingEngine:
         positions = trading_client.get_all_positions()
         open_count = len(positions)
         held_symbols = {p.symbol for p in positions}
+        position_rows = [
+            {
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "avg_entry_price": float(p.avg_entry_price),
+                "unrealized_pl": float(p.unrealized_pl),
+                "unrealized_plpc": float(p.unrealized_plpc) * 100,
+            }
+            for p in positions
+        ]
 
         cfg = self._load_config()
         symbols = cfg.get("active_symbols", [])
         max_pos = cfg.get("max_open_positions", 5)
 
+        signal_rows: list[dict] = []
+
         for symbol in symbols:
             if self._stop_event.is_set():
                 break
             if symbol in held_symbols:
+                signal_rows.append({
+                    "symbol": symbol, "direction": "HOLD", "conviction": 0.0, "status": "OPEN",
+                })
                 continue
+
+            row = {"symbol": symbol, "direction": "HOLD", "conviction": 0.0, "status": "SCANNING"}
 
             try:
                 closes = self._fetch_closes(data_client, symbol)
                 if len(closes) < 40:
+                    row["status"] = "NO_DATA"
+                    signal_rows.append(row)
                     continue
 
                 rsi_val = rsi(closes)
@@ -287,6 +327,7 @@ class TradingEngine:
                 signal = classify_signal(closes, rsi_val, macd_result)
 
                 if signal == SignalStrength.HOLD:
+                    signal_rows.append(row)
                     continue
 
                 claude_reason: str | None = None
@@ -316,16 +357,24 @@ class TradingEngine:
                     elif first_word == "SELL":
                         signal = SignalStrength.STRONG_SELL
                     else:
+                        row["status"] = "WATCHING"
+                        signal_rows.append(row)
                         continue
 
                 if signal == SignalStrength.STRONG_BUY:
+                    row["direction"] = "BUY"
+                    row["conviction"] = 80.0
                     allowed, _ = can_open_position(open_count)
                     if not allowed:
+                        row["status"] = "MAX_POSITIONS"
+                        signal_rows.append(row)
                         continue
 
                     current_price = closes[-1]
                     qty = calc_position_size(portfolio_value, current_price)
                     if qty < 0.001:
+                        row["status"] = "SIZE_TOO_SMALL"
+                        signal_rows.append(row)
                         continue
 
                     sl_price = get_stop_loss_price(current_price)
@@ -340,9 +389,22 @@ class TradingEngine:
                     )
                     open_count += 1
                     held_symbols.add(symbol)
+                    row["status"] = "EXECUTED"
+                elif signal == SignalStrength.STRONG_SELL:
+                    row["direction"] = "SELL"
+                    row["conviction"] = 80.0
+                    row["status"] = "SELL_SIGNAL"
+
+                signal_rows.append(row)
 
             except Exception as e:
                 logger.warning(f"[Trading] Cycle error for {symbol}: {e}")
+                row["status"] = "ERROR"
+                signal_rows.append(row)
+
+        self._write_status_snapshot(
+            portfolio_value, float(account.cash), position_rows, signal_rows
+        )
 
     # ── Loop ───────────────────────────────────────────────────────────────────
 
