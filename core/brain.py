@@ -399,6 +399,15 @@ add_autonomous_task(description, delay_hours, recurring_hours):
   - description should be a complete, self-contained instruction El Fager can execute.
 "what tasks do you have queued?" / "show my background tasks" -> list_autonomous_tasks.
 "cancel task X" / "remove task X" -> delete_autonomous_task(task_id) where task_id is the 8-char id from list_autonomous_tasks.
+Skills (SkillForge -- Mo's routines saved as reusable skills, then automated):
+Tools: learn_skill, list_skills, run_skill, delete_skill, schedule_skill, unschedule_skill, skill_proposals, dismiss_skill_proposal.
+A skill is a saved instruction routine. run_skill returns its steps -- EXECUTE them immediately with your tools, then report the outcome.
+When Mo says "learn this as a skill: ..." -> learn_skill(name, instructions, trigger_phrases). Write instructions as complete self-contained steps.
+When Mo's request matches a skill name or trigger phrase (e.g. "focus time", "good morning", "quiz me") -> call run_skill FIRST and follow its steps.
+When Mo says "what skills do you have" -> list_skills. "forget that skill" -> delete_skill.
+Automation flow (propose, never impose): if run_skill's result asks you to offer scheduling, finish the skill, then ask Mo ONCE if he wants it automatic. If yes -> schedule_skill(name, every_hours, at_time="HH:MM"). "stop doing X automatically" -> unschedule_skill.
+When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
+Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
 El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
@@ -4508,6 +4517,94 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["task"]
         }
     },
+    {
+        "name": "learn_skill",
+        "description": (
+            "Save a new SkillForge skill -- a reusable natural-language routine. Use when Mo "
+            "says 'learn this as a skill', 'save this as a routine', or accepts a skill proposal. "
+            "Instructions must be complete, self-contained steps."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Short skill name, e.g. 'morning nvda check'."},
+                "instructions": {"type": "string", "description": "Complete numbered steps to execute."},
+                "trigger_phrases": {"type": "string", "description": "Optional comma-separated phrases that should trigger this skill."}
+            },
+            "required": ["name", "instructions"]
+        }
+    },
+    {
+        "name": "list_skills",
+        "description": "List all learned skills with run counts and schedule status.",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "run_skill",
+        "description": (
+            "Fetch a skill's instructions for immediate execution. Use when Mo names a skill or "
+            "uses one of its trigger phrases ('focus time', 'good morning', 'quiz me', ...). "
+            "EXECUTE the returned steps right away with your other tools."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Skill name or the trigger phrase Mo used."}
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "delete_skill",
+        "description": "Delete a learned skill (also unschedules it).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "schedule_skill",
+        "description": (
+            "Turn a skill into a recurring automation, ONLY after Mo confirms. "
+            "at_time='HH:MM' makes the first run wait until that time (then repeats every every_hours)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "every_hours": {"type": "number", "description": "Repeat interval in hours (24 = daily)."},
+                "at_time": {"type": "string", "description": "Optional HH:MM for the first run, e.g. '09:00'."}
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "unschedule_skill",
+        "description": "Stop a skill's automatic schedule (the skill itself is kept).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "skill_proposals",
+        "description": (
+            "Mine Mo's recent conversations for repeated asks and list pending skill proposals. "
+            "Use when Mo asks for skill suggestions or responds to a proactive proposal."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "dismiss_skill_proposal",
+        "description": "Dismiss a skill proposal by id so it is never suggested again.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"proposal_id": {"type": "string"}},
+            "required": ["proposal_id"]
+        }
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4545,6 +4642,7 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "analyze_screen", "ocr_screenshot",
     "screen_agent", "browser_agent", "stocks_agent",
     "research_agent", "file_agent", "health_agent",
+    "run_skill", "list_skills", "learn_skill",
 })
 
 _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
@@ -4706,6 +4804,11 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "notifications": frozenset({
         "send_notification", "notification_status",
     }),
+    "skills": frozenset({
+        "learn_skill", "list_skills", "run_skill", "delete_skill",
+        "schedule_skill", "unschedule_skill", "skill_proposals",
+        "dismiss_skill_proposal",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4830,6 +4933,12 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "is whatsapp set up", "set up notifications", "phone alerts",
         "how do i set up notifications", "push to my phone", "send me a whatsapp",
         "ping me on whatsapp", "whatsapp me",
+    ],
+    "skills": [
+        "skill", "skills", "learn this", "make it a skill", "save this as",
+        "automate", "automation", "automatically", "routine", "schedule this",
+        "every morning", "every day", "every night", "every week",
+        "stop doing", "suggestions", "proposal", "مهارة", "اتعلمها", "روتين",
     ],
 }
 
@@ -6279,6 +6388,30 @@ class Brain:
             elif name == "health_agent":
                 from core.agents.health_agent import HealthAgent
                 return HealthAgent().run(tool_input["task"])
+            elif name == "learn_skill":
+                from tools.skill_tool import learn_skill as _learn_sk
+                return _learn_sk(**tool_input)
+            elif name == "list_skills":
+                from tools.skill_tool import list_skills as _list_sk
+                return _list_sk()
+            elif name == "run_skill":
+                from tools.skill_tool import run_skill as _run_sk
+                return _run_sk(**tool_input)
+            elif name == "delete_skill":
+                from tools.skill_tool import delete_skill as _del_sk
+                return _del_sk(**tool_input)
+            elif name == "schedule_skill":
+                from tools.skill_tool import schedule_skill as _sched_sk
+                return _sched_sk(**tool_input)
+            elif name == "unschedule_skill":
+                from tools.skill_tool import unschedule_skill as _unsched_sk
+                return _unsched_sk(**tool_input)
+            elif name == "skill_proposals":
+                from tools.skill_tool import skill_proposals as _sk_props
+                return _sk_props()
+            elif name == "dismiss_skill_proposal":
+                from tools.skill_tool import dismiss_skill_proposal as _dismiss_sk
+                return _dismiss_sk(**tool_input)
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
