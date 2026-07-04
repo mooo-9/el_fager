@@ -54,11 +54,11 @@ class TestMining:
     def test_three_days_of_repetition_creates_proposal(self, env):
         convo, _, miner = env
         for d in (1, 2, 3):
-            _write_day(convo, d, ["check nvda rsi please", "what's the weather"])
+            _write_day(convo, d, ["check nvda rsi please", "weather in cairo today"])
         proposals = miner.mine(days=14, min_days=3)
         examples = [p["example"] for p in proposals]
         assert any("nvda" in e for e in examples)
-        # weather asked 3x too -> also proposed
+        # weather asked on 3 days too -> also proposed
         assert len(proposals) == 2
 
     def test_two_days_is_not_enough(self, env):
