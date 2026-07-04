@@ -1,0 +1,12 @@
+#!/bin/sh
+# El Fager pre-push gate: block the push if the test suite fails.
+# Installed into .git/hooks/pre-push by hooks/install.ps1 (or copy manually).
+echo "[pre-push] Running El Fager test suite..."
+python -m pytest tests/ -q
+status=$?
+if [ $status -ne 0 ]; then
+    echo "[pre-push] TESTS FAILED - push blocked. Fix the suite, then push again."
+    exit 1
+fi
+echo "[pre-push] All tests passed. Pushing."
+exit 0
