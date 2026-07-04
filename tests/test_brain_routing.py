@@ -130,6 +130,21 @@ def test_chat_loop_captures_text_alongside_tool_use_block():
     assert mock_create.call_count == 15
 
 
+def test_chat_with_screenshot_captures_text_from_mixed_blocks():
+    brain = _make_brain()
+    non_text_block = MagicMock()
+    non_text_block.type = "tool_use"
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = "I can see your screen."
+    response = MagicMock()
+    response.stop_reason = "end_turn"
+    response.content = [non_text_block, text_block]
+    with patch.object(brain.client.messages, "create", return_value=response):
+        result = brain.chat_with_screenshot("what do you see?", "aGVsbG8=")
+    assert result == "I can see your screen."
+
+
 def test_chat_can_chain_agent_tool_then_instant_tool():
     brain = _make_brain()
     responses = [
