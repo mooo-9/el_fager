@@ -12,6 +12,7 @@ Changes from Phase 6:
 
 import json
 import math
+import psutil
 from pathlib import Path
 
 from PyQt6.QtCore import (
@@ -48,6 +49,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.hud_canvas import HudCanvas
+from ui.hud_web import HudWebView
 from ui.trading_panel import TradingPanel
 
 _SETTINGS_FILE = Path("data/settings.json")
@@ -415,6 +417,10 @@ class OverlayWindow(QWidget):
         )
         self._stack.addWidget(self._trading)
 
+        # Page 3: full-screen JARVIS HUD
+        self._hud_web = HudWebView(self._stack)
+        self._stack.addWidget(self._hud_web)
+
         self._stack.setCurrentIndex(0)
 
     def _build_voice_page(self, page: QWidget):
@@ -633,20 +639,47 @@ class OverlayWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def cycle_mode(self) -> None:
-        self._mode = (self._mode + 1) % 3
+        self._mode = (self._mode + 1) % 4
         self._stack.setCurrentIndex(self._mode)
-        labels = {0: "[V]", 1: "[H]", 2: "[T]"}
+        labels = {0: "[V]", 1: "[H]", 2: "[T]", 3: "[J]"}
         self._mode_btn.setText(labels[self._mode])
         if self._mode == 2:
             self._trading.refresh()
+        elif self._mode == 3:
+            # Switch to full-screen JARVIS HUD
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.resize(screen.width(), screen.height())
+            self.move(screen.x(), screen.y())
+            self._hud_web.enter_standby()
+
+    def switch_to_jarvis_hud(self) -> None:
+        """Jump directly to the full-screen HUD (called from tray or hotkey)."""
+        self._mode = 3
+        self._stack.setCurrentIndex(3)
+        self._mode_btn.setText("[J]")
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(screen.width(), screen.height())
+        self.move(screen.x(), screen.y())
+        self._hud_web.enter_standby()
 
     @property
     def mode_name(self) -> str:
-        return {0: "voice", 1: "hud", 2: "trading"}[self._mode]
+        return {0: "voice", 1: "hud", 2: "trading", 3: "jarvis"}[self._mode]
 
     def _refresh_trading_if_active(self):
         if self._mode == 2:
             self._trading.refresh()
+
+    def _push_telemetry(self):
+        if self._mode != 3:
+            return
+        try:
+            cpu = int(psutil.cpu_percent())
+            ram = int(psutil.virtual_memory().percent)
+            net = round(psutil.net_io_counters().bytes_sent / 1_000_000, 1)
+            self._hud_web.push_telemetry(cpu, ram, net)
+        except Exception:
+            pass
 
     def _apply_theme(self):
         settings = _load_settings()
@@ -670,6 +703,12 @@ class OverlayWindow(QWidget):
         self._trading_refresh_timer.setInterval(30000)
         self._trading_refresh_timer.timeout.connect(self._refresh_trading_if_active)
         self._trading_refresh_timer.start()
+
+        # HUD telemetry push every 2 seconds
+        self._telemetry_timer = QTimer(self)
+        self._telemetry_timer.setInterval(2000)
+        self._telemetry_timer.timeout.connect(self._push_telemetry)
+        self._telemetry_timer.start()
 
     # ------------------------------------------------------------------ #
     #  Conversation history bubbles                                        #
@@ -847,6 +886,14 @@ class OverlayWindow(QWidget):
             self._hud.set_state(state)
             if response:
                 self._hud.set_response_text(response)
+
+        if self._mode == 3:
+            if state == "listening":
+                self._hud_web.goto_scene(2)  # Voice scene
+            elif state == "processing":
+                self._hud_web.set_state({"processing": True})
+            elif state == "speaking" and transcript and response:
+                self._hud_web.push_voice_result(transcript, response)
 
     @pyqtSlot(str)
     def on_error(self, message: str):
