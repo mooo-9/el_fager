@@ -277,6 +277,55 @@ class TestNightlyBacktest:
         engine._deliver.assert_not_called()
 
 
+class TestSkillProposalCheck:
+    def _miner(self, pending):
+        miner = MagicMock()
+        miner.pending.return_value = pending
+        miner.mine.return_value = []
+        return miner
+
+    def test_one_pending_proposal_is_delivered(self, engine):
+        p = {"id": "ab12", "example": "check nvda rsi", "count": 5, "days_seen": 4}
+        with patch("core.skills.miner.HabitMiner", return_value=self._miner([p])):
+            engine._check_skill_proposals()
+        engine._deliver.assert_called_once()
+        msg = engine._deliver.call_args.args[0]
+        assert "check nvda rsi" in msg and "skill" in msg.lower()
+
+    def test_only_first_proposal_delivered(self, engine):
+        pending = [
+            {"id": "a", "example": "first ask", "count": 3, "days_seen": 3},
+            {"id": "b", "example": "second ask", "count": 3, "days_seen": 3},
+        ]
+        with patch("core.skills.miner.HabitMiner", return_value=self._miner(pending)):
+            engine._check_skill_proposals()
+        assert engine._deliver.call_count == 1
+        assert "second ask" not in engine._deliver.call_args.args[0]
+
+    def test_no_pending_stays_quiet_and_resets_cooldown(self, engine):
+        with patch("core.skills.miner.HabitMiner", return_value=self._miner([])):
+            engine._check_skill_proposals()
+        engine._deliver.assert_not_called()
+        assert "skill_proposals" not in engine._state
+
+    def test_cooldown_blocks_second_delivery_same_day(self, engine):
+        p = {"id": "ab12", "example": "check nvda rsi", "count": 5, "days_seen": 4}
+        with patch("core.skills.miner.HabitMiner", return_value=self._miner([p])):
+            engine._check_skill_proposals()
+            engine._check_skill_proposals()
+        assert engine._deliver.call_count == 1
+
+    def test_miner_error_does_not_raise(self, engine):
+        with patch("core.skills.miner.HabitMiner", side_effect=RuntimeError("io")):
+            engine._check_skill_proposals()  # must not raise
+        engine._deliver.assert_not_called()
+
+    def test_runs_in_morning_window(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 9, 0))
+        mocks["_check_skill_proposals"].assert_called_once()
+
+
 class TestNewCheckWindows:
     def test_oauth_check_runs_in_morning_window(self, engine):
         mocks = _patch_all_checks(engine)

@@ -174,6 +174,7 @@ class ProactiveEngine:
             self._check_overdue_invoices()
             self._check_rest_day()
             self._check_oauth_tokens()
+            self._check_skill_proposals()
 
         if hour == 23:
             self._check_nightly_backtest()
@@ -577,6 +578,28 @@ class ProactiveEngine:
                 self._reset_cooldown("oauth_tokens")
         except Exception:
             pass
+
+    def _check_skill_proposals(self) -> None:
+        """Morning: mine the conversation logs for repeated asks and offer
+        AT MOST ONE new skill proposal per day (propose, never impose)."""
+        if self._cooldown("skill_proposals", 20):
+            return
+        try:
+            from core.skills.miner import HabitMiner
+            miner = HabitMiner()
+            miner.mine()
+            pending = miner.pending()
+            if not pending:
+                self._reset_cooldown("skill_proposals")
+                return
+            p = pending[0]
+            self._deliver(
+                f"Mo, you've asked \"{p['example']}\" {p['count']} times across "
+                f"{p['days_seen']} days. Want me to save it as a skill? "
+                f"Say 'make it a skill' or 'dismiss it'."
+            )
+        except Exception as e:
+            print(f"[Proactive] skill proposal check error: {e}")
 
     _GATE_MIN_SHARPE = 1.0
     _GATE_MAX_DRAWDOWN = 15.0
