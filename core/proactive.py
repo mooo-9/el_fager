@@ -13,6 +13,8 @@ Checks implemented:
   • Evening journal nudge (no entry today)
   • Evening expense nudge (nothing logged today)
   • Weekly review prompt (Friday / Saturday evening)
+  • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
+  • Nightly backtest after US market close, alert only on metric regression
 """
 
 import json
@@ -171,6 +173,10 @@ class ProactiveEngine:
             self._check_weather()
             self._check_overdue_invoices()
             self._check_rest_day()
+            self._check_oauth_tokens()
+
+        if hour == 23:
+            self._check_nightly_backtest()
 
         if 19 <= hour <= 22:
             self._check_journal()
@@ -543,6 +549,82 @@ class ProactiveEngine:
                 self._deliver(f"Weekly gym report -- {count} sessions last week. Latest: {days}.")
         except Exception:
             pass
+
+    _TOKEN_FILES = ("data/token.json", "data/token_gmail.json", "data/token_gdrive.json")
+    _TOKEN_WARN_AGE_DAYS = 6  # Testing-mode refresh tokens die at 7 days
+
+    def _check_oauth_tokens(self) -> None:
+        """Morning warning when a Google OAuth token is close to the 7-day
+        Testing-mode revocation, so re-auth happens before things silently break."""
+        if self._cooldown("oauth_tokens", 20):
+            return
+        try:
+            stale = []
+            for name in self._TOKEN_FILES:
+                p = Path(name)
+                if not p.exists():
+                    continue
+                age_days = (time.time() - p.stat().st_mtime) / 86400
+                if age_days >= self._TOKEN_WARN_AGE_DAYS:
+                    stale.append(f"{p.name} ({age_days:.0f} days old)")
+            if stale:
+                self._deliver(
+                    "Mo, Google login tokens are about to expire: "
+                    + ", ".join(stale)
+                    + ". Say 'check my email' or 'check my calendar' to re-auth before they break."
+                )
+            else:
+                self._reset_cooldown("oauth_tokens")
+        except Exception:
+            pass
+
+    _GATE_MIN_SHARPE = 1.0
+    _GATE_MAX_DRAWDOWN = 15.0
+
+    def _check_nightly_backtest(self) -> None:
+        """Nightly (11 PM Cairo, after US close): re-run the full backtest and
+        speak up only when a symbol's gate metric regressed."""
+        if self._cooldown("nightly_backtest", 20):
+            return
+        try:
+            results_path = Path("data/backtest_results.json")
+            previous: dict = {}
+            if results_path.exists():
+                try:
+                    previous = json.loads(results_path.read_text(encoding="utf-8"))
+                except Exception:
+                    previous = {}
+
+            from tools.backtest_tool import run_full_backtest
+            run_full_backtest()  # refreshes data/backtest_results.json
+
+            if not results_path.exists():
+                return
+            current = json.loads(results_path.read_text(encoding="utf-8"))
+
+            regressions = []
+            for symbol, stats in current.items():
+                if symbol.startswith("_") or not isinstance(stats, dict):
+                    continue
+                sharpe = stats.get("sharpe_ratio", 0)
+                drawdown = stats.get("max_drawdown_pct", 0)
+                ret = stats.get("total_return_pct", 0)
+                prev = previous.get(symbol) or {}
+                if drawdown > self._GATE_MAX_DRAWDOWN:
+                    regressions.append(f"{symbol} drawdown {drawdown:.1f}%")
+                elif prev.get("sharpe_ratio", 0) >= self._GATE_MIN_SHARPE > sharpe:
+                    regressions.append(f"{symbol} Sharpe fell to {sharpe:.2f}")
+                elif prev.get("total_return_pct", 0) > 0 > ret:
+                    regressions.append(f"{symbol} return went negative ({ret:.1f}%)")
+
+            if regressions:
+                self._deliver(
+                    "Nightly backtest warning -- " + " | ".join(regressions[:3])
+                    + ". Review before the next trading session.",
+                    remote=True,
+                )
+        except Exception as e:
+            print(f"[Proactive] nightly backtest error: {e}")
 
     def _check_rest_day(self) -> None:
         """Suggest rest after 4 consecutive training days."""
