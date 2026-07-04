@@ -25,11 +25,16 @@ def test_calc_position_size_basic():
     assert abs(rm.calc_position_size(1000.0, 100.0) - 1.0) < 0.001
 
 
-def test_calc_position_size_fractional():
+def test_calc_position_size_returns_zero_when_one_share_exceeds_cap():
     _patch()
-    # 10% of $500 at $450/share = $50/$450 ~ 0.111
-    qty = rm.calc_position_size(500.0, 450.0)
-    assert 0.10 < qty < 0.12
+    # 10% of $500 = $50 budget; one share costs $450 — must NOT force-buy it
+    assert rm.calc_position_size(500.0, 450.0) == 0
+
+
+def test_calc_position_size_floors_to_whole_shares():
+    _patch()
+    # 10% of $10,000 = $1,000 budget at $300/share -> floor(3.33) = 3
+    assert rm.calc_position_size(10_000.0, 300.0) == 3
 
 
 def test_get_stop_loss_price():

@@ -40,12 +40,17 @@ def calc_position_size(portfolio_value: float, price_per_share: float) -> int:
 
     Bracket orders on Alpaca require whole-share quantities — fractional
     shares are only supported with simple market orders.
+
+    Returns 0 when even a single share would exceed the position cap;
+    all callers skip the trade in that case.
     """
     import math
     cfg = _load_config()
     max_pct = cfg.get("max_position_pct", _DEFAULTS["max_position_pct"]) / 100.0
     max_dollars = portfolio_value * max_pct
-    return max(1, math.floor(max_dollars / price_per_share))
+    if price_per_share <= 0:
+        return 0
+    return math.floor(max_dollars / price_per_share)
 
 
 def get_stop_loss_price(entry_price: float) -> float:
