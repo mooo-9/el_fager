@@ -1,8 +1,33 @@
 import json
 import os
+import time
 from typing import Any
 
 import anthropic
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """True for errors worth retrying: rate limits, timeouts, flaky connections."""
+    if isinstance(exc, (
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,
+    )):
+        return True
+    try:
+        import httpx
+        if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+            return True
+    except Exception:
+        pass
+    msg = str(exc).lower()
+    return any(tok in msg for tok in (
+        "rate limit", "timed out", "timeout", "connection reset",
+        "connection aborted", "connection refused", "temporarily unavailable",
+        "http 429", "http 500", "http 502", "http 503", "http 504",
+        "status 429", "status 502", "status 503",
+    ))
 
 SYSTEM_PROMPT = """\
 You are El Fager — Mo's personal AI assistant running on his Windows laptop.
@@ -4869,7 +4894,29 @@ class Brain:
         self._live_pending: bool = False
         self._live_pending_ts: float = 0.0
 
+    _DISPATCH_RETRY_DELAYS = (1.0, 3.0)  # 2 retries with backoff on transient errors
+
     def _dispatch_tool(self, name: str, tool_input: dict) -> str:
+        """Dispatch a tool call, retrying transient failures (429/5xx/network).
+
+        Non-transient errors are caught inside _dispatch_tool_once and
+        returned as a normal "Tool error (...)" string without retrying.
+        """
+        last_exc: Exception | None = None
+        for delay in self._DISPATCH_RETRY_DELAYS:
+            try:
+                return self._dispatch_tool_once(name, tool_input)
+            except Exception as e:
+                last_exc = e
+                time.sleep(delay)
+        try:
+            return self._dispatch_tool_once(name, tool_input)
+        except Exception as e:
+            last_exc = e
+        attempts = len(self._DISPATCH_RETRY_DELAYS) + 1
+        return f"Tool error ({name}): {last_exc} (failed after {attempts} attempts)"
+
+    def _dispatch_tool_once(self, name: str, tool_input: dict) -> str:
         from tools.files_tool import search_files, open_file, read_file_content
         from tools.system_tool import open_app, run_command
         from tools.clipboard_tool import get_clipboard_text, set_clipboard_text
@@ -6235,6 +6282,8 @@ class Brain:
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
+            if _is_transient_error(e):
+                raise  # let _dispatch_tool retry with backoff
             return f"Tool error ({name}): {e}"
 
     def _try_agent_dispatch(self, task: str) -> str | None:
