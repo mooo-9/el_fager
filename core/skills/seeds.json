@@ -1,0 +1,56 @@
+[
+  {
+    "name": "morning routine",
+    "pack": "daily-life",
+    "trigger_phrases": ["good morning", "sabah el kheir", "start my day"],
+    "instructions": "1) Give Mo today's briefing: weather in Cairo, today's calendar events (list_calendar_events), and today's prayer times (get_prayer_times). 2) Summarize the paper trading account: portfolio_summary plus any overnight price alerts. 3) Mention the top pending reminder or task if any. Keep the whole thing under 6 spoken sentences."
+  },
+  {
+    "name": "evening shutdown",
+    "pack": "daily-life",
+    "trigger_phrases": ["wrap up my day", "evening routine", "tesbah ala kheir"],
+    "instructions": "1) Ask Mo if he wants to journal today (do not write it for him). 2) Preview tomorrow: first calendar event and Fajr time. 3) One-line summary of today's spending if any expenses were logged. Keep it short and calm."
+  },
+  {
+    "name": "weekly review",
+    "pack": "daily-life",
+    "trigger_phrases": ["weekly review", "how was my week"],
+    "instructions": "Compile Mo's week: journal_insights for the last 7 days, spending_insights, gym sessions this week, and paper-trading P&L summary. Present as 4 short sections, then ONE suggestion for next week."
+  },
+  {
+    "name": "morning research digest",
+    "pack": "research",
+    "trigger_phrases": ["research digest", "what's new in my topics"],
+    "instructions": "Use research_agent to research the latest developments (last 48 hours) on Mo's tracked topics. Default topics: AI agents and assistants, US stock market conditions affecting SPY/QQQ/NVDA/AAPL, and the Egyptian tech scene. Summarize the 3 most important findings in plain language, one sentence of why each matters to Mo."
+  },
+  {
+    "name": "deep dive",
+    "pack": "research",
+    "trigger_phrases": ["deep dive on", "research this properly"],
+    "instructions": "Take the topic Mo just mentioned and use research_agent for a thorough multi-source investigation. Structure the answer: what it is, current state, the 3 strongest opposing viewpoints, and a practical takeaway for Mo. If the topic touches a stock, add stocks_agent analysis of the ticker."
+  },
+  {
+    "name": "focus mode",
+    "pack": "music",
+    "trigger_phrases": ["focus time", "focus mode", "deep work"],
+    "instructions": "1) play_music with a deep-focus instrumental playlist. 2) Set system volume to a moderate level (around 40%). 3) Tell Mo focus mode is on and offer to set a reminder for a break in 50 minutes (only set it if he agrees)."
+  },
+  {
+    "name": "gym mode",
+    "pack": "music",
+    "trigger_phrases": ["gym mode", "workout music", "going to the gym"],
+    "instructions": "1) play_music with a high-energy gym playlist. 2) Remind Mo which session today is according to his gym program (health_agent knows the split). 3) After he confirms he trained, log the workout via health_agent."
+  },
+  {
+    "name": "summarize new lectures",
+    "pack": "study",
+    "trigger_phrases": ["summarize my lectures", "new lecture summary"],
+    "instructions": "Look in C:\\Users\\Mohab1\\OneDrive\\Documents for recently added lecture files (PDF/PPTX/DOCX modified in the last 7 days). For each new file, use file_agent to produce: a 5-bullet summary, the 3 key terms with definitions, and 1 likely exam question. If nothing new, say so."
+  },
+  {
+    "name": "exam prep quiz",
+    "pack": "study",
+    "trigger_phrases": ["quiz me", "exam prep"],
+    "instructions": "Ask Mo which subject or lecture file to prep. Then use file_agent to read it and generate 5 exam-style questions ONE AT A TIME: ask, wait for Mo's answer, grade it honestly, explain the correct answer, then move on. At the end give a score out of 5 and the weakest topic to review."
+  }
+]

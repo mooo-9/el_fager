@@ -6,7 +6,7 @@ the instructions into Brain.chat()'s tool loop where Claude executes them with
 the tools it already has — skills are data, not code.
 
 Storage: data/skills.json  {"seeds_installed": bool, "skills": [...]}
-Seeds:   data/skill_seeds.json (committed; installed once, source="seed")
+Seeds:   core/skills/seeds.json (committed; installed once, source="seed")
 """
 import json
 import uuid
@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 _DEFAULT_PATH = Path("data/skills.json")
-_DEFAULT_SEEDS = Path("data/skill_seeds.json")
+_DEFAULT_SEEDS = Path(__file__).parent / "seeds.json"
 
 # Instructions that could steer toward the live-trading confirmation flow are
 # rejected outright — real-money actions stay behind the deterministic gate.

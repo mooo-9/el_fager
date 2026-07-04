@@ -118,7 +118,7 @@ class TestSeeds:
     def test_real_seed_file_is_valid_and_covers_all_packs(self):
         # The committed seed file must parse and contain all 4 packs.
         repo_seeds = os.path.join(os.path.dirname(__file__), "..", "..",
-                                  "data", "skill_seeds.json")
+                                  "core", "skills", "seeds.json")
         data = json.loads(open(repo_seeds, encoding="utf-8").read())
         packs = {s["pack"] for s in data}
         assert {"study", "research", "music", "daily-life"} <= packs
