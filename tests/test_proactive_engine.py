@@ -1,0 +1,207 @@
+"""Unit tests for core/proactive.py — cooldowns, scheduling windows, and
+autonomous task execution. No threads are started; checks are called directly.
+"""
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import json
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+import core.proactive as pa
+from core.proactive import ProactiveEngine, _fmt12
+
+
+@pytest.fixture
+def engine(tmp_path, monkeypatch):
+    monkeypatch.setattr(pa, "_STATE_FILE", tmp_path / "proactive_state.json")
+    e = ProactiveEngine(speak_fn=None)
+    e._deliver = MagicMock()
+    return e
+
+
+class TestFmt12:
+    def test_afternoon(self):
+        assert _fmt12("13:05") == "1:05 PM"
+
+    def test_midnight(self):
+        assert _fmt12("00:30") == "12:30 AM"
+
+    def test_noon(self):
+        assert _fmt12("12:00") == "12:00 PM"
+
+    def test_garbage_passthrough(self):
+        assert _fmt12("not a time") == "not a time"
+
+
+class TestCooldown:
+    def test_first_call_not_in_cooldown_and_stamps(self, engine, tmp_path):
+        assert engine._cooldown("k", 1) is False
+        saved = json.loads((tmp_path / "proactive_state.json").read_text(encoding="utf-8"))
+        assert "k" in saved
+
+    def test_second_call_within_window_is_blocked(self, engine):
+        engine._cooldown("k", 1)
+        assert engine._cooldown("k", 1) is True
+
+    def test_expired_cooldown_runs_again(self, engine):
+        engine._state["k"] = (datetime.now() - timedelta(hours=2)).isoformat()
+        assert engine._cooldown("k", 1) is False
+
+    def test_reset_cooldown_persists(self, engine, tmp_path):
+        engine._cooldown("k", 1)
+        engine._reset_cooldown("k")
+        assert "k" not in engine._state
+        saved = json.loads((tmp_path / "proactive_state.json").read_text(encoding="utf-8"))
+        assert "k" not in saved
+
+    def test_corrupt_timestamp_treated_as_expired(self, engine):
+        engine._state["k"] = "not-a-timestamp"
+        assert engine._cooldown("k", 1) is False
+
+    def test_state_survives_reload(self, engine, tmp_path):
+        engine._cooldown("k", 5)
+        fresh = ProactiveEngine(speak_fn=None)
+        assert fresh._cooldown("k", 5) is True
+
+
+def _patch_all_checks(engine):
+    """Replace every _check_* method with a MagicMock; return dict of mocks."""
+    mocks = {}
+    for name in dir(engine):
+        if name.startswith("_check_"):
+            m = MagicMock()
+            setattr(engine, name, m)
+            mocks[name] = m
+    return mocks
+
+
+def _run_checks_at(engine, dt):
+    fake = MagicMock(wraps=datetime)
+    fake.now = MagicMock(return_value=dt)
+    with patch.object(pa, "datetime", fake):
+        engine._run_checks()
+
+
+class TestRunChecksWindows:
+    def test_sleep_hours_run_nothing(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 3, 0))  # 3 AM
+        for m in mocks.values():
+            m.assert_not_called()
+
+    def test_always_on_checks_run_midday(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 14, 0))  # Wed 2 PM
+        for name in ("_check_battery", "_check_prayer_times", "_check_upcoming_events",
+                     "_check_price_alerts", "_check_autonomous_tasks"):
+            mocks[name].assert_called_once()
+        mocks["_check_journal"].assert_not_called()
+        mocks["_check_weather"].assert_not_called()
+
+    def test_morning_checks_run_in_morning(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 8, 0))  # Wed 8 AM
+        mocks["_check_deadlines"].assert_called_once()
+        mocks["_check_weather"].assert_called_once()
+        mocks["_check_rest_day"].assert_called_once()
+        mocks["_check_journal"].assert_not_called()
+
+    def test_evening_checks_run_in_evening(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 20, 0))  # Wed 8 PM
+        mocks["_check_journal"].assert_called_once()
+        mocks["_check_expenses"].assert_called_once()
+        mocks["_check_budget_exceeded"].assert_called_once()
+        mocks["_check_gym_session"].assert_called_once()
+        mocks["_check_weather"].assert_not_called()
+
+    def test_weekly_review_only_on_fri_sat_evening(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 3, 18, 0))  # Friday 6 PM
+        mocks["_check_weekly_review"].assert_called_once()
+
+        mocks2 = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 18, 0))  # Wednesday 6 PM
+        mocks2["_check_weekly_review"].assert_not_called()
+
+
+class TestAutonomousTasks:
+    def _mgr(self, due):
+        mgr = MagicMock()
+        mgr.get_due.return_value = due
+        return mgr
+
+    def test_no_brain_fn_does_nothing(self, engine):
+        engine._brain_fn = None
+        with patch("core.autonomous_tasks.AutonomousTaskManager") as mgr_cls:
+            engine._check_autonomous_tasks()
+        mgr_cls.assert_not_called()
+
+    def test_due_task_executed_and_completed(self, engine):
+        brain = MagicMock(return_value="NVDA RSI is 38.")
+        engine._brain_fn = brain
+        mgr = self._mgr([{"id": "t1", "description": "check NVDA RSI"}])
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+            engine._check_autonomous_tasks()
+        mgr.mark_running.assert_called_once_with("t1")
+        brain.assert_called_once_with("check NVDA RSI")
+        mgr.complete.assert_called_once_with("t1", "NVDA RSI is 38.")
+        engine._deliver.assert_called_once()
+        assert engine._deliver.call_args.kwargs.get("remote") is True
+
+    def test_max_two_tasks_per_cycle(self, engine):
+        engine._brain_fn = MagicMock(return_value="ok")
+        due = [{"id": f"t{i}", "description": f"task {i}"} for i in range(4)]
+        mgr = self._mgr(due)
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+            engine._check_autonomous_tasks()
+        assert mgr.mark_running.call_count == 2
+        assert mgr.complete.call_count == 2
+
+    def test_brain_failure_marks_task_failed_not_completed(self, engine):
+        engine._brain_fn = MagicMock(side_effect=RuntimeError("API down"))
+        mgr = self._mgr([{"id": "t1", "description": "doomed task"}])
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+            engine._check_autonomous_tasks()
+        mgr.fail.assert_called_once()
+        assert mgr.fail.call_args.args[0] == "t1"
+        mgr.complete.assert_not_called()
+        engine._deliver.assert_not_called()
+
+    def test_one_failed_task_does_not_block_the_next(self, engine):
+        engine._brain_fn = MagicMock(side_effect=[RuntimeError("boom"), "second ok"])
+        due = [
+            {"id": "t1", "description": "fails"},
+            {"id": "t2", "description": "succeeds"},
+        ]
+        mgr = self._mgr(due)
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+            engine._check_autonomous_tasks()
+        mgr.fail.assert_called_once()
+        mgr.complete.assert_called_once_with("t2", "second ok")
+
+    def test_empty_brain_result_records_done(self, engine):
+        engine._brain_fn = MagicMock(return_value="")
+        mgr = self._mgr([{"id": "t1", "description": "quiet task"}])
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+            engine._check_autonomous_tasks()
+        mgr.complete.assert_called_once_with("t1", "Done.")
+
+
+class TestHudNotify:
+    def test_no_hud_fn_is_silent(self, engine):
+        engine._hud_notify(5, "a", "b", "c", "TAG")  # must not raise
+
+    def test_hud_fn_receives_args(self, engine):
+        fn = MagicMock()
+        engine.set_hud_notify(fn)
+        engine._hud_notify(5, "pre", "hl", "suf", "TAG")
+        fn.assert_called_once_with(5, "pre", "hl", "suf", "TAG")
+
+    def test_hud_fn_exception_swallowed(self, engine):
+        engine.set_hud_notify(MagicMock(side_effect=RuntimeError("js bridge gone")))
+        engine._hud_notify(5, "a", "b", "c", "TAG")  # must not raise
