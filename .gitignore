@@ -27,7 +27,6 @@ desktop.ini
 
 # Logs
 *.log
-*.txt
 startup_*
 
 # Pip/curl artifacts
