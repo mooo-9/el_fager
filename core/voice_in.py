@@ -36,6 +36,12 @@ RMS_CHUNK_SEC = 0.1
 RMS_THRESHOLD = 0.01
 RMS_SILENCE_SEC = 2.5
 
+# Hallucination guards.
+# Mo speaks Arabic/English/French (Arabizi decodes as ar or en). Anything else
+# is Whisper hallucinating on noise — retry forced-Arabic, then give up.
+ALLOWED_LANGUAGES = {"ar", "en", "fr"}
+NO_SPEECH_MAX = 0.6  # drop segments Whisper itself flags as probable non-speech
+
 _BACKEND_GROQ   = "groq"
 _BACKEND_FASTER = "faster_whisper"
 _BACKEND_OPENAI = "openai_whisper"
@@ -51,6 +57,20 @@ def _numpy_to_wav_bytes(audio: np.ndarray, sr: int = SAMPLE_RATE) -> bytes:
         wf.setframerate(sr)
         wf.writeframes(pcm.tobytes())
     return buf.getvalue()
+
+
+def _join_speech_segments(language: str | None,
+                          segments: "list[tuple[str, float | None]]") -> str:
+    """
+    Join (text, no_speech_prob) segments into a transcript, dropping segments
+    Whisper flags as probable non-speech. Returns "" for disallowed languages
+    so noise decoded as Icelandic/Korean/etc. never reaches the brain.
+    """
+    if language is not None and language.split("-")[0] not in ALLOWED_LANGUAGES:
+        return ""
+    kept = [t.strip() for t, p in segments
+            if t.strip() and (p is None or p < NO_SPEECH_MAX)]
+    return " ".join(kept).strip()
 
 
 def _normalise(audio: np.ndarray) -> np.ndarray:
@@ -261,7 +281,8 @@ class VoiceInput:
     def transcribe(self, audio: np.ndarray) -> str:
         """
         Convert float32 numpy audio → text using the best available backend.
-        Auto-detects language (Arabic, English, French, Arabizi).
+        Auto-detects language but only accepts ALLOWED_LANGUAGES; any other
+        detection is treated as a hallucination and retried forced-Arabic.
         """
         if audio is None or len(audio) < SAMPLE_RATE * 0.3:
             return ""
@@ -274,18 +295,33 @@ class VoiceInput:
             return self._transcribe_faster(audio)
         return self._transcribe_openai(audio)
 
-    def _transcribe_groq(self, audio: np.ndarray) -> str:
+    def _transcribe_groq(self, audio: np.ndarray, language: str | None = None) -> str:
         try:
             from groq import Groq
             client = Groq(api_key=os.getenv("GROQ_API_KEY"))
             wav = _numpy_to_wav_bytes(audio)
+            kwargs = {"language": language} if language else {}
             result = client.audio.transcriptions.create(
                 model="whisper-large-v3-turbo",
                 file=("audio.wav", wav),
-                response_format="text",
+                response_format="verbose_json",
+                **kwargs,
             )
-            # result is a string when response_format="text"
-            return result.strip() if isinstance(result, str) else result.text.strip()
+            detected = getattr(result, "language", None)
+            raw_segments = getattr(result, "segments", None) or []
+            segments = [
+                (
+                    (s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "")),
+                    (s.get("no_speech_prob") if isinstance(s, dict) else getattr(s, "no_speech_prob", None)),
+                )
+                for s in raw_segments
+            ]
+            if not segments:  # API variant without segment detail
+                segments = [(getattr(result, "text", "") or "", None)]
+            if language is None and detected is not None \
+                    and detected.split("-")[0] not in ALLOWED_LANGUAGES:
+                return self._transcribe_groq(audio, language="ar")
+            return _join_speech_segments(language or detected, segments)
         except Exception as e:
             print(f"[El Fager] Groq transcription error: {e}")
             # Graceful degradation: fall back to local if available
@@ -295,25 +331,36 @@ class VoiceInput:
                 return self._transcribe_openai(audio)
             return ""
 
-    def _transcribe_faster(self, audio: np.ndarray) -> str:
-        segments, _ = self._whisper.transcribe(
+    def _transcribe_faster(self, audio: np.ndarray, language: str | None = None) -> str:
+        segments, info = self._whisper.transcribe(
             audio,
-            language=None,
+            language=language,
             beam_size=5,
             best_of=5,
             temperature=0.0,
             condition_on_previous_text=False,
             vad_filter=False,  # we handle VAD ourselves
         )
-        return " ".join(s.text for s in segments).strip()
+        pairs = [(s.text, getattr(s, "no_speech_prob", None)) for s in segments]
+        if language is None and info.language not in ALLOWED_LANGUAGES:
+            # Egyptian Arabic often misdetects as another language — retry forced.
+            return self._transcribe_faster(audio, language="ar")
+        return _join_speech_segments(language or info.language, pairs)
 
-    def _transcribe_openai(self, audio: np.ndarray) -> str:
+    def _transcribe_openai(self, audio: np.ndarray, language: str | None = None) -> str:
         result = self._whisper.transcribe(
             audio,
-            language=None,
+            language=language,
             task="transcribe",
             fp16=False,
             temperature=0.0,
             condition_on_previous_text=False,
         )
-        return result["text"].strip()
+        detected = result.get("language")
+        if language is None and detected not in ALLOWED_LANGUAGES:
+            return self._transcribe_openai(audio, language="ar")
+        pairs = [(s.get("text", ""), s.get("no_speech_prob"))
+                 for s in result.get("segments", [])]
+        if not pairs:
+            pairs = [(result.get("text", ""), None)]
+        return _join_speech_segments(language or detected, pairs)
