@@ -31,7 +31,7 @@ python -c "from core.brain import Brain; from core.voice_in import VoiceInput; p
 
 ```powershell
 # Watchdog scheduled task still registered?
-Get-ScheduledTask -TaskName "ElFagerWatchdog" -ErrorAction SilentlyContinue
+Get-ScheduledTask -TaskName "El Fager Watchdog" -ErrorAction SilentlyContinue
 
 # No stray shell artifacts in repo root (past quoting accidents)
 Get-ChildItem -Name | Where-Object { $_ -match '^(=|Accept$|GET$|Host$|User-Agent$)' }
