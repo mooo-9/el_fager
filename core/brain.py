@@ -408,6 +408,8 @@ When Mo says "what skills do you have" -> list_skills. "forget that skill" -> de
 Automation flow (propose, never impose): if run_skill's result asks you to offer scheduling, finish the skill, then ask Mo ONCE if he wants it automatic. If yes -> schedule_skill(name, every_hours, at_time="HH:MM"). "stop doing X automatically" -> unschedule_skill.
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
 Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
+"import my routines" / "turn my tasks into skills" / "automate my week" -> import_routines (creates + schedules skills from calendar and gym program).
+"sync my skills" (make skills available in Claude Code) -> sync_skills_to_claude. Also offer this after importing routines.
 API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
 Missions (multi-step background goals):
 Tools: start_mission, mission_status, cancel_mission.
@@ -4612,6 +4614,24 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "import_routines",
+        "description": (
+            "Scan Mo's calendar (recurring events, next 2 weeks) and gym program, turn each "
+            "recurring commitment into a skill, and schedule it automatically. Use when Mo says "
+            "'import my routines', 'turn my tasks into skills', or 'automate my week'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "sync_skills_to_claude",
+        "description": (
+            "Export all learned skills as Claude Code skills (.claude/skills/fager-*) so the "
+            "same routines are runnable from Claude Code. Use when Mo says 'sync my skills' "
+            "or after importing/learning several skills."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
         "name": "start_mission",
         "description": (
             "Start a multi-step background mission. Use when Mo gives a BIG "
@@ -4855,7 +4875,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "skills": frozenset({
         "learn_skill", "list_skills", "run_skill", "delete_skill",
         "schedule_skill", "unschedule_skill", "skill_proposals",
-        "dismiss_skill_proposal",
+        "dismiss_skill_proposal", "import_routines", "sync_skills_to_claude",
     }),
     "usage": frozenset({"usage_report"}),
     "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
@@ -6472,6 +6492,12 @@ class Brain:
             elif name == "dismiss_skill_proposal":
                 from tools.skill_tool import dismiss_skill_proposal as _dismiss_sk
                 return _dismiss_sk(**tool_input)
+            elif name == "import_routines":
+                from tools.skill_tool import import_routines as _import_rt
+                return _import_rt()
+            elif name == "sync_skills_to_claude":
+                from tools.skill_tool import sync_skills_to_claude as _sync_sk
+                return _sync_sk()
             elif name == "usage_report":
                 from tools.usage_tool import usage_report as _usage_rep
                 return _usage_rep(**tool_input)
