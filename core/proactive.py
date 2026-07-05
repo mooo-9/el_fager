@@ -183,6 +183,7 @@ class ProactiveEngine:
             self._check_journal()
             self._check_expenses()
             self._check_budget_exceeded()
+            self._check_api_budget()
 
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
             self._check_weekly_review()
@@ -548,6 +549,37 @@ class ProactiveEngine:
             else:
                 days = ", ".join(s["session"].capitalize() for s in sessions[-3:])
                 self._deliver(f"Weekly gym report -- {count} sessions last week. Latest: {days}.")
+        except Exception:
+            pass
+
+    _DEFAULT_API_BUDGET_USD = 5.0
+
+    def _check_api_budget(self) -> None:
+        """Evening warning when today's Claude API spend exceeds the budget.
+        Budget: data/settings.json 'api_daily_budget_usd' (0 disables)."""
+        if self._cooldown("api_budget", 20):
+            return
+        try:
+            budget = self._DEFAULT_API_BUDGET_USD
+            settings_path = Path("data/settings.json")
+            if settings_path.exists():
+                try:
+                    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+                    budget = float(settings.get("api_daily_budget_usd",
+                                                self._DEFAULT_API_BUDGET_USD))
+                except Exception:
+                    pass
+            if budget <= 0:
+                return
+            from core.telemetry import cost_today
+            spent = cost_today()
+            if spent > budget:
+                self._deliver(
+                    f"Mo, heads up -- I've cost about ${spent:.2f} in API calls "
+                    f"today, over your ${budget:.2f} daily budget."
+                )
+            else:
+                self._reset_cooldown("api_budget")
         except Exception:
             pass
 

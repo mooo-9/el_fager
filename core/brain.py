@@ -408,6 +408,7 @@ When Mo says "what skills do you have" -> list_skills. "forget that skill" -> de
 Automation flow (propose, never impose): if run_skill's result asks you to offer scheduling, finish the skill, then ask Mo ONCE if he wants it automatic. If yes -> schedule_skill(name, every_hours, at_time="HH:MM"). "stop doing X automatically" -> unschedule_skill.
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
 Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
+API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
 El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
@@ -4605,6 +4606,20 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["proposal_id"]
         }
     },
+    {
+        "name": "usage_report",
+        "description": (
+            "Report El Fager's own Claude API usage and cost. Use when Mo asks "
+            "'what did you cost me', 'how much have you spent', 'api usage', "
+            "'your running costs'. days=1 for today, 7 for the week."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "Window in days (default 1)."}
+            }
+        }
+    },
 ]
 
 def _slim_tools(tools: list) -> list:
@@ -4809,6 +4824,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "schedule_skill", "unschedule_skill", "skill_proposals",
         "dismiss_skill_proposal",
     }),
+    "usage": frozenset({"usage_report"}),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4939,6 +4955,11 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "automate", "automation", "automatically", "routine", "schedule this",
         "every morning", "every day", "every night", "every week",
         "stop doing", "suggestions", "proposal", "مهارة", "اتعلمها", "روتين",
+    ],
+    "usage": [
+        "cost me", "you cost", "api usage", "api cost", "your cost",
+        "how much have you spent", "token usage", "running costs",
+        "what did you spend",
     ],
 }
 
@@ -6412,6 +6433,9 @@ class Brain:
             elif name == "dismiss_skill_proposal":
                 from tools.skill_tool import dismiss_skill_proposal as _dismiss_sk
                 return _dismiss_sk(**tool_input)
+            elif name == "usage_report":
+                from tools.usage_tool import usage_report as _usage_rep
+                return _usage_rep(**tool_input)
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
@@ -6464,6 +6488,23 @@ class Brain:
             return "Live trading activation cancelled."
         return None
 
+    def _create_message(self, _telemetry_source: str, **kwargs):
+        """All brain API calls route through here: times the call and records
+        usage/cost telemetry. Telemetry never raises; API errors propagate."""
+        started = time.monotonic()
+        response = self.client.messages.create(**kwargs)
+        try:
+            from core.telemetry import record_api_usage
+            record_api_usage(
+                _telemetry_source,
+                kwargs.get("model", self._model),
+                response.usage,
+                (time.monotonic() - started) * 1000,
+            )
+        except Exception:
+            pass
+        return response
+
     def chat(self, user_message: str, memory_context: str = "") -> str:
         # Log user turn
         if self._logger:
@@ -6496,7 +6537,8 @@ class Brain:
 
         try:
             for _iteration in range(_MAX_TOOL_ITERATIONS):
-                response = self.client.messages.create(
+                response = self._create_message(
+                    "chat",
                     model=self._model,
                     max_tokens=1024,
                     system=system,
@@ -6631,7 +6673,8 @@ class Brain:
 
         try:
             while True:
-                response = self.client.messages.create(
+                response = self._create_message(
+                    "screenshot",
                     model=self._model,
                     max_tokens=1024,
                     system=system,
