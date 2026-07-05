@@ -166,17 +166,19 @@ class VoiceInput:
 
     # ── Recording ──────────────────────────────────────────────────────────────
 
-    def record_audio(self) -> "np.ndarray | None":
+    def record_audio(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """
         Record until the speaker is truly done talking.
         Uses Silero VAD if loaded, otherwise falls back to RMS silence detection.
+        start_timeout_sec: give up (return None) if speech hasn't started within
+        this many seconds — used by conversation mode's follow-up window.
         """
         self._stop_flag.clear()
         if self._vad_model is not None:
-            return self._record_vad()
-        return self._record_rms()
+            return self._record_vad(start_timeout_sec)
+        return self._record_rms(start_timeout_sec)
 
-    def _record_vad(self) -> "np.ndarray | None":
+    def _record_vad(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """
         Neural end-of-speech via Silero VAD.
         Stops only after END_SILENCE_SEC of frames the model says aren't speech.
@@ -187,6 +189,8 @@ class VoiceInput:
         end_frames  = int(END_SILENCE_SEC * SAMPLE_RATE / VAD_CHUNK)
         trail_frames = int(TRAIL_KEEP_SEC  * SAMPLE_RATE / VAD_CHUNK)
         max_frames  = int(MAX_RECORD_SECONDS * SAMPLE_RATE / VAD_CHUNK)
+        start_frames = (int(start_timeout_sec * SAMPLE_RATE / VAD_CHUNK)
+                        if start_timeout_sec else None)
 
         chunks: list[np.ndarray] = []
         aq: queue.Queue = queue.Queue(maxsize=200)
@@ -230,6 +234,8 @@ class VoiceInput:
                     consec_silence += 1
                     if consec_silence >= end_frames:
                         break
+                elif start_frames is not None and len(chunks) >= start_frames:
+                    break  # follow-up window expired with no speech
 
         if self._stop_flag.is_set() or not speech_started:
             return None
@@ -238,11 +244,13 @@ class VoiceInput:
         trim = max(len(chunks) - end_frames + trail_frames, 1)
         return np.concatenate(chunks[:trim]).flatten()
 
-    def _record_rms(self) -> "np.ndarray | None":
+    def _record_rms(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """RMS fallback — 2.5 s silence window, 100 ms chunks."""
         chunk_size = int(SAMPLE_RATE * RMS_CHUNK_SEC)
         silence_needed = int(RMS_SILENCE_SEC / RMS_CHUNK_SEC)
         max_chunks = int(MAX_RECORD_SECONDS / RMS_CHUNK_SEC)
+        start_chunks = (int(start_timeout_sec / RMS_CHUNK_SEC)
+                        if start_timeout_sec else None)
 
         chunks: list[np.ndarray] = []
         consec_silence = 0
@@ -270,6 +278,9 @@ class VoiceInput:
                     consec_silence += 1
                 if speech_started and consec_silence >= silence_needed:
                     break
+                if (not speech_started and start_chunks is not None
+                        and len(chunks) >= start_chunks):
+                    break  # follow-up window expired with no speech
 
         if self._stop_flag.is_set() or not speech_started:
             return None
