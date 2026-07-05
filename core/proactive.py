@@ -15,6 +15,7 @@ Checks implemented:
   • Weekly review prompt (Friday / Saturday evening)
   • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
   • Nightly backtest after US market close, alert only on metric regression
+  • Transcription-quality alert when too many of today's turns are gibberish
 """
 
 import json
@@ -185,6 +186,7 @@ class ProactiveEngine:
             self._check_expenses()
             self._check_budget_exceeded()
             self._check_api_budget()
+            self._check_transcription_quality()
 
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
             self._check_weekly_review()
@@ -731,6 +733,52 @@ class ProactiveEngine:
                 )
         except Exception as e:
             print(f"[Proactive] nightly backtest error: {e}")
+
+    # Scripts Mo never speaks (Hangul, Hebrew, Cyrillic, CJK, Thai) plus the
+    # Icelandic eth/thorn Whisper hallucinates on silence.
+    _GARBAGE_RE = re.compile(r"[가-힯֐-׿Ѐ-ӿ一-鿿฀-๿ðþÞÐ]")
+    _GARBAGE_MAX_PCT = 10.0
+    _GARBAGE_MIN_TURNS = 5
+
+    def _check_transcription_quality(self) -> None:
+        """Evening: warn when too many of today's user turns contain scripts
+        Mo doesn't speak — the biggest silent failure (mic/VAD/Whisper) made
+        visible."""
+        if self._cooldown("transcription_quality", 20):
+            return
+        try:
+            fpath = Path("data/conversations") / f"{date.today().isoformat()}.jsonl"
+            if not fpath.exists():
+                self._reset_cooldown("transcription_quality")
+                return
+            turns = garbage = 0
+            for line in fpath.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if entry.get("role") != "user":
+                    continue
+                turns += 1
+                if self._GARBAGE_RE.search(entry.get("content", "")):
+                    garbage += 1
+            if turns < self._GARBAGE_MIN_TURNS:
+                self._reset_cooldown("transcription_quality")
+                return
+            pct = 100 * garbage / turns
+            if pct > self._GARBAGE_MAX_PCT:
+                self._deliver(
+                    f"Mo, {garbage} of your {turns} voice messages today "
+                    f"({pct:.0f}%) came through as gibberish. Check the mic or "
+                    f"say a test sentence — Whisper may be mishearing you."
+                )
+            else:
+                self._reset_cooldown("transcription_quality")
+        except Exception:
+            pass
 
     def _check_rest_day(self) -> None:
         """Suggest rest after 4 consecutive training days."""

@@ -356,3 +356,63 @@ class TestHudNotify:
     def test_hud_fn_exception_swallowed(self, engine):
         engine.set_hud_notify(MagicMock(side_effect=RuntimeError("js bridge gone")))
         engine._hud_notify(5, "a", "b", "c", "TAG")  # must not raise
+
+
+class TestTranscriptionQuality:
+    def _write_day(self, tmp_path, contents):
+        convo_dir = tmp_path / "data" / "conversations"
+        convo_dir.mkdir(parents=True)
+        from datetime import date
+        fpath = convo_dir / f"{date.today().isoformat()}.jsonl"
+        lines = [json.dumps({"role": "user", "content": c}, ensure_ascii=False)
+                 for c in contents]
+        fpath.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_high_garbage_rate_alerts(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        # 2 of 6 turns (33%) in scripts Mo doesn't speak
+        self._write_day(tmp_path, [
+            "what is the weather", "hello", "sabah el kheir",
+            "check my email", "여러분들과의 바세사", "Það er um þig",
+        ])
+        engine._check_transcription_quality()
+        assert engine._deliver.call_count == 1
+        assert "gibberish" in engine._deliver.call_args.args[0]
+
+    def test_clean_day_stays_quiet_and_resets(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, [
+            "what is the weather", "hello", "sabah el kheir",
+            "check my email", "ازيك يا فجر", "quelle heure est-il",
+        ])
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+        assert "transcription_quality" not in engine._state
+
+    def test_too_few_turns_stays_quiet(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, ["Það er um þig", "여러분들과의"])  # 100% but n=2
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+
+    def test_missing_log_file_stays_quiet(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+
+    def test_cooldown_blocks_second_alert(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, ["Það", "Það", "Það", "Það", "Það", "ok"])
+        engine._check_transcription_quality()
+        engine._check_transcription_quality()
+        assert engine._deliver.call_count == 1
+
+    def test_runs_in_evening_window(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 20, 0))
+        mocks["_check_transcription_quality"].assert_called_once()
+
+    def test_not_run_midday(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 12, 0))
+        mocks["_check_transcription_quality"].assert_not_called()
