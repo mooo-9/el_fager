@@ -316,6 +316,10 @@ def main():
     _trading_speak_cb(voice_out.speak)
     _start_trading()   # auto-start paper trading on every launch
 
+    # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
+    from core.dashboard import start_dashboard
+    start_dashboard()
+
     # ── Daily briefing ────────────────────────────────────────────────────────
     from core.briefing import already_briefed_today, mark_briefed_today, get_briefing_prompt
 
