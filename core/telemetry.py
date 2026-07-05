@@ -128,3 +128,33 @@ def summarize(days: int = 7) -> dict:
 
 def cost_today() -> float:
     return summarize(days=1)["cost_usd"]
+
+
+def instrument_client(client, source: str):
+    """Wrap client.messages.create so every call is timed and recorded.
+    Idempotent; never raises. Returns the same client for chaining."""
+    try:
+        import time as _time
+        if getattr(client.messages, "_elf_instrumented", False):
+            return client
+        original = client.messages.create
+
+        def _create(*args, **kwargs):
+            started = _time.monotonic()
+            response = original(*args, **kwargs)
+            try:
+                record_api_usage(
+                    source,
+                    kwargs.get("model", "unknown"),
+                    response.usage,
+                    (_time.monotonic() - started) * 1000,
+                )
+            except Exception:
+                pass
+            return response
+
+        client.messages.create = _create
+        client.messages._elf_instrumented = True
+    except Exception:
+        pass
+    return client

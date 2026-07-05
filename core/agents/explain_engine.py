@@ -47,6 +47,8 @@ class ExplainEngine:
         try:
             import anthropic
             client = anthropic.Anthropic()
+            from core.telemetry import instrument_client
+            instrument_client(client, "explain_engine")
             resp = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=200,

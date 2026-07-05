@@ -78,6 +78,51 @@ class TestRecord:
         tel.record_api_usage("chat", "claude-opus-4-8", object(), 1.0)
 
 
+class TestInstrumentClient:
+    def _client(self):
+        from unittest.mock import MagicMock
+        client = MagicMock()
+        response = MagicMock()
+        response.usage = _usage(100, 50)
+        client.messages.create = MagicMock(return_value=response)
+        # a real SDK resource allows attribute assignment; MagicMock does too
+        client.messages._elf_instrumented = False
+        return client, response
+
+    def test_wrapped_call_records_usage(self, isolated_dir):
+        client, response = self._client()
+        tel.instrument_client(client, "screen_agent")
+        out = client.messages.create(model="claude-opus-4-8", messages=[])
+        assert out is response
+        s = tel.summarize(days=1)
+        assert s["requests"] == 1
+        assert "screen_agent" in s["by_source"]
+
+    def test_idempotent(self, isolated_dir):
+        client, _ = self._client()
+        tel.instrument_client(client, "a")
+        tel.instrument_client(client, "a")  # second wrap must be a no-op
+        client.messages.create(model="m", messages=[])
+        assert tel.summarize(days=1)["requests"] == 1
+
+    def test_api_error_propagates(self, isolated_dir):
+        client, _ = self._client()
+        client.messages.create = __import__("unittest.mock", fromlist=["MagicMock"]) \
+            .MagicMock(side_effect=RuntimeError("api down"))
+        client.messages._elf_instrumented = False
+        tel.instrument_client(client, "a")
+        with pytest.raises(RuntimeError):
+            client.messages.create(model="m", messages=[])
+
+    def test_telemetry_failure_swallowed(self, isolated_dir, monkeypatch):
+        client, response = self._client()
+        tel.instrument_client(client, "a")
+        monkeypatch.setattr(tel, "record_api_usage",
+                            lambda *a, **k: (_ for _ in ()).throw(IOError()))
+        out = client.messages.create(model="m", messages=[])
+        assert out is response
+
+
 class TestSummarize:
     def _write_day(self, base, days_ago, entries):
         d = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")

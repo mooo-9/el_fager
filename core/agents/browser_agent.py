@@ -44,6 +44,8 @@ class BrowserAgent(BaseAgent):
         from playwright.sync_api import sync_playwright
 
         client = anthropic.Anthropic()
+        from core.telemetry import instrument_client
+        instrument_client(client, "browser_agent")
         vault = Vault()
         history: list[str] = []
 

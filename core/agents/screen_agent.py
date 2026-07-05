@@ -45,6 +45,8 @@ class ScreenAgent(BaseAgent):
         from PIL import Image
 
         client = anthropic.Anthropic()
+        from core.telemetry import instrument_client
+        instrument_client(client, "screen_agent")
         history: list[str] = []
 
         for _ in range(self.MAX_STEPS):
