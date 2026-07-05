@@ -131,8 +131,40 @@ _PAGE = """<!DOCTYPE html>
 </style></head><body>
 <h1>EL FAGER</h1>
 <div class="sub" id="ts">connecting...</div>
+<div class="card"><h2>Command</h2>
+ <div style="display:flex;gap:8px">
+  <input id="cmd" placeholder="tell El Fager..." maxlength="500"
+   style="flex:1;background:#06090f;border:1px solid #163040;color:#e8f7ff;
+          border-radius:6px;padding:8px;font-family:inherit">
+  <button onclick="sendCmd()" style="background:#0e2a3a;border:1px solid #2a5d78;
+   color:#4dd6ff;border-radius:6px;padding:8px 14px;font-family:inherit">SEND</button>
+ </div><div class="row dim" id="cmdmsg"></div></div>
 <div id="content"></div>
 <script>
+function token(){
+ let t=localStorage.getItem('elf_token');
+ if(!t){t=prompt('Dashboard token (from data/settings.json on the laptop):');
+   if(t)localStorage.setItem('elf_token',t);}
+ return t;}
+async function sendCmd(){
+ const text=document.getElementById('cmd').value.trim();
+ if(!text)return;
+ const msg=document.getElementById('cmdmsg');
+ try{
+  const r=await fetch('/api/command',{method:'POST',
+    headers:{'Content-Type':'application/json',
+             'Authorization':'Bearer '+token()},
+    body:JSON.stringify({text})});
+  if(r.status===401){localStorage.removeItem('elf_token');
+    msg.textContent='bad token - try again';return;}
+  const j=await r.json();
+  msg.textContent=j.queued?'queued ('+j.task_id+') - runs within a minute'
+                          :'error: '+(j.error||'unknown');
+  if(j.queued)document.getElementById('cmd').value='';
+ }catch(e){msg.textContent='send failed: '+e;}
+}
+document.getElementById('cmd').addEventListener('keydown',
+  e=>{if(e.key==='Enter')sendCmd();});
 async function load(){
  try{
   const r=await fetch('/api/status');const s=await r.json();
@@ -173,6 +205,21 @@ load();setInterval(load,30000);
 </script></body></html>"""
 
 
+_MAX_COMMAND_CHARS = 500
+
+
+def _expected_token() -> str:
+    return str(_read_json(_SETTINGS_PATH, {}).get("dashboard_token", "") or "")
+
+
+def queue_command(text: str) -> dict:
+    """Queue a phone command as an autonomous task (executed by the
+    ProactiveEngine via brain.chat within ~60s — all normal gates apply)."""
+    from core.autonomous_tasks import AutonomousTaskManager
+    task = AutonomousTaskManager().add(description=text.strip())
+    return {"queued": True, "task_id": task["id"]}
+
+
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/status":
@@ -182,6 +229,34 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, "text/html; charset=utf-8", _PAGE.encode("utf-8"))
         else:
             self._send(404, "text/plain", b"not found")
+
+    def do_POST(self):
+        if self.path != "/api/command":
+            self._send(404, "text/plain", b"not found")
+            return
+        expected = _expected_token()
+        supplied = self.headers.get("Authorization", "")
+        if not expected or supplied != f"Bearer {expected}":
+            self._send(401, "application/json",
+                       b'{"error": "missing or invalid token"}')
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            text = str(payload.get("text", "")).strip()
+        except Exception:
+            self._send(400, "application/json", b'{"error": "bad json"}')
+            return
+        if not text or len(text) > _MAX_COMMAND_CHARS:
+            self._send(400, "application/json",
+                       b'{"error": "text required, max 500 chars"}')
+            return
+        try:
+            result = queue_command(text)
+            self._send(200, "application/json",
+                       json.dumps(result).encode("utf-8"))
+        except Exception:
+            self._send(500, "application/json", b'{"error": "queue failed"}')
 
     def _send(self, code: int, ctype: str, body: bytes):
         self.send_response(code)
@@ -195,11 +270,28 @@ class _Handler(BaseHTTPRequestHandler):
         pass  # keep the console quiet
 
 
+def _ensure_token(settings: dict) -> dict:
+    """Generate dashboard_token on first run so the command channel works
+    out of the box. The token stays in data/settings.json (gitignored)."""
+    if not settings.get("dashboard_token"):
+        import secrets
+        settings["dashboard_token"] = secrets.token_urlsafe(24)
+        try:
+            _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _SETTINGS_PATH.write_text(
+                json.dumps(settings, indent=2, ensure_ascii=False),
+                encoding="utf-8")
+        except Exception:
+            pass
+    return settings
+
+
 def start_dashboard() -> ThreadingHTTPServer | None:
     """Start the dashboard in a daemon thread. Returns the server or None."""
     settings = _read_json(_SETTINGS_PATH, {})
     if not settings.get("dashboard_enabled", True):
         return None
+    settings = _ensure_token(settings)
     host = settings.get("dashboard_host", "0.0.0.0")
     port = int(settings.get("dashboard_port", 8765))
     try:

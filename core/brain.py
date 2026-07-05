@@ -4624,7 +4624,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "goal": {"type": "string", "description": "The overall goal in one sentence."},
-                "steps": {"type": "string", "description": "Ordered steps, one per line. Each step must be self-contained and executable."}
+                "steps": {"type": "string", "description": "Ordered steps, one per line. Each step must be self-contained and executable. Prefix a line with '&' when it is INDEPENDENT of the previous step -- independent steps run together in the same cycle (faster)."}
             },
             "required": ["goal", "steps"]
         }

@@ -459,40 +459,45 @@ class ProactiveEngine:
         except Exception as e:
             print(f"[Proactive] autonomous task check error: {e}")
 
+    _MAX_STEPS_PER_CYCLE = 3
+
     def _check_missions(self) -> None:
-        """Execute AT MOST ONE mission step per cycle via brain.chat().
+        """Execute the current group's pending steps (up to 3 per cycle) via
+        brain.chat(). Same-group steps are independent; groups run in order.
         Completion and blockage are announced; step results become context
-        for the following steps (MissionManager.step_context)."""
+        for later groups (MissionManager.step_context)."""
         if self._brain_fn is None:
             return
         try:
             from core.missions import MissionManager
             mgr = MissionManager()
-            step = mgr.next_step()
-            if step is None:
+            steps = mgr.next_steps()[: self._MAX_STEPS_PER_CYCLE]
+            if not steps:
                 return
             active = mgr.get_active()
-            prompt = (
-                f"{mgr.step_context()}\n\n"
-                f"You are executing step {step['n']} of this mission. "
-                f"Do it now using your tools and report the outcome concisely:\n"
-                f"{step['description']}"
-            )
-            try:
-                result = self._brain_fn(prompt)
-                mgr.complete_step(active["id"], step["n"], result or "Done.")
-            except Exception as e:
-                mgr.fail_step(active["id"], step["n"], str(e))
-                refreshed = mgr.last_finished()
-                if refreshed and refreshed["id"] == active["id"] \
-                        and refreshed["status"] == "blocked":
-                    self._deliver(
-                        f"Mo, mission '{active['goal']}' is stuck at step "
-                        f"{step['n']} ({step['description'][:60]}). "
-                        f"I tried twice. Tell me how to proceed.",
-                        remote=True,
-                    )
-                return
+            context = mgr.step_context()
+            for step in steps:
+                prompt = (
+                    f"{context}\n\n"
+                    f"You are executing step {step['n']} of this mission. "
+                    f"Do it now using your tools and report the outcome concisely:\n"
+                    f"{step['description']}"
+                )
+                try:
+                    result = self._brain_fn(prompt)
+                    mgr.complete_step(active["id"], step["n"], result or "Done.")
+                except Exception as e:
+                    mgr.fail_step(active["id"], step["n"], str(e))
+                    refreshed = mgr.last_finished()
+                    if refreshed and refreshed["id"] == active["id"] \
+                            and refreshed["status"] == "blocked":
+                        self._deliver(
+                            f"Mo, mission '{active['goal']}' is stuck at step "
+                            f"{step['n']} ({step['description'][:60]}). "
+                            f"I tried twice. Tell me how to proceed.",
+                            remote=True,
+                        )
+                    return
             if mgr.get_active() is None:
                 finished = mgr.last_finished()
                 if finished and finished["status"] == "done":

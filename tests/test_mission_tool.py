@@ -109,6 +109,59 @@ class TestProactiveMissionExecutor:
         engine._check_missions()  # must not raise
 
 
+class TestParallelParsing:
+    def test_ampersand_joins_previous_group(self):
+        mt.start_mission("g", "1. research A\n& research B\ncompare\nsummarize")
+        steps = mi.MissionManager().get_active()["steps"]
+        assert [s["group"] for s in steps] == [1, 1, 2, 3]
+        assert steps[1]["description"] == "research B"
+
+    def test_leading_ampersand_on_first_step_starts_group_one(self):
+        mt.start_mission("g", "& weird first\nsecond")
+        steps = mi.MissionManager().get_active()["steps"]
+        assert [s["group"] for s in steps] == [1, 2]
+
+
+class TestParallelExecution:
+    def _engine(self, tmp_path, monkeypatch, brain_fn):
+        import core.proactive as pa
+        from core.proactive import ProactiveEngine
+        monkeypatch.setattr(pa, "_STATE_FILE", tmp_path / "state.json")
+        e = ProactiveEngine(speak_fn=None, brain_fn=brain_fn)
+        e._deliver = MagicMock()
+        return e
+
+    def test_grouped_steps_run_in_one_cycle(self, isolated, monkeypatch):
+        brain = MagicMock(return_value="r")
+        engine = self._engine(isolated, monkeypatch, brain)
+        mt.start_mission("g", "1. find A\n& find B\ncompare")
+        engine._check_missions()
+        assert brain.call_count == 2  # group 1 both steps, group 2 waits
+        active = mi.MissionManager().get_active()
+        assert [s["status"] for s in active["steps"]] == ["done", "done", "pending"]
+
+    def test_cap_three_steps_per_cycle(self, isolated, monkeypatch):
+        brain = MagicMock(return_value="r")
+        engine = self._engine(isolated, monkeypatch, brain)
+        mt.start_mission("g", "a\n& b\n& c\n& d")
+        engine._check_missions()
+        assert brain.call_count == 3
+        engine._check_missions()
+        assert brain.call_count == 4
+
+    def test_failure_in_group_stops_cycle_but_retries(self, isolated, monkeypatch):
+        brain = MagicMock(side_effect=["ok", RuntimeError("boom"), "ok", "ok"])
+        engine = self._engine(isolated, monkeypatch, brain)
+        mt.start_mission("g", "a\n& b\nlast")
+        engine._check_missions()  # a ok, b fails -> retry queued
+        active = mi.MissionManager().get_active()
+        statuses = {s["description"]: s["status"] for s in active["steps"]}
+        assert statuses == {"a": "done", "b": "pending", "last": "pending"}
+        engine._check_missions()  # b retried ok
+        engine._check_missions()  # last runs
+        assert mi.MissionManager().get_active() is None
+
+
 class TestBrainWiring:
     def test_mission_tools_have_schemas(self):
         from core.brain import TOOLS

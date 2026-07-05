@@ -102,6 +102,36 @@ class TestExecutionFlow:
         assert m2["goal"] == "g2"
 
 
+class TestParallelGroups:
+    def test_default_groups_are_sequential(self, mgr):
+        mgr.create("g", ["a", "b", "c"])
+        steps = mgr.next_steps()
+        assert [s["n"] for s in steps] == [1]
+
+    def test_same_group_steps_returned_together(self, mgr):
+        mgr.create("g", ["a", "b", "c"], groups=[1, 1, 2])
+        steps = mgr.next_steps()
+        assert [s["n"] for s in steps] == [1, 2]
+
+    def test_next_group_waits_for_current(self, mgr):
+        m = mgr.create("g", ["a", "b", "c"], groups=[1, 1, 2])
+        mgr.complete_step(m["id"], 1, "r1")
+        # step 2 (same group) still pending -> group 2 must wait
+        assert [s["n"] for s in mgr.next_steps()] == [2]
+        mgr.complete_step(m["id"], 2, "r2")
+        assert [s["n"] for s in mgr.next_steps()] == [3]
+
+    def test_groups_length_mismatch_rejected(self, mgr):
+        with pytest.raises(ValueError):
+            mgr.create("g", ["a", "b"], groups=[1])
+
+    def test_retry_keeps_step_in_current_group(self, mgr):
+        m = mgr.create("g", ["a", "b"], groups=[1, 1])
+        mgr.complete_step(m["id"], 1, "ok")
+        mgr.fail_step(m["id"], 2, "boom")
+        assert [s["n"] for s in mgr.next_steps()] == [2]
+
+
 class TestFormatStatus:
     def test_no_mission(self, mgr):
         assert "No mission" in mgr.format_status()
