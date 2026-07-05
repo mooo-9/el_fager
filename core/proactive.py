@@ -167,6 +167,7 @@ class ProactiveEngine:
         self._check_upcoming_events()       # all waking hours
         self._check_price_alerts()          # all waking hours
         self._check_autonomous_tasks()      # all waking hours
+        self._check_missions()              # all waking hours
 
         if 7 <= hour <= 11:
             self._check_deadlines()
@@ -457,6 +458,51 @@ class ProactiveEngine:
                     mgr.fail(task["id"], str(e))
         except Exception as e:
             print(f"[Proactive] autonomous task check error: {e}")
+
+    def _check_missions(self) -> None:
+        """Execute AT MOST ONE mission step per cycle via brain.chat().
+        Completion and blockage are announced; step results become context
+        for the following steps (MissionManager.step_context)."""
+        if self._brain_fn is None:
+            return
+        try:
+            from core.missions import MissionManager
+            mgr = MissionManager()
+            step = mgr.next_step()
+            if step is None:
+                return
+            active = mgr.get_active()
+            prompt = (
+                f"{mgr.step_context()}\n\n"
+                f"You are executing step {step['n']} of this mission. "
+                f"Do it now using your tools and report the outcome concisely:\n"
+                f"{step['description']}"
+            )
+            try:
+                result = self._brain_fn(prompt)
+                mgr.complete_step(active["id"], step["n"], result or "Done.")
+            except Exception as e:
+                mgr.fail_step(active["id"], step["n"], str(e))
+                refreshed = mgr.last_finished()
+                if refreshed and refreshed["id"] == active["id"] \
+                        and refreshed["status"] == "blocked":
+                    self._deliver(
+                        f"Mo, mission '{active['goal']}' is stuck at step "
+                        f"{step['n']} ({step['description'][:60]}). "
+                        f"I tried twice. Tell me how to proceed.",
+                        remote=True,
+                    )
+                return
+            if mgr.get_active() is None:
+                finished = mgr.last_finished()
+                if finished and finished["status"] == "done":
+                    last_result = (finished["steps"][-1].get("result") or "")[:150]
+                    self._deliver(
+                        f"Mission complete: {finished['goal']}. {last_result}",
+                        remote=True,
+                    )
+        except Exception as e:
+            print(f"[Proactive] mission check error: {e}")
 
     def _check_budget_exceeded(self) -> None:
         """Evening budget check — alert if any budgets are over limit."""

@@ -409,6 +409,11 @@ Automation flow (propose, never impose): if run_skill's result asks you to offer
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
 Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
 API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
+Missions (multi-step background goals):
+Tools: start_mission, mission_status, cancel_mission.
+When Mo gives a BIG multi-part goal that cannot finish in one reply ("research X, compare Y, then write a summary", "plan and execute Z overnight") -> decompose it into 2-8 concrete self-contained steps and call start_mission(goal, steps). Steps run in the background, roughly one per minute; results flow into later steps; Mo is told on completion or blockage.
+"how is the mission going" -> mission_status. "stop the mission" -> cancel_mission.
+Do NOT use a mission for anything you can finish now in one tool loop -- just do it. Do NOT use for simple recurring reminders (autonomous tasks) or saved routines (skills).
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
 El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
@@ -4607,6 +4612,34 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "start_mission",
+        "description": (
+            "Start a multi-step background mission. Use when Mo gives a BIG "
+            "multi-part or long-running goal that cannot be finished in one "
+            "response ('research X, compare Y, then write a summary', 'plan and "
+            "execute Z overnight'). Decompose the goal into 2-8 concrete ordered "
+            "steps yourself. Steps run in the background, about one per minute."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string", "description": "The overall goal in one sentence."},
+                "steps": {"type": "string", "description": "Ordered steps, one per line. Each step must be self-contained and executable."}
+            },
+            "required": ["goal", "steps"]
+        }
+    },
+    {
+        "name": "mission_status",
+        "description": "Report the current mission's progress ('how is the mission going', 'mission status').",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "cancel_mission",
+        "description": "Cancel the running mission when Mo asks to stop it.",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
         "name": "usage_report",
         "description": (
             "Report El Fager's own Claude API usage and cost. Use when Mo asks "
@@ -4825,6 +4858,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "dismiss_skill_proposal",
     }),
     "usage": frozenset({"usage_report"}),
+    "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4960,6 +4994,11 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "cost me", "you cost", "api usage", "api cost", "your cost",
         "how much have you spent", "token usage", "running costs",
         "what did you spend",
+    ],
+    "missions": [
+        "mission", "missions", "big task", "multi-step", "step by step plan",
+        "overnight", "work through", "plan and execute", "and then", "then write",
+        "مهمة كبيرة", "خطة",
     ],
 }
 
@@ -6436,6 +6475,15 @@ class Brain:
             elif name == "usage_report":
                 from tools.usage_tool import usage_report as _usage_rep
                 return _usage_rep(**tool_input)
+            elif name == "start_mission":
+                from tools.mission_tool import start_mission as _start_mi
+                return _start_mi(**tool_input)
+            elif name == "mission_status":
+                from tools.mission_tool import mission_status as _mi_status
+                return _mi_status()
+            elif name == "cancel_mission":
+                from tools.mission_tool import cancel_mission as _cancel_mi
+                return _cancel_mi()
             else:
                 return f"Unknown tool: {name}"
         except Exception as e:
