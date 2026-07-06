@@ -55,7 +55,7 @@ On first launch, two models download automatically:
 
 | Model | Size | Where | When |
 |---|---|---|---|
-| Whisper `medium` | ~1.5 GB | `~/.cache/whisper/` | Background at startup |
+| Whisper `large-v3-turbo` (faster-whisper, override with `WHISPER_MODEL`) | ~1.6 GB | `~/.cache/huggingface/` | Background at startup — skipped entirely when `GROQ_API_KEY` is set (cloud transcription) |
 | Sentence-transformer `all-MiniLM-L6-v2` | ~90 MB | `~/.cache/torch/` | On first memory query |
 
 The Whisper download happens in the background — El Fager will show "Loading Whisper model..." if you press `Ctrl+Space` before it's ready. Just wait a moment.
@@ -162,9 +162,11 @@ python -m pip install google-auth google-auth-oauthlib google-auth-httplib2 goog
 
 ## Voices
 
-| Language | Voice |
-|---|---|
-| Arabic (Egyptian) | `ar-EG-ShakirNeural` (male) |
-| English | `en-US-GuyNeural` (male) |
+TTS picks the best available backend: Groq Orpheus (neural, needs `GROQ_API_KEY`) with Edge TTS as the always-available fallback. Language is auto-detected per response.
 
-Voice is auto-detected from the text content of each response. To change, edit `VOICE_AR` / `VOICE_EN` in `core/voice_out.py`.
+| Language | Orpheus (`.env` var) | Edge fallback (`.env` var) |
+|---|---|---|
+| Arabic | `fahad` (`TTS_VOICE_AR`) | `ar-EG-ShakirNeural` (`EDGE_VOICE_AR`) |
+| English | `daniel` (`TTS_VOICE_EN`) | `en-US-GuyNeural` (`EDGE_VOICE_EN`) |
+
+See the docstring in `core/voice_out.py` for all Orpheus voice options.

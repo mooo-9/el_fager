@@ -25,9 +25,15 @@ import io
 import os
 import re
 import tempfile
+import threading
 import time
 
 import pygame.mixer
+
+# speak() is called from the voice pipeline (QThread), the ProactiveEngine
+# (daemon thread), and the scheduler — pygame has ONE music channel, so
+# concurrent speaks must queue instead of cutting each other off mid-sentence.
+_SPEAK_LOCK = threading.Lock()
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -35,8 +41,10 @@ load_dotenv()
 # ── Orpheus voices ──────────────────────────────────────────────────────────────
 ORPHEUS_MODEL_EN    = "canopylabs/orpheus-v1-english"
 ORPHEUS_MODEL_AR    = "canopylabs/orpheus-arabic-saudi"
-ORPHEUS_VOICE_EN    = os.getenv("TTS_VOICE_EN", "tara")
-ORPHEUS_VOICE_AR    = os.getenv("TTS_VOICE_AR", "jada")
+# Defaults must be valid Orpheus voices (see docstring lists) — an invalid
+# voice makes every Groq TTS call fail and silently fall back to Edge.
+ORPHEUS_VOICE_EN    = os.getenv("TTS_VOICE_EN", "daniel")
+ORPHEUS_VOICE_AR    = os.getenv("TTS_VOICE_AR", "fahad")
 
 # ── Edge TTS fallback voices ────────────────────────────────────────────────────
 EDGE_VOICE_EN       = os.getenv("EDGE_VOICE_EN", "en-US-GuyNeural")
@@ -141,14 +149,15 @@ class VoiceOutput:
         arabic = _is_arabic(text)
         groq_key = os.getenv("GROQ_API_KEY", "").strip()
 
-        # ── 1. Try Groq Orpheus (skip if user chose edge in settings) ───────────
-        use_groq = self._backend != "edge"
-        if use_groq and groq_key and not groq_key.startswith("gsk_xxx"):
-            if self._speak_groq(text, arabic):
-                return
+        with _SPEAK_LOCK:
+            # ── 1. Try Groq Orpheus (skip if user chose edge in settings) ───────
+            use_groq = self._backend != "edge"
+            if use_groq and groq_key and not groq_key.startswith("gsk_xxx"):
+                if self._speak_groq(text, arabic):
+                    return
 
-        # ── 2. Fall back to Edge TTS ─────────────────────────────────────────
-        self._speak_edge(text, arabic)
+            # ── 2. Fall back to Edge TTS ─────────────────────────────────────
+            self._speak_edge(text, arabic)
 
     # ── Groq Orpheus ────────────────────────────────────────────────────────────
 
