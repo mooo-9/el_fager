@@ -9,7 +9,9 @@ Deliberately READ-ONLY and stdlib-only: GET requests, no commands, no
 secrets in the snapshot. Commands stay voice/desktop-side.
 
 Settings (data/settings.json): dashboard_enabled (default true),
-dashboard_port (default 8765), dashboard_host (default 0.0.0.0).
+dashboard_port (default 8765), dashboard_host (default 127.0.0.1 — set to
+"0.0.0.0" explicitly to allow phone/LAN access; the command channel can run
+code through the brain, so LAN exposure is opt-in).
 """
 import json
 import threading
@@ -292,7 +294,10 @@ def start_dashboard() -> ThreadingHTTPServer | None:
     if not settings.get("dashboard_enabled", True):
         return None
     settings = _ensure_token(settings)
-    host = settings.get("dashboard_host", "0.0.0.0")
+    # Default localhost-only: the command channel executes through the brain
+    # (including run_powershell), so LAN exposure must be an explicit opt-in —
+    # set dashboard_host to "0.0.0.0" in data/settings.json for phone access.
+    host = settings.get("dashboard_host", "127.0.0.1")
     port = int(settings.get("dashboard_port", 8765))
     try:
         server = ThreadingHTTPServer((host, port), _Handler)
