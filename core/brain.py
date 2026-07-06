@@ -379,10 +379,10 @@ When Mo says "trading history", "recent trades", "what did you trade?" -> get_tr
 When Mo says "trading summary", "trading P&L", "how's the engine doing?" -> get_trading_summary.
 When Mo says "set stop-loss to X%", "set take-profit to X%", "set max position to X%" -> set_risk_params with the matching param.
 When Mo says "switch to paper mode", "paper trading" -> switch_to_paper_mode.
-When Mo says "switch to live trading", "go live" -> switch_to_live_mode (confirmed=False first, then confirmed=True only if Mo says "confirm live trading").
+When Mo says "switch to live trading", "go live" -> switch_to_live_mode (it only explains the flow; activation happens outside the tool loop when Mo says "confirm live trading" twice).
 When Mo says "add [TICKER] to trading watchlist" -> add_trading_symbol(symbol).
 When Mo says "remove [TICKER] from trading watchlist" -> remove_trading_symbol(symbol).
-NEVER execute switch_to_live_mode(confirmed=True) unless Mo has explicitly said "confirm live trading" after seeing the warning.
+Live activation is NOT possible through tools -- only the deterministic 'confirm live trading' double-confirmation flow can enable it.
 All trading reports are exceptions to the 1-2 sentence rule — deliver the full report.
 - For backtesting and strategy validation: use run_backtest(symbol, days), run_full_backtest(), get_backtest_results(), compare_to_buyhold(symbol). Backtest reports are exceptions to the 1-2 sentence rule.
 - When Mo says "backtest SPY" or "test the strategy" -> run_backtest(symbol).
@@ -4282,13 +4282,8 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "switch_to_live_mode",
-        "description": "Switch to real-money trading. Requires confirmed=True — only set that after Mo explicitly says 'confirm live trading' following the warning.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "confirmed": {"type": "boolean", "description": "Must be true. Only set after Mo explicitly confirms."}
-            }
-        }
+        "description": "Explains how to activate real-money trading. This tool can NOT activate it — live mode only activates through the deterministic 'confirm live trading' double-confirmation flow.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
         "name": "add_trading_symbol",
@@ -5026,9 +5021,17 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
 _SLIM_BY_NAME: dict[str, dict] = {t["name"]: t for t in _SLIM_TOOLS}
 
 
-def _select_tools(message: str) -> list:
-    """Return a slimmed tool list relevant to the user's message."""
-    msg = message.lower()
+def _select_tools(message: str, history: list | None = None) -> list:
+    """Return a slimmed tool list relevant to the user's message. Recent user
+    turns from the conversation also count, so multi-turn follow-ups like
+    'and its P/E?' keep the tool groups the conversation already activated."""
+    parts = [message]
+    if history:
+        parts.extend(
+            m["content"] for m in history[-8:]
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        )
+    msg = " ".join(parts).lower()
     names: set[str] = set(_CORE_NAMES)
     for group, keywords in _GROUP_TRIGGERS.items():
         if any(kw in msg for kw in keywords):
@@ -6416,7 +6419,7 @@ class Brain:
                 return switch_to_paper_mode()
             elif name == "switch_to_live_mode":
                 from tools.trading_tool import switch_to_live_mode
-                return switch_to_live_mode(**tool_input)
+                return switch_to_live_mode()  # never takes args: cannot self-confirm
             elif name == "add_trading_symbol":
                 from tools.trading_tool import add_trading_symbol
                 return add_trading_symbol(**tool_input)
@@ -6579,7 +6582,22 @@ class Brain:
             pass
         return response
 
-    def chat(self, user_message: str, memory_context: str = "") -> str:
+    def chat_background(self, user_message: str, memory_context: str = "") -> str:
+        """chat() with a fresh throwaway history. Background callers
+        (ProactiveEngine: autonomous tasks, missions, dashboard commands,
+        scheduled skills) MUST use this instead of chat(): it keeps their
+        turns out of Mo's live voice conversation (the shared history is not
+        thread-safe) and stops the history growing unbounded between the
+        voice pipeline's resets."""
+        return self.chat(user_message, memory_context, history=[])
+
+    def chat(self, user_message: str, memory_context: str = "",
+             history: list | None = None) -> str:
+        # history=None -> the shared interactive conversation (voice pipeline
+        # owns it and resets it at conversation end). Background callers pass
+        # their own list via chat_background().
+        hist = history if history is not None else self.conversation_history
+
         # Log user turn
         if self._logger:
             self._logger.log("user", user_message)
@@ -6587,7 +6605,8 @@ class Brain:
         # Agent routing — intercept complex multi-step tasks before tool loop
         _agent_result = self._try_agent_dispatch(user_message)
         if _agent_result is not None:
-            self.conversation_history.append({"role": "assistant", "content": _agent_result})
+            hist.append({"role": "user", "content": user_message})
+            hist.append({"role": "assistant", "content": _agent_result})
             if self._logger:
                 self._logger.log("assistant", _agent_result, [])
             return _agent_result
@@ -6603,8 +6622,8 @@ class Brain:
         if memory_context:
             system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
 
-        self.conversation_history.append({"role": "user", "content": user_message})
-        messages = list(self.conversation_history)
+        hist.append({"role": "user", "content": user_message})
+        messages = list(hist)
 
         tools_used: list[str] = []
         last_text = ""
@@ -6616,7 +6635,7 @@ class Brain:
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_message),
+                    tools=_select_tools(user_message, hist),
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6626,7 +6645,7 @@ class Brain:
                         (block.text for block in response.content if block.type == "text"),
                         "",
                     )
-                    self.conversation_history.append({"role": "assistant", "content": text})
+                    hist.append({"role": "assistant", "content": text})
                     if self._logger:
                         self._logger.log("assistant", text, tools_used)
                     return text
@@ -6652,13 +6671,17 @@ class Brain:
                     messages.append({"role": "user", "content": tool_results})
 
                 else:
-                    return "[Response cut off — please try again]"
+                    text = "[Response cut off — please try again]"
+                    hist.append({"role": "assistant", "content": text})
+                    if self._logger:
+                        self._logger.log("assistant", text, tools_used)
+                    return text
 
             text = (
                 (last_text + " " if last_text else "")
                 + f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- let me know if you want me to continue]"
             )
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
@@ -6671,14 +6694,14 @@ class Brain:
                 text = "Anthropic API key is invalid. Check your ANTHROPIC_API_KEY in .env."
             else:
                 text = f"API error: {e}"
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
 
         except anthropic.AuthenticationError:
             text = "Anthropic API key is invalid or expired. Check your ANTHROPIC_API_KEY in .env."
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
@@ -6695,7 +6718,7 @@ class Brain:
                 text = local_chat(messages)
             except RuntimeError as err:
                 text = str(err)
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text

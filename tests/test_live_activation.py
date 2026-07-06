@@ -104,3 +104,37 @@ class TestLiveActivationDispatch:
         for ch in result:
             assert ord(ch) < 0x2000 or 0x2013 <= ord(ch) <= 0x2014, \
                 f"Non-cp1252 char U+{ord(ch):04X} in activation message"
+
+
+class TestToolCannotSelfConfirm:
+    """Regression: switch_to_live_mode used to accept confirmed=True, letting
+    the model activate real-money trading in one tool call. The tool must
+    never write mode:live -- only the deterministic router flow can."""
+
+    def test_tool_takes_no_confirmation_argument(self):
+        import inspect
+        from tools.trading_tool import switch_to_live_mode
+        assert inspect.signature(switch_to_live_mode).parameters == {}
+
+    def test_tool_never_writes_live_mode(self, tmp_path, monkeypatch):
+        import json
+        import tools.trading_tool as tt
+        cfg_path = tmp_path / "trading_config.json"
+        cfg_path.write_text(json.dumps({"mode": "paper"}), encoding="utf-8")
+        monkeypatch.setattr(tt, "_CONFIG_PATH", cfg_path)
+        msg = tt.switch_to_live_mode()
+        assert "confirm live trading" in msg.lower()
+        assert json.loads(cfg_path.read_text(encoding="utf-8"))["mode"] == "paper"
+
+    def test_dispatch_ignores_injected_arguments(self, tmp_path, monkeypatch):
+        """Even a hallucinated {'confirmed': true} input must be discarded."""
+        import json
+        import tools.trading_tool as tt
+        cfg_path = tmp_path / "trading_config.json"
+        cfg_path.write_text(json.dumps({"mode": "paper"}), encoding="utf-8")
+        monkeypatch.setattr(tt, "_CONFIG_PATH", cfg_path)
+        from core.brain import Brain
+        brain = Brain.__new__(Brain)
+        result = brain._dispatch_tool_once("switch_to_live_mode", {"confirmed": True})
+        assert "can't activate" in result.lower() or "cannot" in result.lower()
+        assert json.loads(cfg_path.read_text(encoding="utf-8"))["mode"] == "paper"

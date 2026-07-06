@@ -304,7 +304,9 @@ def main():
 
     # ── Proactive engine (condition-based, autonomous checks) ─────────────────
     from core.proactive import ProactiveEngine
-    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat)
+    # brain_fn MUST be chat_background: proactive runs in a daemon thread and
+    # must never splice its turns into the voice pipeline's live conversation.
+    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat_background)
     # Wire proactive notifications to the HUD banner (thread-safe via Qt signal)
     proactive.set_hud_notify(hud.notify_hud)
     proactive.start()

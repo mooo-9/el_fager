@@ -200,20 +200,16 @@ def switch_to_paper_mode() -> str:
     return "Switched to PAPER mode. All orders route to Alpaca sandbox (fake money)."
 
 
-def switch_to_live_mode(confirmed: bool = False) -> str:
-    if not confirmed:
-        return (
-            "WARNING: This will trade with REAL money. "
-            "Say 'confirm live trading' to proceed."
-        )
-    cfg = _load_config()
-    cfg["mode"] = "live"
-    _save_config(cfg)
-    engine = _get_engine()
-    if engine.is_running():
-        engine.stop()
-        engine.start()
-    return "Switched to LIVE mode. Real-money trading is now active."
+def switch_to_live_mode() -> str:
+    """Live activation is NEVER a tool call -- the model must not be able to
+    confirm real-money trading itself. Only the deterministic router flow
+    ('confirm live trading' twice within 60s, paper gate passing) writes
+    mode:live -- see Brain._try_agent_dispatch."""
+    return (
+        "WARNING: This will trade with REAL money. I can't activate it from "
+        "here. Say 'confirm live trading' to start the double-confirmation "
+        "flow -- it requires the paper-trading gate criteria to pass."
+    )
 
 
 def add_trading_symbol(symbol: str) -> str:
