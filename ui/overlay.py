@@ -50,7 +50,6 @@ from PyQt6.QtWidgets import (
 
 from ui.hud_canvas import HudCanvas
 from ui.hud_web import HudWebView
-from ui.trading_panel import TradingPanel
 
 _SETTINGS_FILE = Path("data/settings.json")
 _MAX_HISTORY = 15
@@ -408,16 +407,7 @@ class OverlayWindow(QWidget):
         self._hud = HudCanvas(self._stack)
         self._stack.addWidget(self._hud)
 
-        # Page 2: trading terminal
-        self._trading = TradingPanel(self._stack)
-        self._trading.set_callback(
-            on_start=lambda: self._start_pipeline(text_input="scan my watchlist"),
-            on_stop=lambda: self._start_pipeline(text_input="pause trading"),
-            on_backtest=lambda: self._start_pipeline(text_input="backtest all symbols"),
-        )
-        self._stack.addWidget(self._trading)
-
-        # Page 3: full-screen JARVIS HUD
+        # Page 2: full-screen JARVIS HUD
         self._hud_web = HudWebView(self._stack)
         self._stack.addWidget(self._hud_web)
 
@@ -606,7 +596,7 @@ class OverlayWindow(QWidget):
 
         self._mode_btn = QPushButton("[V]")
         self._mode_btn.setFixedSize(28, 20)
-        self._mode_btn.setToolTip("Switch mode: Voice / HUD / Trading")
+        self._mode_btn.setToolTip("Switch mode: Voice / HUD / JARVIS")
         self._mode_btn.setStyleSheet(_btn)
         self._mode_btn.clicked.connect(self.cycle_mode)
         row.addWidget(self._mode_btn)
@@ -639,13 +629,11 @@ class OverlayWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def cycle_mode(self) -> None:
-        self._mode = (self._mode + 1) % 4
+        self._mode = (self._mode + 1) % 3
         self._stack.setCurrentIndex(self._mode)
-        labels = {0: "[V]", 1: "[H]", 2: "[T]", 3: "[J]"}
+        labels = {0: "[V]", 1: "[H]", 2: "[J]"}
         self._mode_btn.setText(labels[self._mode])
         if self._mode == 2:
-            self._trading.refresh()
-        elif self._mode == 3:
             # Switch to full-screen JARVIS HUD
             screen = QApplication.primaryScreen().availableGeometry()
             self.resize(screen.width(), screen.height())
@@ -654,8 +642,8 @@ class OverlayWindow(QWidget):
 
     def switch_to_jarvis_hud(self) -> None:
         """Jump directly to the full-screen HUD (called from tray or hotkey)."""
-        self._mode = 3
-        self._stack.setCurrentIndex(3)
+        self._mode = 2
+        self._stack.setCurrentIndex(2)
         self._mode_btn.setText("[J]")
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(screen.width(), screen.height())
@@ -664,14 +652,10 @@ class OverlayWindow(QWidget):
 
     @property
     def mode_name(self) -> str:
-        return {0: "voice", 1: "hud", 2: "trading", 3: "jarvis"}[self._mode]
-
-    def _refresh_trading_if_active(self):
-        if self._mode == 2:
-            self._trading.refresh()
+        return {0: "voice", 1: "hud", 2: "jarvis"}[self._mode]
 
     def _push_telemetry(self):
-        if self._mode != 3:
+        if self._mode != 2:
             return
         try:
             cpu = int(psutil.cpu_percent())
@@ -697,12 +681,6 @@ class OverlayWindow(QWidget):
         self._status_poll_timer.setInterval(1000)
         self._status_poll_timer.timeout.connect(self._update_status_bar)
         self._status_poll_timer.start()
-
-        # Trading panel refresh every 30 seconds
-        self._trading_refresh_timer = QTimer(self)
-        self._trading_refresh_timer.setInterval(30000)
-        self._trading_refresh_timer.timeout.connect(self._refresh_trading_if_active)
-        self._trading_refresh_timer.start()
 
         # HUD telemetry push every 2 seconds
         self._telemetry_timer = QTimer(self)
@@ -887,7 +865,7 @@ class OverlayWindow(QWidget):
             if response:
                 self._hud.set_response_text(response)
 
-        if self._mode == 3:
+        if self._mode == 2:
             if state == "listening":
                 self._hud_web.goto_scene(2)  # Voice scene
             elif state == "processing":

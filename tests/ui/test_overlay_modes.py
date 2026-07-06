@@ -9,8 +9,7 @@ class _FakeHudWebView:
         from unittest.mock import MagicMock
         widget = QWidget(parent)
         for method in ("enter_standby", "push_telemetry", "goto_scene",
-                       "set_state", "push_voice_result", "push_market_data",
-                       "push_proactive"):
+                       "set_state", "push_voice_result", "push_proactive"):
             setattr(widget, method, MagicMock())
         return widget
 
@@ -42,11 +41,10 @@ class TestOverlayModes:
         assert w._mode == 1
         w.close()
 
-    def test_cycle_mode_wraps_at_four(self, qapp):
+    def test_cycle_mode_wraps_at_three(self, qapp):
         w = _make_overlay(qapp)
         w.cycle_mode()   # 1
-        w.cycle_mode()   # 2
-        w.cycle_mode()   # 3 (jarvis HUD)
+        w.cycle_mode()   # 2 (jarvis HUD)
         w.cycle_mode()   # 0
         assert w._mode == 0
         w.close()
@@ -65,19 +63,18 @@ class TestOverlayModes:
     def test_mode_name_jarvis(self, qapp):
         w = _make_overlay(qapp)
         w.cycle_mode()   # 1 hud
-        w.cycle_mode()   # 2 trading
-        w.cycle_mode()   # 3 jarvis
+        w.cycle_mode()   # 2 jarvis
         assert w.mode_name == "jarvis"
         w.close()
 
     def test_switch_to_jarvis_hud_jumps_directly(self, qapp):
         w = _make_overlay(qapp)
         w.switch_to_jarvis_hud()
-        assert w._mode == 3
+        assert w._mode == 2
         assert w.mode_name == "jarvis"
         w.close()
 
-    def test_stacked_widget_has_four_pages(self, qapp):
+    def test_stacked_widget_has_three_pages(self, qapp):
         w = _make_overlay(qapp)
-        assert w._stack.count() == 4
+        assert w._stack.count() == 3
         w.close()

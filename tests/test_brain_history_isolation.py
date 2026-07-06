@@ -56,16 +56,6 @@ class TestBackgroundIsolation:
         assert "autonomous task: check something" not in contents
         assert "bg" not in contents
 
-    def test_agent_dispatch_appends_user_and_assistant(self):
-        """Regression: the agent-dispatch path used to append the assistant
-        reply without the matching user turn."""
-        brain = _make_brain()
-        with patch.object(brain, "_try_agent_dispatch",
-                          return_value="gate summary"):
-            brain.chat("gate check")
-        roles = [m["role"] for m in brain.conversation_history]
-        assert roles == ["user", "assistant"]
-
     def test_cut_off_branch_records_and_logs(self):
         from unittest.mock import MagicMock
         brain = _make_brain()
@@ -83,20 +73,20 @@ class TestMultiTurnToolSelection:
     def _names(self, tools):
         return {t["name"] for t in tools}
 
-    def test_followup_keeps_stocks_group_active(self):
+    def test_followup_keeps_finance_group_active(self):
         history = [
-            {"role": "user", "content": "what's the NVDA stock price?"},
-            {"role": "assistant", "content": "NVDA is at $190."},
+            {"role": "user", "content": "any unpaid invoices?"},
+            {"role": "assistant", "content": "Two invoices are unpaid."},
         ]
-        # "and how did it do this month?" has no stocks trigger keyword itself
-        names = self._names(_select_tools("and how did it do this month?", history))
-        assert "get_stock_price" in names
+        # "and who owes the most?" has no finance trigger keyword itself
+        names = self._names(_select_tools("and who owes the most?", history))
+        assert "list_invoices" in names
 
     def test_no_history_matches_old_behavior(self):
-        with_trigger = self._names(_select_tools("what's the NVDA stock price?"))
-        without = self._names(_select_tools("and how did it do this month?"))
-        assert "get_stock_price" in with_trigger
-        assert "get_stock_price" not in without
+        with_trigger = self._names(_select_tools("any unpaid invoices?"))
+        without = self._names(_select_tools("and who owes the most?"))
+        assert "list_invoices" in with_trigger
+        assert "list_invoices" not in without
 
     def test_non_string_content_blocks_ignored(self):
         history = [{"role": "user", "content": [{"type": "tool_result"}]}]

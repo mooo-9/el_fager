@@ -43,7 +43,7 @@ git check-ignore .env data/vault.key data/token.json
 Expected: watchdog task present, no stray files listed, all three secret
 paths echoed back by check-ignore.
 
-## 5. If the change touched voice, trading, or the HUD
+## 5. If the change touched voice or the HUD
 
 Those paths need a live smoke test — launch `python main.py`, press
 Ctrl+Space, say one sentence in Arabic and one in English, and confirm the

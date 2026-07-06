@@ -1,14 +1,13 @@
 """
 Weekly repo + usage health check.
 
-Runs the test suite, the usage audit, and a backtest drift check; writes a
-markdown report to data/logs/health_report_YYYY-MM-DD.md; if the claude CLI
-is installed, prepends a 3-conclusion summary; announces via Windows toast.
+Runs the test suite and the usage audit; writes a markdown report to
+data/logs/health_report_YYYY-MM-DD.md; if the claude CLI is installed,
+prepends a 3-conclusion summary; announces via Windows toast.
 
 Registered as a Windows scheduled task by scripts/setup_weekly_health_check.ps1.
 Run manually:  python -X utf8 scripts/weekly_health_check.py
 """
-import json
 import shutil
 import subprocess
 import sys
@@ -17,9 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
-
-GATE_MIN_SHARPE = 1.0     # same gates as ProactiveEngine's nightly check
-GATE_MAX_DRAWDOWN = 15.0
 
 
 def run(cmd: list[str], timeout: int = 600) -> str:
@@ -31,41 +27,16 @@ def run(cmd: list[str], timeout: int = 600) -> str:
         return f"FAILED TO RUN {cmd[0]}: {e}"
 
 
-def backtest_drift() -> str:
-    path = ROOT / "data" / "backtest_results.json"
-    if not path.exists():
-        return "No backtest results found."
-    results = json.loads(path.read_text(encoding="utf-8"))
-    lines = []
-    for symbol, stats in results.items():
-        if symbol.startswith("_") or not isinstance(stats, dict):
-            continue
-        flags = []
-        if stats.get("sharpe_ratio", 0) < GATE_MIN_SHARPE:
-            flags.append(f"Sharpe {stats.get('sharpe_ratio', 0):.2f} < {GATE_MIN_SHARPE}")
-        if stats.get("max_drawdown_pct", 0) > GATE_MAX_DRAWDOWN:
-            flags.append(f"drawdown {stats.get('max_drawdown_pct', 0):.1f}% > {GATE_MAX_DRAWDOWN}%")
-        bench = stats.get("benchmark_return_pct")
-        ret = stats.get("total_return_pct", 0)
-        if bench is not None and ret < bench:
-            flags.append(f"underperforms buy-and-hold ({ret:.1f}% vs {bench:.1f}%)")
-        status = "; ".join(flags) if flags else "OK"
-        lines.append(f"- {symbol}: {status}")
-    return "\n".join(lines) or "No symbols in backtest results."
-
-
 def main() -> None:
     today = date.today().isoformat()
 
     tests = run([PY, "-m", "pytest", "-q", "--tb=no"])
     tests_tail = "\n".join(tests.splitlines()[-5:])
     usage = run([PY, "-X", "utf8", str(ROOT / "scripts" / "usage_audit.py")])
-    drift = backtest_drift()
 
     report = (
         f"# El Fager weekly health report — {today}\n\n"
         f"## Test suite\n```\n{tests_tail}\n```\n\n"
-        f"## Backtest gate drift\n{drift}\n\n"
         f"## Usage audit\n```\n{usage}\n```\n"
     )
 
@@ -75,8 +46,8 @@ def main() -> None:
             [claude, "-p",
              "You are reviewing a weekly health report for El Fager, a personal "
              "AI assistant. State the 1-3 conclusions that matter most (failing "
-             "tests, rising transcription garbage rate, unused features, "
-             "trading gate problems). Be blunt and concrete, max 5 sentences.\n\n"
+             "tests, rising transcription garbage rate, unused features). "
+             "Be blunt and concrete, max 5 sentences.\n\n"
              + report],
             timeout=180,
         )

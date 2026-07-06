@@ -92,6 +92,3 @@ pycaw>=20230710    # Windows system volume control
 
 # Phase 7A — Proactive Scheduler
 apscheduler>=3.10.0
-
-# Phase 10 — Autonomous Trading Engine
-alpaca-py>=0.8.2

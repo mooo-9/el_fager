@@ -97,7 +97,7 @@ class TestRunChecksWindows:
         mocks = _patch_all_checks(engine)
         _run_checks_at(engine, datetime(2026, 7, 1, 14, 0))  # Wed 2 PM
         for name in ("_check_battery", "_check_prayer_times", "_check_upcoming_events",
-                     "_check_price_alerts", "_check_autonomous_tasks"):
+                     "_check_autonomous_tasks"):
             mocks[name].assert_called_once()
         mocks["_check_journal"].assert_not_called()
         mocks["_check_weather"].assert_not_called()
@@ -218,65 +218,6 @@ class TestOAuthTokenCheck:
         engine._deliver.assert_not_called()
 
 
-class TestNightlyBacktest:
-    def _write_results(self, tmp_path, data):
-        (tmp_path / "data").mkdir(exist_ok=True)
-        (tmp_path / "data" / "backtest_results.json").write_text(
-            json.dumps(data), encoding="utf-8"
-        )
-
-    def test_regression_in_sharpe_triggers_alert(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.2, "max_drawdown_pct": 8.0,
-                                                "total_return_pct": 20.0}})
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 0.6, "max_drawdown_pct": 9.0,
-                                                    "total_return_pct": 5.0}})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_called_once()
-        msg = engine._deliver.call_args.args[0]
-        assert "NVDA" in msg and "Sharpe" in msg
-
-    def test_drawdown_breach_triggers_alert(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"SPY": {"sharpe_ratio": 1.4, "max_drawdown_pct": 22.0,
-                                                   "total_return_pct": 10.0}})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_called_once()
-        assert "drawdown" in engine._deliver.call_args.args[0]
-
-    def test_healthy_metrics_stay_silent(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.1, "max_drawdown_pct": 8.0,
-                                                "total_return_pct": 18.0}})
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.3, "max_drawdown_pct": 7.0,
-                                                    "total_return_pct": 21.0},
-                                           "_run_at": "2026-07-04T23:00:00"})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_not_called()
-
-    def test_backtest_exception_does_not_raise(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        with patch("tools.backtest_tool.run_full_backtest",
-                   side_effect=RuntimeError("Alpaca down")):
-            engine._check_nightly_backtest()  # must not raise
-        engine._deliver.assert_not_called()
-
-
 class TestSkillProposalCheck:
     def _miner(self, pending):
         miner = MagicMock()
@@ -331,16 +272,6 @@ class TestNewCheckWindows:
         mocks = _patch_all_checks(engine)
         _run_checks_at(engine, datetime(2026, 7, 1, 8, 0))
         mocks["_check_oauth_tokens"].assert_called_once()
-
-    def test_nightly_backtest_runs_at_23(self, engine):
-        mocks = _patch_all_checks(engine)
-        _run_checks_at(engine, datetime(2026, 7, 1, 23, 5))
-        mocks["_check_nightly_backtest"].assert_called_once()
-
-    def test_nightly_backtest_not_run_midday(self, engine):
-        mocks = _patch_all_checks(engine)
-        _run_checks_at(engine, datetime(2026, 7, 1, 14, 0))
-        mocks["_check_nightly_backtest"].assert_not_called()
 
 
 class TestHudNotify:

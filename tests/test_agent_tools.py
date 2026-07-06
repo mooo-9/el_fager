@@ -1,17 +1,17 @@
 from core.brain import _SLIM_TOOLS, _CORE_NAMES
 
 _AGENT_TOOL_NAMES = {
-    "screen_agent", "browser_agent", "stocks_agent",
+    "screen_agent", "browser_agent",
     "research_agent", "file_agent", "health_agent",
 }
 
 
-def test_all_six_specialist_agent_tools_are_defined():
+def test_all_five_specialist_agent_tools_are_defined():
     names = {t["name"] for t in _SLIM_TOOLS}
     assert _AGENT_TOOL_NAMES.issubset(names)
 
 
-def test_all_six_specialist_agent_tools_are_always_core():
+def test_all_five_specialist_agent_tools_are_always_core():
     assert _AGENT_TOOL_NAMES.issubset(_CORE_NAMES)
 
 
@@ -41,12 +41,6 @@ def test_dispatch_routes_to_browser_agent():
     brain = _make_brain()
     with patch("core.agents.browser_agent.BrowserAgent.run", return_value="ok"):
         assert brain._dispatch_tool("browser_agent", {"task": "book x"}) == "ok"
-
-
-def test_dispatch_routes_to_stocks_agent():
-    brain = _make_brain()
-    with patch("core.agents.stocks_agent.StocksAgent.run", return_value="ok"):
-        assert brain._dispatch_tool("stocks_agent", {"task": "analyze NVDA"}) == "ok"
 
 
 def test_dispatch_routes_to_research_agent():

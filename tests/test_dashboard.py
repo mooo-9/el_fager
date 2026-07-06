@@ -22,21 +22,10 @@ def isolated(tmp_path, monkeypatch):
 class TestSnapshot:
     def test_snapshot_has_all_sections_on_empty_disk(self, isolated):
         s = db.build_snapshot()
-        for key in ("generated_at", "mission", "cost", "skills", "tasks",
-                    "trading"):
+        for key in ("generated_at", "mission", "cost", "skills", "tasks"):
             assert key in s
         assert s["mission"]["active"] is False
         assert s["cost"]["today_usd"] == 0
-
-    def test_snapshot_reflects_trades(self, isolated):
-        (isolated / "data").mkdir()
-        (isolated / "data" / "trades.json").write_text(json.dumps([
-            {"symbol": "NVDA", "side": "buy", "qty": 2, "price": 100.5,
-             "timestamp": "2026-07-05T10:00:00", "conviction": 78.0},
-        ]), encoding="utf-8")
-        s = db.build_snapshot()
-        assert s["trading"]["total_trades"] == 1
-        assert s["trading"]["recent"][0]["symbol"] == "NVDA"
 
     def test_snapshot_never_contains_secrets(self, isolated):
         blob = json.dumps(db.build_snapshot()).lower()

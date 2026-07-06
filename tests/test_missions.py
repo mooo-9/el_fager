@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 
 import core.missions as mi
-from core.missions import MissionManager, ForbiddenMissionError
+from core.missions import MissionManager
 
 
 @pytest.fixture
@@ -27,10 +27,6 @@ class TestCreate:
     def test_create_requires_steps(self, mgr):
         with pytest.raises(ValueError):
             mgr.create("goal", [])
-
-    def test_live_trading_steps_rejected(self, mgr):
-        with pytest.raises(ForbiddenMissionError):
-            mgr.create("get rich", ["analyze NVDA", "confirm live trading"])
 
     def test_only_one_active_mission(self, mgr):
         mgr.create("first", ["a"])

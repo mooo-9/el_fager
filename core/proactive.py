@@ -14,7 +14,6 @@ Checks implemented:
   • Evening expense nudge (nothing logged today)
   • Weekly review prompt (Friday / Saturday evening)
   • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
-  • Nightly backtest after US market close, alert only on metric regression
   • Transcription-quality alert when too many of today's turns are gibberish
 """
 
@@ -166,7 +165,6 @@ class ProactiveEngine:
         self._check_battery()               # all hours
         self._check_prayer_times()          # all waking hours
         self._check_upcoming_events()       # all waking hours
-        self._check_price_alerts()          # all waking hours
         self._check_autonomous_tasks()      # all waking hours
         self._check_missions()              # all waking hours
 
@@ -177,9 +175,6 @@ class ProactiveEngine:
             self._check_rest_day()
             self._check_oauth_tokens()
             self._check_skill_proposals()
-
-        if hour == 23:
-            self._check_nightly_backtest()
 
         if 19 <= hour <= 22:
             self._check_journal()
@@ -398,18 +393,6 @@ class ProactiveEngine:
         self._deliver(
             "Mo, good time for your weekly review. Ask me for a 'weekly report' when ready."
         )
-
-    def _check_price_alerts(self) -> None:
-        """Check stock price alerts every cycle — deliver immediately when triggered."""
-        try:
-            from tools.stocks_tool import check_price_alerts
-            messages = check_price_alerts()
-            for msg in messages:
-                self._deliver(msg, remote=True)
-                # Show in HUD Stocks scene banner (whole message as highlight)
-                self._hud_notify(5, "", msg, "", "MARKET")
-        except Exception:
-            pass
 
     def _check_overdue_invoices(self) -> None:
         """Morning sweep — alert if any sent invoices are past due date."""
@@ -685,54 +668,6 @@ class ProactiveEngine:
             )
         except Exception as e:
             print(f"[Proactive] skill proposal check error: {e}")
-
-    _GATE_MIN_SHARPE = 1.0
-    _GATE_MAX_DRAWDOWN = 15.0
-
-    def _check_nightly_backtest(self) -> None:
-        """Nightly (11 PM Cairo, after US close): re-run the full backtest and
-        speak up only when a symbol's gate metric regressed."""
-        if self._cooldown("nightly_backtest", 20):
-            return
-        try:
-            results_path = Path("data/backtest_results.json")
-            previous: dict = {}
-            if results_path.exists():
-                try:
-                    previous = json.loads(results_path.read_text(encoding="utf-8"))
-                except Exception:
-                    previous = {}
-
-            from tools.backtest_tool import run_full_backtest
-            run_full_backtest()  # refreshes data/backtest_results.json
-
-            if not results_path.exists():
-                return
-            current = json.loads(results_path.read_text(encoding="utf-8"))
-
-            regressions = []
-            for symbol, stats in current.items():
-                if symbol.startswith("_") or not isinstance(stats, dict):
-                    continue
-                sharpe = stats.get("sharpe_ratio", 0)
-                drawdown = stats.get("max_drawdown_pct", 0)
-                ret = stats.get("total_return_pct", 0)
-                prev = previous.get(symbol) or {}
-                if drawdown > self._GATE_MAX_DRAWDOWN:
-                    regressions.append(f"{symbol} drawdown {drawdown:.1f}%")
-                elif prev.get("sharpe_ratio", 0) >= self._GATE_MIN_SHARPE > sharpe:
-                    regressions.append(f"{symbol} Sharpe fell to {sharpe:.2f}")
-                elif prev.get("total_return_pct", 0) > 0 > ret:
-                    regressions.append(f"{symbol} return went negative ({ret:.1f}%)")
-
-            if regressions:
-                self._deliver(
-                    "Nightly backtest warning -- " + " | ".join(regressions[:3])
-                    + ". Review before the next trading session.",
-                    remote=True,
-                )
-        except Exception as e:
-            print(f"[Proactive] nightly backtest error: {e}")
 
     # Scripts Mo never speaks (Hangul, Hebrew, Cyrillic, CJK, Thai) plus the
     # Icelandic eth/thorn Whisper hallucinates on silence.

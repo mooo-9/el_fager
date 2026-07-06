@@ -314,9 +314,6 @@ def main():
     # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
     from tools.macro_tool import set_speak_callback as _macro_speak_cb
     _macro_speak_cb(voice_out.speak)
-    from tools.trading_tool import set_trading_speak_callback as _trading_speak_cb, start_trading_engine as _start_trading
-    _trading_speak_cb(voice_out.speak)
-    _start_trading()   # auto-start paper trading on every launch
 
     # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
     from core.dashboard import start_dashboard

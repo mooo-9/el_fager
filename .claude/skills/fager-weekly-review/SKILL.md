@@ -9,4 +9,4 @@ Preferred: send this to the running El Fager via the `fager` bridge skill with t
 
 If El Fager is not running, execute the steps yourself with your own tools where possible:
 
-Compile Mo's week: journal_insights for the last 7 days, spending_insights, gym sessions this week, and paper-trading P&L summary. Present as 4 short sections, then ONE suggestion for next week.
+Compile Mo's week: journal_insights for the last 7 days, spending_insights, and gym sessions this week. Present as 3 short sections, then ONE suggestion for next week.

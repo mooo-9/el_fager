@@ -19,12 +19,6 @@ _MISSIONS_PATH = Path("data/missions.json")
 
 _MAX_ATTEMPTS = 2  # 1 try + 1 retry per step
 
-_FORBIDDEN_FRAGMENTS = ("confirm live trading",)
-
-
-class ForbiddenMissionError(ValueError):
-    """Raised when a mission step touches the live-trading confirmation flow."""
-
 
 class MissionManager:
     def __init__(self, path: Path | None = None):
@@ -63,12 +57,6 @@ class MissionManager:
             step_groups = list(range(1, len(steps) + 1))
         else:
             step_groups = [groups[i] for i in kept_indices]
-        joined = (goal + " " + " ".join(steps)).lower()
-        for frag in _FORBIDDEN_FRAGMENTS:
-            if frag in joined:
-                raise ForbiddenMissionError(
-                    "Missions cannot include live-trading confirmation steps."
-                )
         if self.get_active() is not None:
             raise ValueError(
                 "A mission is already in progress. Finish or cancel it first."

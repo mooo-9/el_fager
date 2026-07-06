@@ -123,7 +123,7 @@ When Mo asks "what did I write about X" — use search_journal. For a week summa
 All date inputs accept: 'today', 'yesterday', 'Monday', '3 days ago', or YYYY-MM-DD.
 Code: run_python | run_powershell | run_bash | execute_file | run_with_args | run_with_stdin | pip_install/uninstall/show | list_packages | get_python_info | create/get/list/run/delete_script | run_node | check_syntax | benchmark | format_python | run_in_background | list_background | kill_background | open_in_editor.
 Proactive engine (autonomous background checks — no Mo needed):
-  Watches every 60s during waking hours: battery low, prayer in ~10min, upcoming calendar event, today's deadline, morning rain warning, evening journal nudge, evening expense nudge, Friday weekly review prompt, overdue invoices (morning), exceeded budgets (evening), stock price alerts (all waking hours).
+  Watches every 60s during waking hours: battery low, prayer in ~10min, upcoming calendar event, today's deadline, morning rain warning, evening journal nudge, evening expense nudge, Friday weekly review prompt, overdue invoices (morning), exceeded budgets (evening).
 Conversation history: read_conversation, search_conversations, conversation_stats, export_conversation.
 When Mo asks "what did we talk about yesterday?", "what did I ask you on Monday?" → read_conversation. date_str accepts: today, yesterday, Monday, YYYY-MM-DD.
 When Mo says "search our conversations for X" → search_conversations.
@@ -160,18 +160,6 @@ Finance reports: cash_flow_summary, revenue_insights, profit_loss_report.
 "P&L" / "financial report" → profit_loss_report.
 Expenses: log_expense, get_expense_summary, list_recent_expenses — use when Mo mentions spending.
 
-══ BOND & FIXED INCOME ══
-Tools: get_bond_yields, get_yield_curve.
-"bond yields" / "Treasury rates" / "yield curve" / "10Y" / "2s10s" → get_bond_yields.
-"is the yield curve inverted?" / "yield curve shape" → get_yield_curve.
-Key concepts to explain when relevant:
-- Inverted curve (short > long yields) = recession signal, historically leads by 12-18 months
-- Higher yields = lower bond prices (inverse relationship)
-- Fed rate hikes → short-term yields rise first, then long-term
-- Duration risk: long bonds lose more value when rates rise
-- Credit spread = difference between corporate bond yield and equivalent Treasury
-- Egypt: no liquid sovereign bond market on yfinance — use CBE rate (currently ~27%) as proxy
-
 ══ BUSINESS CALCULATOR ══
 Tools: startup_metrics, burn_runway, break_even, margin_analysis, roi_calc, dcf_value, valuation_multiples, loan_payment, compound_growth, cagr_calc.
 
@@ -194,99 +182,6 @@ Benchmarks Mo should know (answer proactively):
 - Healthy business margins: gross > 40%, EBIT > 15%, net > 10%
 - Egypt SME loan rate: roughly CBE rate + 3-5% (so ~30-32% total in 2024-2025 era)
 - Rule of 72: years to double = 72 / annual_rate
-══ STOCKS, MARKETS & ALL ASSET CLASSES ══
-El Fager is Mo's personal quant-level market expert across all asset classes: equities, bonds, forex, commodities, crypto.
-Stock tools: get_stock_price, get_stock_info, market_overview, get_stock_news, get_price_history, get_financials, get_earnings, get_analyst_ratings, get_dividends, compare_stocks, sector_performance, add_to_watchlist, remove_from_watchlist, list_watchlist, add_holding, remove_holding, portfolio_summary, set_price_alert, list_price_alerts, delete_price_alert.
-
-═══ TICKER REFERENCE ═══
-Egyptian (EGX) — always use .CA suffix:
-  Banking:     COMI.CA (CIB — largest private bank), QNBA.CA (QNB Egypt), HBCO.CA (Housing & Dev Bank), ADIB.CA (Abu Dhabi Islamic), AAIB.CA (Arab African Intl Bank), MFIN.CA (Mobifinance)
-  Real estate: PHDC.CA (Palm Hills), MNHD.CA (Madinet Nasr / MNHD), TALM.CA (Talaat Moustafa Group), OCDI.CA (Orascom Devel Egypt)
-  Telecom:     ETEL.CA (Telecom Egypt), SWDY.CA (Swvl — listed in US too), ALCN.CA (Alkan Telecom)
-  Healthcare:  CLHO.CA (Cleopatra Hospital), ISPH.CA (Ibnsina Pharma), SWPH.CA (Amoun Pharmaceutical)
-  Energy:      SKPC.CA (Sidi Kerir Petrochemical), AMOC.CA (Alexandria Min Oils Co), EGTS.CA (Egyptian Gas)
-  Food/Bev:    JUFO.CA (Juhayna), DOMTY.CA (Al Domty), OLFI.CA (Olympic Group / Fresh)
-  Industry:    ABUK.CA (Abu Qir Fertilizers), SIDI.CA (Sidi Kerir Steel), IRAX.CA (Iron & Steel)
-  Funds/Other: EFID.CA (EFG Hermes), CIBD.CA (CI Capital), HRHO.CA (Heliopolis Housing), EGCH.CA (GB Auto)
-  EGX Index:   ^CASE30 (EGX 30 — top 30 blue chips). Say "EGX", "Egyptian market", "البورصة" → ^CASE30
-
-US Mega-cap: AAPL (Apple), MSFT (Microsoft), NVDA (Nvidia), AMZN (Amazon), GOOGL (Alphabet), META (Meta), TSLA (Tesla), AVGO (Broadcom), ORCL (Oracle), AMD (AMD)
-US Finance:  JPM (JP Morgan), BAC (Bank of America), GS (Goldman Sachs), V (Visa), MA (Mastercard), BRK-B (Berkshire)
-US Health:   JNJ (J&J), LLY (Eli Lilly), UNH (UnitedHealth), PFE (Pfizer), ABBV (AbbVie)
-US Energy:   XOM (Exxon), CVX (Chevron), COP (ConocoPhillips)
-US Indices:  ^GSPC (S&P 500), ^IXIC (Nasdaq), ^DJI (Dow Jones), ^VIX (Fear index — above 20 = elevated fear)
-Crypto:      BTC-USD, ETH-USD, SOL-USD, BNB-USD, XRP-USD
-Commodities: GC=F (Gold), SI=F (Silver), CL=F (WTI oil), NG=F (Natural gas), HG=F (Copper), ZW=F (Wheat)
-FX:          USDEGP=X (USD/EGP), EURUSD=X, GBPUSD=X, USDJPY=X
-Sector ETFs: XLK (Tech), XLF (Financials), XLV (Healthcare), XLE (Energy), XLI (Industrials), XLY (Cons Disc), XLP (Cons Stap), XLU (Utilities), XLB (Materials), XLC (Comms), XLRE (Real Estate)
-
-═══ TOOL ROUTING ═══
-Price check:      get_stock_price — "aapl?" / "سعر النفط" / "bitcoin price"
-Deep info:        get_stock_info — "tell me about NVDA" / "COMI.CA details"
-News:             get_stock_news — "any news on TSLA?" / "why is AAPL moving?"
-History:          get_price_history — "how has X done this year?" / "NVDA 5y return" / "YTD performance"
-Financials:       get_financials — "AAPL margins" / "TSLA revenue" / "show me MSFT financials"
-Earnings:         get_earnings — "when does NVDA report?" / "what's the P/E?" / "EPS estimates"
-Analyst views:    get_analyst_ratings — "what do analysts think?" / "price target for AAPL" / "upgrades"
-Dividends:        get_dividends — "does X pay dividends?" / "dividend yield MSFT" / "income stock?"
-Compare:          compare_stocks — "AAPL vs MSFT" / "NVDA vs AMD" / "which is better?"
-Sector check:     sector_performance — "which sectors are up?" / "sector rotation?" / "tech vs energy today"
-Market pulse:     market_overview — "how's the market?" / "إيه اللي بيحصل في البورصة"
-Watchlist:        add_to_watchlist / list_watchlist — "track AAPL" / "show my watchlist"
-Portfolio:        add_holding / portfolio_summary — "I own 50 AAPL at 150" / "portfolio P&L"
-Alerts:           set_price_alert — "alert me when TSLA hits 300" / "notify below 200"
-
-For deep analysis ("analyze TSLA", "is COMI.CA a good buy?") — call get_stock_info + get_stock_news + get_analyst_ratings together.
-portfolio_summary and all report-style outputs are exceptions to the 1-2 sentence rule — deliver the full table/report.
-
-═══ ANALYSIS FRAMEWORK (use when Mo asks for analysis or "should I buy/sell X?") ═══
-Act like a sharp buy-side analyst at a top hedge fund. Structure every analysis:
-
-1. PRICE & MOMENTUM
-   - Current price vs 52-week range: near the high = momentum play or stretched; near the low = value or falling knife
-   - Day/week trend and volume signal
-   - Call get_price_history for YTD or 1y return
-
-2. VALUATION
-   - P/E (trailing) context by sector:
-     US Tech: fair 25-35x, expensive >40x, cheap <20x
-     US Finance/Banks: fair 10-15x, cheap <8x
-     EGX Banks: typically trade 5-10x P/E (Egypt premium due to rates/inflation)
-     EGX Real estate: 8-15x depending on pre-sales pipeline
-     Consumer staples: 15-25x, utilities 12-18x, energy 10-15x
-   - Forward P/E vs trailing = expansion (growth expected) or contraction (margins at risk)
-   - PEG ratio < 1 = potentially undervalued for growth rate
-
-3. FUNDAMENTALS
-   - Revenue growth > 15% = strong; >30% = high-growth; negative = red flag
-   - Net margin: Software 20-35% (good), Banks 20-30% ROE (good), Manufacturing 5-15%
-   - Free cash flow positive and growing = health signal
-   - Debt/Equity < 1 = safe; >2 = leveraged; banks excluded (leverage is business model)
-
-4. CATALYSTS & RISKS
-   - Upcoming earnings (always check get_earnings — earnings week = high vol)
-   - Analyst consensus and price target upside (get_analyst_ratings)
-   - For EGX: CBE rate changes (higher rates = bank profits up, real estate down), USD/EGP moves
-   - For US: Fed meetings (Mar/May/Jun/Sep/Nov/Dec), CPI Tuesdays, earnings seasons
-
-5. VERDICT (2-3 sentences, opinionated)
-   Examples: "NVDA at 32x forward P/E is stretched given the AI cycle is maturing — I'd wait for a pullback to the 180 range." / "COMI.CA is cheap at 6x P/E with ROE above 25% — solid accumulation candidate if you're comfortable with EGP exposure." / "TSLA: growth story intact but valuation demands execution. High risk/high reward."
-
-Always end analysis with: "Not financial advice — do your own research."
-For pure price requests ("what's X at?") — stay concise: price + change only. No analysis unless asked.
-
-═══ EGYPT MARKET EXPERTISE ═══
-EGX macro drivers (know these cold):
-  CBE interest rate: ~27% (2024-2025 era). High rates → banks profit, real estate hurts, manufacturing pressured.
-  USD/EGP: around 48-50 EGP per USD. Devaluations hit importers (consumer goods, steel) but help exporters.
-  Suez Canal revenue: key FX earner; Red Sea conflict (2024) severely cut canal revenues → pressure on EGP.
-  Inflation: high CPI (30-40%) = pressure on consumer spending; benefits food staples over discretionary.
-  IMF programme: Egypt in $8B IMF deal (2024); conditional on fiscal reform; FDI confidence signal.
-  Key EGX sectors: Banking (biggest weight, ~30%), Real Estate (high retail interest), Fertilizers (export revenue).
-  Foreign investor flows: measure via EGID.CA (EFG) or net buying data; hot money moves EGX fast.
-EGP-denominated returns vs USD: always note whether EGX gain is real or inflation-driven.
-For any EGX stock: mention the CBE rate environment and USD/EGP sensitivity in the analysis.
-
 ═══ ARABIC FINANCIAL VOCABULARY ═══
 بورصة = stock market | سهم/اسهم = share/shares | توزيعات = dividends | عائد = yield/return
 مؤشر = index | محفظة = portfolio | سعر مستهدف = price target | ربحية = profitability
@@ -367,28 +262,6 @@ Local git: git_status, git_log, git_diff, git_add, git_commit, git_push, git_pul
 "git status" / "what changed?" → git_status. "show commits" → git_log. To commit: git_add(['.']) then git_commit(msg). ALWAYS confirm before git_push.
 Developer utilities: hash_text, encode_base64, decode_base64, url_encode, url_decode, generate_password, generate_uuid, generate_qr.
 "hash this" → hash_text(text, "sha256"). "strong password" → generate_password(20). "QR code for this URL" → generate_qr(url). "give me a UUID" → generate_uuid.
-Trading engine (autonomous investing):
-Tools: start_trading_engine, stop_trading_engine, get_trading_status, get_trading_portfolio, get_trade_history, get_trading_summary, set_risk_params, switch_to_paper_mode, switch_to_live_mode, add_trading_symbol, remove_trading_symbol.
-
-Trading engine runs in paper mode by default (Alpaca sandbox — fake money, real market data). Switch to live only when Mo explicitly confirms.
-When Mo says "start trading", "start the trading engine", "start investing" -> start_trading_engine.
-When Mo says "stop trading", "pause the engine" -> stop_trading_engine.
-When Mo says "trading status", "is the engine running?" -> get_trading_status.
-When Mo says "trading portfolio", "my trading positions", "what am I holding?" (in trading context) -> get_trading_portfolio.
-When Mo says "trading history", "recent trades", "what did you trade?" -> get_trade_history.
-When Mo says "trading summary", "trading P&L", "how's the engine doing?" -> get_trading_summary.
-When Mo says "set stop-loss to X%", "set take-profit to X%", "set max position to X%" -> set_risk_params with the matching param.
-When Mo says "switch to paper mode", "paper trading" -> switch_to_paper_mode.
-When Mo says "switch to live trading", "go live" -> switch_to_live_mode (it only explains the flow; activation happens outside the tool loop when Mo says "confirm live trading" twice).
-When Mo says "add [TICKER] to trading watchlist" -> add_trading_symbol(symbol).
-When Mo says "remove [TICKER] from trading watchlist" -> remove_trading_symbol(symbol).
-Live activation is NOT possible through tools -- only the deterministic 'confirm live trading' double-confirmation flow can enable it.
-All trading reports are exceptions to the 1-2 sentence rule — deliver the full report.
-- For backtesting and strategy validation: use run_backtest(symbol, days), run_full_backtest(), get_backtest_results(), compare_to_buyhold(symbol). Backtest reports are exceptions to the 1-2 sentence rule.
-- When Mo says "backtest SPY" or "test the strategy" -> run_backtest(symbol).
-- When Mo says "backtest all symbols" or "full backtest" -> run_full_backtest().
-- When Mo says "backtest results" or "how did the strategy do?" -> get_backtest_results().
-- When Mo says "compare to buy and hold [TICKER]" -> compare_to_buyhold(symbol).
 Autonomous tasks (El Fager executes on its own, proactively):
 Tools: add_autonomous_task, list_autonomous_tasks, delete_autonomous_task.
 Use when Mo delegates future work: "research X tonight", "check NVDA RSI every morning", "do X for me later", "queue: X", "El Fager, tonight please X".
@@ -407,7 +280,6 @@ When Mo's request matches a skill name or trigger phrase (e.g. "focus time", "go
 When Mo says "what skills do you have" -> list_skills. "forget that skill" -> delete_skill.
 Automation flow (propose, never impose): if run_skill's result asks you to offer scheduling, finish the skill, then ask Mo ONCE if he wants it automatic. If yes -> schedule_skill(name, every_hours, at_time="HH:MM"). "stop doing X automatically" -> unschedule_skill.
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
-Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
 "import my routines" / "turn my tasks into skills" / "automate my week" -> import_routines (creates + schedules skills from calendar and gym program).
 "sync my skills" (make skills available in Claude Code) -> sync_skills_to_claude. Also offer this after importing routines.
 API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
@@ -418,7 +290,7 @@ When Mo gives a BIG multi-part goal that cannot finish in one reply ("research X
 Do NOT use a mission for anything you can finish now in one tool loop -- just do it. Do NOT use for simple recurring reminders (autonomous tasks) or saved routines (skills).
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
-El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
+El Fager automatically sends WhatsApp alerts for: autonomous task completions and critical battery.
 When Mo says "send my phone a message", "ping me on WhatsApp", "send me a WhatsApp", "notify my phone about X" -> send_notification(message).
 When Mo asks "is WhatsApp set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
 Setup: TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_FROM + WHATSAPP_PHONE in .env.
@@ -2235,224 +2107,6 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "get_stock_price",
-        "description": "Current price and day change for a stock or ETF. symbol examples: AAPL, TSLA, AMZN, COMI.CA (EGX), GC=F (gold), BTC-USD.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol, e.g. AAPL, TSLA, COMI.CA, BTC-USD"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_stock_info",
-        "description": "Detailed stock info: price, day change, 52-week range, P/E ratio, market cap, volume.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "market_overview",
-        "description": "Live snapshot of major market indices: S&P 500, NASDAQ, Dow Jones, EGX30, Gold, Oil, Bitcoin, USD/EGP rate.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "get_stock_news",
-        "description": "Recent news headlines for a specific stock or company.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "add_to_watchlist",
-        "description": "Add a stock to Mo's watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"},
-                "notes":  {"type": "string", "description": "Optional note (e.g. 'watching for breakout')"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "remove_from_watchlist",
-        "description": "Remove a stock from the watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "list_watchlist",
-        "description": "Show Mo's watchlist with live current prices.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "add_holding",
-        "description": "Add or update a stock position in Mo's portfolio. Records shares owned and average buy price.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol":    {"type": "string", "description": "Ticker symbol"},
-                "shares":    {"type": "number", "description": "Number of shares owned"},
-                "avg_price": {"type": "number", "description": "Average buy price per share"},
-                "currency":  {"type": "string", "description": "Currency, e.g. USD, EGP. Default: USD"}
-            },
-            "required": ["symbol", "shares", "avg_price"]
-        }
-    },
-    {
-        "name": "remove_holding",
-        "description": "Remove a position from Mo's portfolio (sold all shares).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "portfolio_summary",
-        "description": "Show Mo's entire stock portfolio with live prices, current value, and unrealised P&L per position.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "set_price_alert",
-        "description": "Set a price alert — notify Mo when a stock goes above or below a target price.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol":       {"type": "string", "description": "Ticker symbol"},
-                "target_price": {"type": "number", "description": "Target price threshold"},
-                "condition":    {"type": "string", "description": "'above' or 'below'. Default: above"}
-            },
-            "required": ["symbol", "target_price"]
-        }
-    },
-    {
-        "name": "list_price_alerts",
-        "description": "List all active price alerts with current prices.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "delete_price_alert",
-        "description": "Delete a price alert for a symbol.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_price_history",
-        "description": "Historical price performance for a stock over a period. Returns total return %, period high/low, current price, annualised volatility. Use for 'how has X done this year?', 'AAPL performance 5y', 'YTD return NVDA'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"},
-                "period": {"type": "string", "description": "1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max. Default: 1y"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_financials",
-        "description": "Key financial metrics: revenue, revenue growth, gross/operating/net margin, EPS (trailing & forward), EPS growth, ROE, ROA, debt/equity, current ratio, free cash flow. Use for deep fundamental analysis.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_earnings",
-        "description": "Earnings data: next earnings date, trailing P/E, forward P/E, PEG ratio, EPS estimates vs actuals, beat/miss history. Use when Mo asks 'when does X report?', 'what's the EPS?', 'does X beat estimates?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_analyst_ratings",
-        "description": "Analyst consensus: buy/hold/sell recommendation, mean score, number of analysts, average/median/range price targets, recent upgrades and downgrades. Use for 'what do analysts think of X?', 'what's the price target for TSLA?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_dividends",
-        "description": "Dividend info: yield, annual rate, ex-dividend date, payout ratio, recent dividend payment history. Use when Mo asks about income investing, dividend stocks, 'does X pay dividends?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "compare_stocks",
-        "description": "Side-by-side comparison of two stocks: price, day change, P/E (trailing & forward), market cap, net margin, ROE, debt/equity, dividend yield, 52-week range. Use for 'AAPL vs MSFT', 'which is better NVDA or AMD?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol1": {"type": "string", "description": "First ticker"},
-                "symbol2": {"type": "string", "description": "Second ticker"}
-            },
-            "required": ["symbol1", "symbol2"]
-        }
-    },
-    {
-        "name": "sector_performance",
-        "description": "US market sector performance today using sector ETFs (XLK tech, XLF financials, XLV healthcare, XLE energy, etc.). Shows which sectors are leading and lagging. Use for 'how are sectors doing?', 'which sector is up today?', 'sector rotation'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
         "name": "cash_flow_summary",
         "description": "Cash flow: total income minus total expenses for a period. Shows net surplus or deficit and savings rate.",
         "input_schema": {
@@ -3485,17 +3139,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["selector", "value"]
         }
     },
-    # ── Bond Tools ────────────────────────────────────────────────────────────
-    {
-        "name": "get_bond_yields",
-        "description": "Fetch live US Treasury yield curve (3M/2Y/5Y/10Y/30Y) plus major sovereign 10Y yields (Germany, UK, Japan, France). Shows 2s10s spread and inversion signals.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_yield_curve",
-        "description": "US yield curve shape with ASCII bar chart, key spreads (3M vs 10Y, 2Y vs 10Y, 5Y vs 30Y), and inversion analysis with recession signal interpretation.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
     # ── Business Calculator Tools ─────────────────────────────────────────────
     {
         "name": "startup_metrics",
@@ -4225,121 +3868,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["text"]
         }
     },
-    # ── Trading Engine ────────────────────────────────────────────────────────
-    {
-        "name": "start_trading_engine",
-        "description": "Start the autonomous trading engine background loop. Monitors the active watchlist every 15 minutes and places bracket orders when signals fire. Paper mode by default.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "stop_trading_engine",
-        "description": "Stop the trading engine loop. Open positions remain with their bracket orders active on Alpaca's servers.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trading_status",
-        "description": "Return trading engine state: running/stopped, paper/live mode, active watchlist, last trade timestamp.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trading_portfolio",
-        "description": "Fetch live positions from Alpaca: symbol, qty, entry price, current P&L for each open position plus total portfolio value.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trade_history",
-        "description": "Return the last N executed trades with timestamp, symbol, side, qty, price, and signal type.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "n": {"type": "integer", "description": "Number of trades to return. Default 20."}
-            }
-        }
-    },
-    {
-        "name": "get_trading_summary",
-        "description": "Return total trades, today's trades, and current portfolio value — a one-page trading dashboard.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "set_risk_params",
-        "description": "Update one or more risk parameters. All params are optional — only provided ones are changed.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "max_position_pct": {"type": "number", "description": "Max % of portfolio per trade. Default 10."},
-                "stop_loss_pct": {"type": "number", "description": "Auto-sell if position drops this %. Default 8."},
-                "take_profit_pct": {"type": "number", "description": "Auto-sell if position gains this %. Default 15."},
-                "daily_loss_limit_pct": {"type": "number", "description": "Stop trading if portfolio drops this % in a day. Default 5."},
-                "max_open_positions": {"type": "integer", "description": "Maximum simultaneous open positions. Default 5."}
-            }
-        }
-    },
-    {
-        "name": "switch_to_paper_mode",
-        "description": "Route all orders to Alpaca paper trading sandbox (fake money, real market data). Safe to call anytime.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "switch_to_live_mode",
-        "description": "Explains how to activate real-money trading. This tool can NOT activate it — live mode only activates through the deterministic 'confirm live trading' double-confirmation flow.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "add_trading_symbol",
-        "description": "Add a ticker symbol to the active trading watchlist (e.g. 'TSLA', 'AMZN').",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol, e.g. 'TSLA'"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "remove_trading_symbol",
-        "description": "Remove a ticker symbol from the active trading watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "run_backtest",
-        "description": "Backtest the trading strategy on 2 years of hourly historical data for one symbol. Returns total return, win rate, avg gain/loss, max drawdown, Sharpe ratio vs buy-and-hold.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Stock ticker (e.g. 'SPY', 'AAPL'). Default 'SPY'."},
-                "days": {"type": "integer", "description": "Days of history to test. Default 730 (2 years)."},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "run_full_backtest",
-        "description": "Backtest the strategy across all 5 active watchlist symbols and report combined results.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name": "get_backtest_results",
-        "description": "Return the last saved backtest results for all symbols that have been tested.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name": "compare_to_buyhold",
-        "description": "Compare strategy return vs simply buying and holding a symbol. Shows whether active trading adds value.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker to compare (e.g. 'AAPL')."},
-            },
-            "required": ["symbol"],
-        },
-    },
     {
         "name": "add_autonomous_task",
         "description": "Queue a task for El Fager to execute autonomously in the background. Use when Mo delegates work: 'research X tonight', 'check NVDA RSI every day', 'do X for me later'.",
@@ -4437,26 +3965,6 @@ TOOLS: list[dict[str, Any]] = [
                 "task": {
                     "type": "string",
                     "description": "The user's web-automation request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "stocks_agent",
-        "description": (
-            "Deep market analysis and conviction-gated autonomous trading agent. Use for: "
-            "'analyze NVDA', 'should I buy/sell X', 'your thesis/opinion/view on X', "
-            "'conviction on X', 'scan my watchlist', 'why did you buy/sell X', 'my trading stats', "
-            "'pause/resume trading', 'set auto-trade threshold to N'. Do NOT use for simple price "
-            "lookups -- those are instant-lane tools."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's stock-analysis or trading-control request."
                 }
             },
             "required": ["task"]
@@ -4703,7 +4211,7 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "set_reminder", "list_reminders", "cancel_reminder",
     "get_battery_status", "get_clipboard_history",
     "analyze_screen", "ocr_screenshot",
-    "screen_agent", "browser_agent", "stocks_agent",
+    "screen_agent", "browser_agent",
     "research_agent", "file_agent", "health_agent",
     "run_skill", "list_skills", "learn_skill",
 })
@@ -4779,14 +4287,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "daily_activity", "streak_stats",
         "cash_flow_summary", "revenue_insights", "profit_loss_report",
     }),
-    "stocks": frozenset({
-        "get_stock_price", "get_stock_info", "market_overview", "get_stock_news",
-        "add_to_watchlist", "remove_from_watchlist", "list_watchlist",
-        "add_holding", "remove_holding", "portfolio_summary",
-        "set_price_alert", "list_price_alerts", "delete_price_alert",
-        "get_price_history", "get_financials", "get_earnings",
-        "get_analyst_ratings", "get_dividends", "compare_stocks", "sector_performance",
-    }),
     "finance": frozenset({
         "log_income", "get_income_summary", "list_recent_income",
         "create_invoice", "send_invoice", "mark_invoice_paid",
@@ -4794,9 +4294,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "set_budget", "list_budgets", "delete_budget",
         "set_savings_goal", "update_savings_progress", "list_savings_goals", "delete_savings_goal",
         "cash_flow_summary", "revenue_insights", "profit_loss_report",
-    }),
-    "bonds": frozenset({
-        "get_bond_yields", "get_yield_curve",
     }),
     "bizmath": frozenset({
         "startup_metrics", "burn_runway", "break_even", "margin_analysis",
@@ -4852,15 +4349,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "url_encode", "url_decode",
         "generate_password", "generate_uuid", "generate_qr",
     }),
-    "trading": frozenset({
-        "start_trading_engine", "stop_trading_engine", "get_trading_status",
-        "get_trading_portfolio", "get_trade_history", "get_trading_summary",
-        "set_risk_params", "switch_to_paper_mode", "switch_to_live_mode",
-        "add_trading_symbol", "remove_trading_symbol",
-    }),
-    "backtest": frozenset({
-        "run_backtest", "run_full_backtest", "get_backtest_results", "compare_to_buyhold",
-    }),
     "autonomous_tasks": frozenset({
         "add_autonomous_task", "list_autonomous_tasks", "delete_autonomous_task",
     }),
@@ -4908,17 +4396,6 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
                     "consistency", "how consistent",
                     "income", "revenue", "invoice", "savings", "cash flow", "profit",
                     "يوميات", "مصاريف", "مزاج"],
-    "stocks":      ["stock", "stocks", "share", "shares", "market", "ticker",
-                    "price of", "nasdaq", "s&p", "dow jones", "egx", "egx30",
-                    "portfolio", "watchlist", "holding", "position",
-                    "buy price", "sell price", "p/e", "market cap",
-                    "gold price", "oil price", "bitcoin", "btc", "crypto",
-                    "price alert", "stock news", "aapl", "tsla", "amzn", "nvda",
-                    "earnings", "dividend", "analyst", "price target", "sector",
-                    "financials", "margin", "roe", "eps", "p/e ratio",
-                    "performance", "return", "compare stock", "vs stock",
-                    "should i buy", "should i sell", "invest in", "is it a good buy",
-                    "بورصة", "اسهم", "سهم", "بتكوين", "ذهب", "توزيعات", "عائد"],
     "finance":     ["invoice", "invoices", "client", "bill ", "billing",
                     "income", "earned", "got paid", "payment received",
                     "cash flow", "profit", "loss", "p&l",
@@ -4926,9 +4403,6 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
                     "financial report", "how much did i make", "how much i made",
                     "log income", "received payment",
                     "فاتورة", "ايراد", "دخل", "ميزانية", "مدخرات"],
-    "bonds":       ["bond", "bonds", "treasury", "yield", "yield curve", "interest rate",
-                    "10 year", "10y", "2s10s", "bund", "gilts", "sovereign", "fixed income",
-                    "t-bill", "t-bond", "سندات", "عائد السندات"],
     "bizmath":     ["startup", "saas", "mrr", "arr", "ltv", "cac", "churn", "burn rate",
                     "runway", "break even", "break-even", "margin analysis",
                     "roi", "return on investment", "dcf", "valuation", "multiple",
@@ -4973,18 +4447,6 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "dev_utils":   ["hash", "md5", "sha256", "base64", "encode base64", "decode base64",
                     "url encode", "url decode", "generate password", "random password",
                     "strong password", "uuid", "qr code", "qr ", "generate qr"],
-    "trading":    ["start trading", "stop trading", "trading engine", "trading status",
-                   "trading portfolio", "trading history", "trade history", "recent trades",
-                   "trading summary", "trading p&l", "set stop-loss", "set take-profit",
-                   "set max position", "paper mode", "live trading", "confirm live",
-                   "trading watchlist", "add to trading", "remove from trading",
-                   "autonomous trading", "invest automatically", "auto invest",
-                   "engine running", "is it trading", "what did you trade",
-                   "استثمار تلقائي", "محرك التداول"],
-    "backtest":   ["backtest", "test strategy", "how is the strategy", "strategy performance",
-                   "did the strategy work", "historical performance", "backtest results",
-                   "strategy test", "how did the strategy do", "compare to buy and hold",
-                   "buy and hold", "اختبار الاستراتيجية"],
     "autonomous_tasks": [
         "queue", "add task for yourself", "do this for me", "do this later",
         "autonomous task", "background task", "my queued tasks", "what tasks do you have",
@@ -5039,29 +4501,6 @@ def _select_tools(message: str, history: list | None = None) -> list:
     return [t for t in _SLIM_TOOLS if t["name"] in names]
 
 
-_LIVE_CONFIG_PATH = "data/trading_config.json"
-
-
-def _write_live_config(config_path: str) -> str:
-    """Write mode: live to trading_config.json. Returns cp1252-safe confirmation."""
-    import json
-    from pathlib import Path
-    p = Path(config_path)
-    cfg: dict = {}
-    if p.exists():
-        try:
-            cfg = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    cfg["mode"] = "live"
-    p.parent.mkdir(exist_ok=True)
-    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-    return (
-        "LIVE TRADING ACTIVATED. El Fager will now trade with real money. "
-        "Say 'pause trading' at any time to halt all autonomous trading."
-    )
-
-
 _MAX_TOOL_ITERATIONS = 15
 
 
@@ -5083,8 +4522,6 @@ class Brain:
             self._logger = ConversationLogger()
         except Exception:
             self._logger = None
-        self._live_pending: bool = False
-        self._live_pending_ts: float = 0.0
 
     _DISPATCH_RETRY_DELAYS = (1.0, 3.0)  # 2 retries with backoff on transient errors
 
@@ -5593,77 +5030,6 @@ class Brain:
             elif name == "streak_stats":
                 from tools.analytics_tool import streak_stats
                 return streak_stats()
-            # Stocks
-            elif name == "get_stock_price":
-                from tools.stocks_tool import get_stock_price
-                return get_stock_price(tool_input["symbol"])
-            elif name == "get_stock_info":
-                from tools.stocks_tool import get_stock_info
-                return get_stock_info(tool_input["symbol"])
-            elif name == "market_overview":
-                from tools.stocks_tool import market_overview
-                return market_overview()
-            elif name == "get_stock_news":
-                from tools.stocks_tool import get_stock_news
-                return get_stock_news(tool_input["symbol"])
-            elif name == "add_to_watchlist":
-                from tools.stocks_tool import add_to_watchlist
-                return add_to_watchlist(tool_input["symbol"], tool_input.get("notes", ""))
-            elif name == "remove_from_watchlist":
-                from tools.stocks_tool import remove_from_watchlist
-                return remove_from_watchlist(tool_input["symbol"])
-            elif name == "list_watchlist":
-                from tools.stocks_tool import list_watchlist
-                return list_watchlist()
-            elif name == "add_holding":
-                from tools.stocks_tool import add_holding
-                return add_holding(
-                    tool_input["symbol"],
-                    tool_input["shares"],
-                    tool_input["avg_price"],
-                    tool_input.get("currency", "USD"),
-                )
-            elif name == "remove_holding":
-                from tools.stocks_tool import remove_holding
-                return remove_holding(tool_input["symbol"])
-            elif name == "portfolio_summary":
-                from tools.stocks_tool import portfolio_summary
-                return portfolio_summary()
-            elif name == "set_price_alert":
-                from tools.stocks_tool import set_price_alert
-                return set_price_alert(
-                    tool_input["symbol"],
-                    tool_input["target_price"],
-                    tool_input.get("condition", "above"),
-                )
-            elif name == "list_price_alerts":
-                from tools.stocks_tool import list_price_alerts
-                return list_price_alerts()
-            elif name == "delete_price_alert":
-                from tools.stocks_tool import delete_price_alert
-                return delete_price_alert(tool_input["symbol"])
-            # Stocks — expert analysis
-            elif name == "get_price_history":
-                from tools.stocks_tool import get_price_history
-                return get_price_history(tool_input["symbol"], tool_input.get("period", "1y"))
-            elif name == "get_financials":
-                from tools.stocks_tool import get_financials
-                return get_financials(tool_input["symbol"])
-            elif name == "get_earnings":
-                from tools.stocks_tool import get_earnings
-                return get_earnings(tool_input["symbol"])
-            elif name == "get_analyst_ratings":
-                from tools.stocks_tool import get_analyst_ratings
-                return get_analyst_ratings(tool_input["symbol"])
-            elif name == "get_dividends":
-                from tools.stocks_tool import get_dividends
-                return get_dividends(tool_input["symbol"])
-            elif name == "compare_stocks":
-                from tools.stocks_tool import compare_stocks
-                return compare_stocks(tool_input["symbol1"], tool_input["symbol2"])
-            elif name == "sector_performance":
-                from tools.stocks_tool import sector_performance
-                return sector_performance()
             # Phase 8 — Income
             elif name == "log_income":
                 from tools import income_tool
@@ -6120,13 +5486,6 @@ class Brain:
             elif name == "analyze_screen":
                 from tools.screen_analysis_tool import analyze_screen
                 return analyze_screen(tool_input.get("question", "What do you see on screen?"))
-            # ── Bond tools ────────────────────────────────────────────────────
-            elif name == "get_bond_yields":
-                from tools.bond_tool import get_bond_yields
-                return get_bond_yields()
-            elif name == "get_yield_curve":
-                from tools.bond_tool import get_yield_curve
-                return get_yield_curve()
             # ── Business calculator ───────────────────────────────────────────
             elif name == "startup_metrics":
                 from tools.business_calculator import startup_metrics
@@ -6392,52 +5751,6 @@ class Brain:
             elif name == "generate_qr":
                 from tools.dev_utils_tool import generate_qr
                 return generate_qr(tool_input["text"], tool_input.get("output_path"))
-            # ── Trading Engine ───────────────────────────────────────────────
-            elif name == "start_trading_engine":
-                from tools.trading_tool import start_trading_engine
-                return start_trading_engine()
-            elif name == "stop_trading_engine":
-                from tools.trading_tool import stop_trading_engine
-                return stop_trading_engine()
-            elif name == "get_trading_status":
-                from tools.trading_tool import get_trading_status
-                return get_trading_status()
-            elif name == "get_trading_portfolio":
-                from tools.trading_tool import get_trading_portfolio
-                return get_trading_portfolio()
-            elif name == "get_trade_history":
-                from tools.trading_tool import get_trade_history
-                return get_trade_history(**tool_input)
-            elif name == "get_trading_summary":
-                from tools.trading_tool import get_trading_summary
-                return get_trading_summary()
-            elif name == "set_risk_params":
-                from tools.trading_tool import set_risk_params
-                return set_risk_params(**tool_input)
-            elif name == "switch_to_paper_mode":
-                from tools.trading_tool import switch_to_paper_mode
-                return switch_to_paper_mode()
-            elif name == "switch_to_live_mode":
-                from tools.trading_tool import switch_to_live_mode
-                return switch_to_live_mode()  # never takes args: cannot self-confirm
-            elif name == "add_trading_symbol":
-                from tools.trading_tool import add_trading_symbol
-                return add_trading_symbol(**tool_input)
-            elif name == "remove_trading_symbol":
-                from tools.trading_tool import remove_trading_symbol
-                return remove_trading_symbol(**tool_input)
-            elif name == "run_backtest":
-                from tools.backtest_tool import run_backtest as _run_bt
-                return _run_bt(**tool_input)
-            elif name == "run_full_backtest":
-                from tools.backtest_tool import run_full_backtest as _run_fbt
-                return _run_fbt()
-            elif name == "get_backtest_results":
-                from tools.backtest_tool import get_backtest_results as _get_bt
-                return _get_bt()
-            elif name == "compare_to_buyhold":
-                from tools.backtest_tool import compare_to_buyhold as _compare_bt
-                return _compare_bt(**tool_input)
             elif name == "add_autonomous_task":
                 from tools.autonomous_task_tool import add_autonomous_task as _add_at
                 return _add_at(**tool_input)
@@ -6459,9 +5772,6 @@ class Brain:
             elif name == "browser_agent":
                 from core.agents.browser_agent import BrowserAgent
                 return BrowserAgent().run(tool_input["task"])
-            elif name == "stocks_agent":
-                from core.agents.stocks_agent import StocksAgent
-                return StocksAgent().run(tool_input["task"])
             elif name == "research_agent":
                 from core.agents.research_agent import ResearchAgent
                 return ResearchAgent().run(tool_input["task"])
@@ -6520,51 +5830,6 @@ class Brain:
                 raise  # let _dispatch_tool retry with backoff
             return f"Tool error ({name}): {e}"
 
-    def _try_agent_dispatch(self, task: str) -> str | None:
-        """Intercept financial-safety state-machine commands before the tool loop.
-
-        Specialist agents (screen/browser/stocks/research/file/health) are
-        reachable as tools inside the main chat() loop instead -- see the
-        screen_agent/browser_agent/stocks_agent/research_agent/file_agent/
-        health_agent tool definitions in TOOLS. Only the live-trading
-        confirmation flow stays here: it's a deterministic 60-second
-        confirmation window that must not be left to LLM tool-use judgment.
-        """
-        from core.agents.router import classify_intent
-        intent = classify_intent(task)
-        if intent == "gate_check":
-            from core.trade_tracker import TradeTracker
-            from core.paper_metrics import PaperMetrics
-            TradeTracker().sync()
-            return PaperMetrics().gate_summary()
-        if intent == "confirm_live":
-            import time as _time
-            if not self._live_pending:
-                self._live_pending = True
-                self._live_pending_ts = _time.monotonic()
-                return (
-                    "CAUTION: You are about to switch to REAL money trading. "
-                    "Say 'confirm live trading' again within 60 seconds to activate. "
-                    "Say 'cancel live trading' to abort."
-                )
-            elapsed = _time.monotonic() - self._live_pending_ts
-            self._live_pending = False
-            self._live_pending_ts = 0.0
-            if elapsed > 60.0:
-                return (
-                    "Live trading activation timed out. "
-                    "Say 'confirm live trading' to start over."
-                )
-            from core.paper_metrics import PaperMetrics
-            if not PaperMetrics().compute()["gate_pass"]:
-                return PaperMetrics().gate_summary()
-            return _write_live_config(_LIVE_CONFIG_PATH)
-        if intent == "cancel_live":
-            self._live_pending = False
-            self._live_pending_ts = 0.0
-            return "Live trading activation cancelled."
-        return None
-
     def _create_message(self, _telemetry_source: str, **kwargs):
         """All brain API calls route through here: times the call and records
         usage/cost telemetry. Telemetry never raises; API errors propagate."""
@@ -6601,15 +5866,6 @@ class Brain:
         # Log user turn
         if self._logger:
             self._logger.log("user", user_message)
-
-        # Agent routing — intercept complex multi-step tasks before tool loop
-        _agent_result = self._try_agent_dispatch(user_message)
-        if _agent_result is not None:
-            hist.append({"role": "user", "content": user_message})
-            hist.append({"role": "assistant", "content": _agent_result})
-            if self._logger:
-                self._logger.log("assistant", _agent_result, [])
-            return _agent_result
 
         system = SYSTEM_PROMPT
         if self.memory is not None:

@@ -9,4 +9,4 @@ Preferred: send this to the running El Fager via the `fager` bridge skill with t
 
 If El Fager is not running, execute the steps yourself with your own tools where possible:
 
-1) Give Mo today's briefing: weather in Cairo, today's calendar events (list_calendar_events), and today's prayer times (get_prayer_times). 2) Summarize the paper trading account: portfolio_summary plus any overnight price alerts. 3) Mention the top pending reminder or task if any. Keep the whole thing under 6 spoken sentences.
+1) Give Mo today's briefing: weather in Cairo, today's calendar events (list_calendar_events), and today's prayer times (get_prayer_times). 2) Mention the top pending reminder or task if any. Keep the whole thing under 6 spoken sentences.

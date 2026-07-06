@@ -3,7 +3,7 @@
     "name": "morning routine",
     "pack": "daily-life",
     "trigger_phrases": ["good morning", "sabah el kheir", "start my day"],
-    "instructions": "1) Give Mo today's briefing: weather in Cairo, today's calendar events (list_calendar_events), and today's prayer times (get_prayer_times). 2) Summarize the paper trading account: portfolio_summary plus any overnight price alerts. 3) Mention the top pending reminder or task if any. Keep the whole thing under 6 spoken sentences."
+    "instructions": "1) Give Mo today's briefing: weather in Cairo, today's calendar events (list_calendar_events), and today's prayer times (get_prayer_times). 2) Mention the top pending reminder or task if any. Keep the whole thing under 6 spoken sentences."
   },
   {
     "name": "evening shutdown",
@@ -15,19 +15,19 @@
     "name": "weekly review",
     "pack": "daily-life",
     "trigger_phrases": ["weekly review", "how was my week"],
-    "instructions": "Compile Mo's week: journal_insights for the last 7 days, spending_insights, gym sessions this week, and paper-trading P&L summary. Present as 4 short sections, then ONE suggestion for next week."
+    "instructions": "Compile Mo's week: journal_insights for the last 7 days, spending_insights, and gym sessions this week. Present as 3 short sections, then ONE suggestion for next week."
   },
   {
     "name": "morning research digest",
     "pack": "research",
     "trigger_phrases": ["research digest", "what's new in my topics"],
-    "instructions": "Use research_agent to research the latest developments (last 48 hours) on Mo's tracked topics. Default topics: AI agents and assistants, US stock market conditions affecting SPY/QQQ/NVDA/AAPL, and the Egyptian tech scene. Summarize the 3 most important findings in plain language, one sentence of why each matters to Mo."
+    "instructions": "Use research_agent to research the latest developments (last 48 hours) on Mo's tracked topics. Default topics: AI agents and assistants, and the Egyptian tech scene. Summarize the 3 most important findings in plain language, one sentence of why each matters to Mo."
   },
   {
     "name": "deep dive",
     "pack": "research",
     "trigger_phrases": ["deep dive on", "research this properly"],
-    "instructions": "Take the topic Mo just mentioned and use research_agent for a thorough multi-source investigation. Structure the answer: what it is, current state, the 3 strongest opposing viewpoints, and a practical takeaway for Mo. If the topic touches a stock, add stocks_agent analysis of the ticker."
+    "instructions": "Take the topic Mo just mentioned and use research_agent for a thorough multi-source investigation. Structure the answer: what it is, current state, the 3 strongest opposing viewpoints, and a practical takeaway for Mo."
   },
   {
     "name": "focus mode",

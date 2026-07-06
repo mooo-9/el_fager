@@ -19,63 +19,6 @@ _BROWSER_KEYWORDS = [
     "search on google", "search on amazon",
 ]
 
-# StocksAgent handles ANALYTICAL and AGENTIC stock tasks.
-# Checked BEFORE _STOCKS_KEYWORDS so these take priority.
-_STOCKS_AGENT_KEYWORDS = [
-    "analyze", "thesis on", "your thesis",
-    "should i buy", "should i sell", "should we buy",
-    "your view on", "your opinion on",
-    "what do you think about", "what's your take on",
-    "conviction on", "outlook for", "stock outlook",
-    "deep analysis", "deep dive",
-    "why did you buy", "why did we buy",
-    "why did you sell", "why did we sell",
-    "my trading stats", "trading performance",
-    "scan my watchlist", "scan portfolio", "scan watchlist",
-    "pause trading", "resume trading", "unpause trading",
-    "stop auto-trade", "start auto-trade",
-    "set auto-trade threshold", "set threshold",
-    "auto-trade threshold", "auto trade threshold",
-    "explain my portfolio", "explain my trades",
-]
-
-# Instant-lane stock tools: price lookups, watchlist, alerts, market overview.
-_STOCKS_KEYWORDS = [
-    "stock", "stocks", "trade", "trading", "portfolio", "ticker",
-    "buy shares", "sell shares", "invest", "investing", "investment",
-    "trading engine", "trading agent", "open positions", "trade history",
-    "bull", "bear", "bullish", "bearish", "earnings", "dividend",
-    "p/e ratio", "rsi", "macd", "moving average",
-    "nvda", "aapl", "msft", "amzn", "googl", "meta", "tsla",
-    "spy", "qqq", "btc", "eth", "crypto",
-]
-
-_GATE_CHECK_KEYWORDS = [
-    "ready for real trading",
-    "passed the paper trading",
-    "paper trading gate",
-    "paper trading results",
-    "am i ready to go live",
-    "how are we doing trading",
-]
-
-_CONFIRM_LIVE_KEYWORDS = [
-    "confirm real trading",
-    "confirm live trading",
-    "activate real trading",
-    "activate live trading",
-    "go live with trading",
-    "switch to real trading",
-    "switch to live trading",
-]
-
-_CANCEL_LIVE_KEYWORDS = [
-    "cancel live trading",
-    "cancel real trading",
-    "abort live trading",
-    "stop live trading activation",
-]
-
 _HEALTH_FOOD_KEYWORDS = [
     "i just ate", "i ate", "i just had", "log meal", "log food",
     "nutrition", "calories today", "how many calories", "macro", "macros",
@@ -120,11 +63,6 @@ _FILE_KEYWORDS = [
 _LABEL_KEYWORDS = [
     ("screen", _SCREEN_KEYWORDS),
     ("browser", _BROWSER_KEYWORDS),
-    ("stocks_agent", _STOCKS_AGENT_KEYWORDS),  # checked before "stocks"
-    ("confirm_live", _CONFIRM_LIVE_KEYWORDS),  # checked before gate_check and stocks
-    ("cancel_live", _CANCEL_LIVE_KEYWORDS),    # checked before gate_check and stocks
-    ("gate_check", _GATE_CHECK_KEYWORDS),      # checked before generic "stocks"
-    ("stocks", _STOCKS_KEYWORDS),
     ("health", _HEALTH_FOOD_KEYWORDS + _HEALTH_GYM_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),
@@ -134,9 +72,8 @@ _LABEL_KEYWORDS = [
 def classify_intent(message: str) -> str:
     """Return the agent label that should handle this message.
 
-    Returns one of: 'screen', 'browser', 'stocks_agent', 'confirm_live',
-    'cancel_live', 'gate_check', 'stocks', 'research', 'file', 'instant'.
-    Uses keyword matching. First match wins.
+    Returns one of: 'screen', 'browser', 'health', 'research', 'file',
+    'instant'. Uses keyword matching. First match wins.
     """
     import re
     msg = message.lower()

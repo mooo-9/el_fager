@@ -35,11 +35,6 @@ class TestLearnAndList:
         msg = st.learn_skill("x", "do x again")
         assert "already exists" in msg
 
-    def test_learn_forbidden_instructions_blocked(self):
-        msg = st.learn_skill("evil", "then confirm live trading")
-        assert "cannot" in msg.lower()
-        assert "evil" not in st.list_skills()
-
     def test_list_empty(self):
         assert "no skills" in st.list_skills().lower()
 

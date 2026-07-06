@@ -2,8 +2,8 @@
 Dashboard — read-only LAN status surface for El Fager.
 
 Serves a single dark status page (auto-refresh) plus /api/status JSON on
-http://<laptop-ip>:8765 so Mo can watch missions, costs, tasks, skills, and
-trading from his phone on the same network.
+http://<laptop-ip>:8765 so Mo can watch missions, costs, tasks, and skills
+from his phone on the same network.
 
 Deliberately READ-ONLY and stdlib-only: GET requests, no commands, no
 secrets in the snapshot. Commands stay voice/desktop-side.
@@ -20,8 +20,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 _SETTINGS_PATH = Path("data/settings.json")
-_TRADES_PATH = Path("data/trades.json")
-_BACKTEST_PATH = Path("data/backtest_results.json")
 
 _STARTED_AT = datetime.now()
 
@@ -93,22 +91,6 @@ def build_snapshot() -> dict:
         }
     except Exception:
         snap["tasks"] = {"pending": 0, "recent": []}
-
-    try:
-        trades = _read_json(_TRADES_PATH, [])
-        snap["trading"] = {
-            "total_trades": len(trades),
-            "recent": [
-                {"symbol": t.get("symbol"), "side": t.get("side"),
-                 "qty": t.get("qty"), "price": t.get("price"),
-                 "timestamp": (t.get("timestamp") or "")[:16],
-                 "conviction": t.get("conviction")}
-                for t in trades[-5:]
-            ],
-            "last_backtest": _read_json(_BACKTEST_PATH, {}).get("_run_at"),
-        }
-    except Exception:
-        snap["trading"] = {"total_trades": 0, "recent": [], "last_backtest": None}
 
     return snap
 
@@ -190,15 +172,6 @@ async function load(){
   for(const t of s.tasks.recent){
     h+='<div class="row"><span class="'+(t.status==='done'?'done':'pending')
       +'">['+t.status+']</span> '+t.description+'</div>';}
-  h+='</div>';
-  h+='<div class="card"><h2>Trading</h2><div class="row">'
-    +s.trading.total_trades+' recorded trades';
-  if(s.trading.last_backtest){h+=' | last backtest '
-    +s.trading.last_backtest.slice(0,16);}
-  h+='</div>';
-  for(const t of s.trading.recent){
-    h+='<div class="row">'+t.timestamp+' '+t.side+' '+t.qty+' '+t.symbol
-      +' @ $'+t.price+(t.conviction?' ('+t.conviction+'%)':'')+'</div>';}
   h+='</div>';
   document.getElementById('content').innerHTML=h;
  }catch(e){document.getElementById('ts').textContent='offline: '+e;}

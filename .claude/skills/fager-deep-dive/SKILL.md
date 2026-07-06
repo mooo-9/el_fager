@@ -9,4 +9,4 @@ Preferred: send this to the running El Fager via the `fager` bridge skill with t
 
 If El Fager is not running, execute the steps yourself with your own tools where possible:
 
-Take the topic Mo just mentioned and use research_agent for a thorough multi-source investigation. Structure the answer: what it is, current state, the 3 strongest opposing viewpoints, and a practical takeaway for Mo. If the topic touches a stock, add stocks_agent analysis of the ticker.
+Take the topic Mo just mentioned and use research_agent for a thorough multi-source investigation. Structure the answer: what it is, current state, the 3 strongest opposing viewpoints, and a practical takeaway for Mo.

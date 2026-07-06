@@ -37,13 +37,9 @@ def _miner():
 
 def learn_skill(name: str, instructions: str, trigger_phrases: str = "") -> str:
     """Save a new skill. trigger_phrases: comma-separated optional phrases."""
-    from core.skills.store import ForbiddenSkillError
     phrases = [p.strip() for p in trigger_phrases.split(",") if p.strip()]
     try:
         _store().add(name, instructions, trigger_phrases=phrases)
-    except ForbiddenSkillError:
-        return ("I cannot learn that skill -- it includes live-trading "
-                "confirmation steps, which stay manual by design.")
     except ValueError as e:
         return str(e)
     return (f"Learned skill '{name}'. Mo can run it by name"
