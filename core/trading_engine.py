@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -135,6 +136,7 @@ class TradingEngine:
         tp_price: float,
         conviction: float,
         rationale: str,
+        est_price: float = 0.0,
     ) -> None:
         from alpaca.trading.requests import (
             MarketOrderRequest,
@@ -153,7 +155,24 @@ class TradingEngine:
             stop_loss=StopLossRequest(stop_price=sl_price),
         )
         order = trading_client.submit_order(order_data)
+
+        # Market orders rarely have filled_avg_price at submit time — poll
+        # briefly, then fall back to the signal's reference price so the
+        # trade log never records $0.00 entries.
         filled_price = float(order.filled_avg_price or 0)
+        price_estimated = False
+        for _ in range(3):
+            if filled_price > 0:
+                break
+            time.sleep(1)
+            try:
+                refreshed = trading_client.get_order_by_id(order.id)
+                filled_price = float(refreshed.filled_avg_price or 0)
+            except Exception:
+                break
+        if filled_price <= 0:
+            filled_price = est_price
+            price_estimated = True
 
         trade = {
             "id": str(uuid.uuid4()),
@@ -168,6 +187,7 @@ class TradingEngine:
             "sl_price": sl_price,
             "tp_price": tp_price,
             "alpaca_order_id": str(order.id),
+            "price_estimated": price_estimated,
         }
         self._log_trade(trade)
 
@@ -256,6 +276,7 @@ class TradingEngine:
                     trading_client, symbol, qty,
                     sl_price, tp_price,
                     adjusted, analysis.rationale,
+                    est_price=current_price,
                 )
                 open_count += 1
                 held_symbols.add(symbol)

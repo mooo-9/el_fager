@@ -221,6 +221,49 @@ class TestPlaceBuy:
         assert float(req.stop_loss.stop_price) == 92.0
 
 
+    def test_unfilled_order_polls_then_falls_back_to_est_price(self, tmp_path, monkeypatch):
+        """Regression: market orders have filled_avg_price=None at submit time;
+        the trade log used to record price 0.0."""
+        monkeypatch.setattr(te, "_TRADES_PATH", tmp_path / "trades.json")
+        monkeypatch.setattr(te.time, "sleep", lambda s: None)
+        engine = _make_engine()
+        order = MagicMock()
+        order.filled_avg_price = None
+        order.id = "order-123"
+        client = MagicMock()
+        client.submit_order.return_value = order
+        client.get_order_by_id.return_value = order  # never fills during poll
+
+        engine._place_buy(client, "NVDA", 5, 92.0, 115.0, 78.3, "r",
+                          est_price=101.25)
+
+        import json
+        t = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))[0]
+        assert t["price"] == 101.25
+        assert t["price_estimated"] is True
+
+    def test_late_fill_price_picked_up_by_poll(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(te, "_TRADES_PATH", tmp_path / "trades.json")
+        monkeypatch.setattr(te.time, "sleep", lambda s: None)
+        engine = _make_engine()
+        order = MagicMock()
+        order.filled_avg_price = None
+        order.id = "order-123"
+        filled = MagicMock()
+        filled.filled_avg_price = "100.50"
+        client = MagicMock()
+        client.submit_order.return_value = order
+        client.get_order_by_id.return_value = filled
+
+        engine._place_buy(client, "NVDA", 5, 92.0, 115.0, 78.3, "r",
+                          est_price=99.0)
+
+        import json
+        t = json.loads((tmp_path / "trades.json").read_text(encoding="utf-8"))[0]
+        assert t["price"] == 100.50
+        assert t["price_estimated"] is False
+
+
 class TestMarketHours:
     def _with_now(self, engine, dt):
         fake = MagicMock(wraps=datetime)
