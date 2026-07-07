@@ -183,13 +183,8 @@ Benchmarks Mo should know (answer proactively):
 - Egypt SME loan rate: roughly CBE rate + 3-5% (so ~30-32% total in 2024-2025 era)
 - Rule of 72: years to double = 72 / annual_rate
 ═══ ARABIC FINANCIAL VOCABULARY ═══
-بورصة = stock market | سهم/اسهم = share/shares | توزيعات = dividends | عائد = yield/return
-مؤشر = index | محفظة = portfolio | سعر مستهدف = price target | ربحية = profitability
-صندوق استثماري = investment fund | عرض عام اولي = IPO | تحليل = analysis | توصية = recommendation
-سندات = bonds | منحنى العائد = yield curve | معدل الفائدة = interest rate | تضخم = inflation
-عجز = deficit | فائض = surplus | تدفق نقدي = cash flow | هامش الربح = profit margin
+معدل الفائدة = interest rate | تضخم = inflation | تدفق نقدي = cash flow | هامش الربح = profit margin
 رأس المال = capital | تقييم = valuation | عائد على الاستثمار = ROI | نقطة التعادل = break-even
-قيمة السهم الجوهرية = intrinsic value | معدل الخصم = discount rate | مضاعف = multiple
 مصروفات = expenses | دخل = income | فاتورة = invoice | ميزانية = budget | مدخرات = savings
 
 ══ EGYPT BUSINESS ENVIRONMENT ══
@@ -203,13 +198,6 @@ Foreign currency: since 2024 liberalization, USD/EGP ~48-50. FX accounts now wid
 Stock exchange: EGX managed by FRA (Financial Regulatory Authority). T+2 settlement.
 Central Bank (CBE): sets monetary policy. Key meetings: MPC meetings every 6-8 weeks.
 Key sectors: Banking, Real Estate, Petrochemicals, Fertilizers, FMCG, Tourism, Telecom.
-
-══ FINANCIAL RATIOS QUICK REFERENCE ══
-Valuation: P/E (price/earnings), P/B (price/book), P/S (price/sales), EV/EBITDA
-Profitability: Gross margin, EBIT margin, Net margin, ROE (return on equity), ROA (return on assets)
-Leverage: D/E (debt/equity), Interest coverage ratio, Current ratio, Quick ratio
-Growth: Revenue CAGR, EPS growth, FCF growth
-Quality: FCF yield, FCF/Net income (>0.8 = high quality earnings), Days Sales Outstanding
 
 Spotify music: play_music, pause_music, next_track, what_playing, set_volume, spotify_status.
 When Mo says "play [song/artist/mood]" — call play_music(query). Moods like "chill", "focus", "hype" work as queries.
@@ -4503,6 +4491,17 @@ def _select_tools(message: str, history: list | None = None) -> list:
 
 _MAX_TOOL_ITERATIONS = 15
 
+_HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
+
+
+def _window_history(hist: list) -> list:
+    """Last _HISTORY_WINDOW messages, trimmed so the slice never opens on an
+    assistant turn (the API requires the first message to be a user turn)."""
+    messages = list(hist)[-_HISTORY_WINDOW:]
+    while messages and messages[0]["role"] != "user":
+        messages = messages[1:]
+    return messages
+
 
 class Brain:
     def __init__(self, profile: dict, memory=None):
@@ -5856,7 +5855,40 @@ class Brain:
             )
         except Exception:
             pass
+        try:
+            u = response.usage
+            print(f"[El Fager] tokens: in={u.input_tokens} "
+                  f"cache_read={getattr(u, 'cache_read_input_tokens', 0) or 0} "
+                  f"cache_write={getattr(u, 'cache_creation_input_tokens', 0) or 0} "
+                  f"out={u.output_tokens}")
+        except Exception:
+            pass
         return response
+
+    def _build_system(self, memory_context: str = "") -> list:
+        """System prompt as content blocks. The static SYSTEM_PROMPT carries a
+        cache_control breakpoint (prompt caching: ~0.1x cost + lower latency on
+        repeat calls within the TTL); per-turn dynamic context (facts,
+        deadlines, memory hits) goes in a second, uncached block so it never
+        invalidates the cached prefix."""
+        blocks = [{
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }]
+        dynamic = ""
+        if self.memory is not None:
+            facts = self.memory.format_facts_for_prompt()
+            if facts:
+                dynamic += f"\n\n{facts}"
+            deadlines = self.memory.get_upcoming_deadlines()
+            if deadlines:
+                dynamic += f"\n\n{deadlines}"
+        if memory_context:
+            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        if dynamic:
+            blocks.append({"type": "text", "text": dynamic.strip()})
+        return blocks
 
     def chat_background(self, user_message: str, memory_context: str = "") -> str:
         """chat() with a fresh throwaway history. Background callers
@@ -5879,19 +5911,10 @@ class Brain:
         if self._logger:
             self._logger.log("user", user_message)
 
-        system = SYSTEM_PROMPT
-        if self.memory is not None:
-            facts = self.memory.format_facts_for_prompt()
-            if facts:
-                system += f"\n\n{facts}"
-            deadlines = self.memory.get_upcoming_deadlines()
-            if deadlines:
-                system += f"\n\n{deadlines}"
-        if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = self._build_system(memory_context)
 
         hist.append({"role": "user", "content": user_message})
-        messages = list(hist)
+        messages = _window_history(hist)
 
         tools_used: list[str] = []
         last_text = ""
@@ -6005,16 +6028,7 @@ class Brain:
                 memory_context,
             )
 
-        system = SYSTEM_PROMPT
-        if self.memory is not None:
-            facts = self.memory.format_facts_for_prompt()
-            if facts:
-                system += f"\n\n{facts}"
-            deadlines = self.memory.get_upcoming_deadlines()
-            if deadlines:
-                system += f"\n\n{deadlines}"
-        if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = self._build_system(memory_context)
 
         content = [
             {

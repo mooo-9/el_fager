@@ -91,3 +91,50 @@ class TestMultiTurnToolSelection:
     def test_non_string_content_blocks_ignored(self):
         history = [{"role": "user", "content": [{"type": "tool_result"}]}]
         _select_tools("hello", history)  # must not raise
+
+
+class TestHistoryWindow:
+    def test_short_history_passes_through(self):
+        from core.brain import _window_history
+        hist = [{"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"}]
+        assert _window_history(hist) == hist
+
+    def test_long_history_is_capped(self):
+        from core.brain import _HISTORY_WINDOW, _window_history
+        hist = []
+        for i in range(30):
+            hist.append({"role": "user", "content": f"u{i}"})
+            hist.append({"role": "assistant", "content": f"a{i}"})
+        windowed = _window_history(hist)
+        assert len(windowed) <= _HISTORY_WINDOW
+        assert windowed[0]["role"] == "user"
+        assert windowed[-1] == hist[-1]
+
+    def test_window_never_opens_on_assistant_turn(self):
+        from core.brain import _window_history
+        # Odd-length history: naive slicing would start on an assistant turn
+        hist = [{"role": "assistant", "content": "orphan"}]
+        for i in range(15):
+            hist.append({"role": "user", "content": f"u{i}"})
+            hist.append({"role": "assistant", "content": f"a{i}"})
+        windowed = _window_history(hist)
+        assert windowed[0]["role"] == "user"
+
+
+class TestSystemPromptCaching:
+    def test_static_prefix_carries_cache_control(self):
+        brain = _make_brain()
+        blocks = brain._build_system()
+        assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_dynamic_context_goes_in_uncached_block(self):
+        brain = _make_brain()
+        blocks = brain._build_system(memory_context="Mo asked about X")
+        assert len(blocks) == 2
+        assert "cache_control" not in blocks[1]
+        assert "Mo asked about X" in blocks[1]["text"]
+
+    def test_no_dynamic_context_means_single_block(self):
+        brain = _make_brain()
+        assert len(brain._build_system()) == 1
