@@ -279,6 +279,10 @@ class HudWebView(QWebEngineView):
             lambda ok: self._on_poll(ok, tries),
         )
 
+    # Bounded bridge wait: 50 × 200 ms = 10 s. If the React bundle hasn't
+    # mounted by then, give up loudly instead of polling forever.
+    _MAX_BRIDGE_TRIES = 50
+
     def _on_poll(self, ok, tries: int):
         if ok:
             if not self._bridge_ready:
@@ -288,8 +292,13 @@ class HudWebView(QWebEngineView):
                 for js in self._pending_js:
                     self.page().runJavaScript(js)
                 self._pending_js.clear()
-        elif tries < 150:
-            QTimer.singleShot(300, lambda: self._poll_bridge(tries + 1))
+        elif tries < self._MAX_BRIDGE_TRIES:
+            QTimer.singleShot(200, lambda: self._poll_bridge(tries + 1))
+        else:
+            print("[HUD] Bridge failed to initialise within 10 s — "
+                  "HUD stays static; the native assistant is unaffected.",
+                  flush=True)
+            self._pending_js.clear()
 
     # ------------------------------------------------------------------ #
     #  Public API                                                          #

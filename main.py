@@ -49,7 +49,6 @@ from core.voice_in import VoiceInput
 from core.voice_out import VoiceOutput
 from core.wake_word import WakeWordListener
 from ui.overlay import OverlayWindow
-from ui.hud_window import HudWindow
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -62,6 +61,7 @@ from ui.hud_window import HudWindow
 
 class HotkeySignaler(QObject):
     triggered = pyqtSignal()
+    hud_triggered = pyqtSignal()
     analyze_triggered = pyqtSignal()
     memory_query_triggered = pyqtSignal()
     memory_clear_triggered = pyqtSignal()
@@ -169,19 +169,19 @@ def main():
         _icon_img = _make_tray_image().resize((256, 256), Image.LANCZOS)
         _icon_img.save(str(_icon_path), format="ICO", sizes=[(256,256),(64,64),(32,32),(16,16)])
 
-    # ── Primary window: full-screen JARVIS HUD ─────────────────────────────
-    hud = HudWindow(voice_in, brain, voice_out, memory)
-    hud.setWindowIcon(QIcon(str(_icon_path)))
-
-    # ── Secondary window: compact card (accessible via tray) ───────────────
+    # ── Primary window: native compact assistant ───────────────────────────
     overlay = OverlayWindow(voice_in, brain, voice_out, memory)
     overlay.setWindowIcon(QIcon(str(_icon_path)))
 
+    # ── Optional rich HUD: constructed lazily on first request ─────────────
+    # QWebEngine (Chromium) is heavy — it must not spin up at startup.
+    _hud_ref: list = [None]
+
     # ── Hotkey bridge ──────────────────────────────────────────────────────
     signaler = HotkeySignaler()
-    signaler.triggered.connect(hud.toggle)           # Ctrl+Space → HUD
-    signaler.analyze_triggered.connect(hud.analyze_screen)
-    signaler.memory_query_triggered.connect(hud.query_memory)
+    signaler.triggered.connect(overlay.toggle)       # Ctrl+Space → assistant
+    signaler.analyze_triggered.connect(overlay.analyze_screen)
+    signaler.memory_query_triggered.connect(overlay.query_memory)
 
     def _on_memory_clear():
         from PyQt6.QtWidgets import QMessageBox
@@ -201,19 +201,31 @@ def main():
 
     # ── Wake word listener ─────────────────────────────────────────────────
     wake_listener = WakeWordListener(on_detected=signaler.wake_word_detected.emit)
-    signaler.wake_word_detected.connect(hud.wake_word_activate)
-    hud.set_wake_listener(wake_listener)
-    # Compact overlay still needs its wake listener set for the HUD-canvas path
-    overlay.set_wake_listener(wake_listener)
+    signaler.wake_word_detected.connect(overlay.wake_word_activate)
+    overlay.set_wake_listener(wake_listener)  # also builds the overlay UI
     wake_listener.start()
+
+    def _get_hud():
+        """Construct the full-screen JARVIS HUD on first use (main thread only)."""
+        if _hud_ref[0] is None:
+            from ui.hud_window import HudWindow
+            hud = HudWindow(voice_in, brain, voice_out, memory)
+            hud.setWindowIcon(QIcon(str(_icon_path)))
+            hud.set_wake_listener(wake_listener)
+            _hud_ref[0] = hud
+        return _hud_ref[0]
+
+    # HUD opens from the tray; pystray callbacks run off the main thread, so
+    # marshal construction through a Qt signal.
+    signaler.hud_triggered.connect(lambda: _get_hud().toggle())
 
     # ── System tray ────────────────────────────────────────────────────────
     def on_tray_open(icon, item):
         signaler.triggered.emit()
 
-    def on_tray_compact(icon, item):
-        """Show the compact card overlay instead of the full HUD."""
-        overlay.toggle()
+    def on_tray_hud(icon, item):
+        """Open the optional full-screen JARVIS HUD (lazily constructed)."""
+        signaler.hud_triggered.emit()
 
     def on_tray_analyze(icon, item):
         signaler.analyze_triggered.emit()
@@ -253,8 +265,8 @@ def main():
         icon=_make_tray_image(),
         title="El Fager",
         menu=pystray.Menu(
-            pystray.MenuItem("Open JARVIS HUD  (Ctrl+Space)", on_tray_open),
-            pystray.MenuItem("Compact Mode", on_tray_compact),
+            pystray.MenuItem("Open Assistant  (Ctrl+Space)", on_tray_open),
+            pystray.MenuItem("Open JARVIS HUD", on_tray_hud),
             pystray.MenuItem("Analyze Screen", on_tray_analyze),
             pystray.MenuItem("Memory", pystray.Menu(
                 pystray.MenuItem("What do you know about me?", on_tray_memory_query),
@@ -307,8 +319,14 @@ def main():
     # brain_fn MUST be chat_background: proactive runs in a daemon thread and
     # must never splice its turns into the voice pipeline's live conversation.
     proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat_background)
-    # Wire proactive notifications to the HUD banner (thread-safe via Qt signal)
-    proactive.set_hud_notify(hud.notify_hud)
+
+    def _notify_hud(scene, prefix, highlight, suffix, tag):
+        """Forward proactive banners to the HUD only if it has been opened."""
+        hud = _hud_ref[0]
+        if hud is not None:
+            hud.notify_hud(scene, prefix, highlight, suffix, tag)
+
+    proactive.set_hud_notify(_notify_hud)
     proactive.start()
 
     # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
@@ -326,14 +344,14 @@ def main():
         if already_briefed_today():
             return
         mark_briefed_today()
-        hud.run_briefing(get_briefing_prompt())
+        overlay.run_briefing(get_briefing_prompt())
 
     QTimer.singleShot(3000, _run_daily_briefing)
 
-    # Show HUD on startup
-    hud.show()
-    hud.raise_()
-    hud.activateWindow()
+    # Show the assistant on startup
+    overlay.show()
+    overlay.raise_()
+    overlay.activateWindow()
 
     print("[El Fager] Running. Press Ctrl+Space to activate.")
     sys.exit(app.exec())

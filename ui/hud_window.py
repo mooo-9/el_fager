@@ -1,13 +1,14 @@
 """
-El Fager — Full-screen JARVIS HUD window.
+El Fager — Full-screen JARVIS HUD window (optional rich surface).
 
-This is the primary window.  The old small-card OverlayWindow stays alive
-for "compact mode" (tray → Compact) but the HUD is what Ctrl+Space opens.
+The native OverlayWindow is the primary surface (Ctrl+Space). This window
+is constructed lazily by main.py the first time it's requested from the
+tray — QWebEngine/Chromium never spins up at startup.
 
 Lifecycle
 ---------
   Boot scene (3.8 s auto-advance) → Standby scene (idle)
-  Ctrl+Space / tray → show + go to Voice scene + start pipeline
+  Tray → "Open JARVIS HUD" → show + go to Voice scene + start pipeline
   Escape          → hide (go back to tray)
   Pipeline done   → show contextual data scene for 6 s → Standby
 
