@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 _FACTS_FILE = Path(__file__).parent.parent / "data" / "facts.json"
+_MAX_FACTS = 300  # facts.json growth bound — oldest non-deadline facts drop first
 
 
 class Memory:
@@ -22,7 +23,14 @@ class Memory:
     def __init__(self):
         self._collection = None
         self._ready = False
+        self._failed = False
         threading.Thread(target=self._setup, daemon=True).start()
+
+    @property
+    def degraded(self) -> bool:
+        """True when vector-memory init finished and FAILED (vs still loading).
+        Surfaced in the UI so a broken ChromaDB never fails silently again."""
+        return self._failed
 
     def _setup(self):
         try:
@@ -49,6 +57,7 @@ class Memory:
         except Exception as e:
             print(f"[El Fager] Memory init failed (non-fatal): {e}")
             self._ready = False
+            self._failed = True
 
     # ── Layer 1: ChromaDB conversation summaries ──────────────────────────
 
@@ -124,6 +133,14 @@ class Memory:
                 "created_at": datetime.now().isoformat(),
                 "source": "explicit",
             })
+            # Growth bound: drop the oldest non-deadline facts past the cap.
+            if len(data["facts"]) > _MAX_FACTS:
+                facts = sorted(data["facts"], key=lambda f: f.get("created_at", ""))
+                for f in facts:
+                    if len(data["facts"]) <= _MAX_FACTS:
+                        break
+                    if f.get("category") != "deadline":
+                        data["facts"].remove(f)
             self._save_facts(data)
             return f"Noted: {content}"
         except Exception as e:

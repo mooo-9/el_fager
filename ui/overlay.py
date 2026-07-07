@@ -574,6 +574,13 @@ class OverlayWindow(QWidget):
         except Exception:
             pass
 
+        # Vector memory failed to load (facts still work)
+        try:
+            if getattr(self.memory, "degraded", False):
+                indicators.append("⚠ Memory off")
+        except Exception:
+            pass
+
         if indicators:
             self._status_bar.setText("  ·  ".join(indicators))
             self._status_bar.setVisible(True)

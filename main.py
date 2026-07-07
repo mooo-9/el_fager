@@ -290,52 +290,109 @@ def main():
     # ── Windows startup entry ──────────────────────────────────────────────
     _register_startup()
 
-    # ── Reminder checker ──────────────────────────────────────────────────
-    from tools.reminder_tool import check_reminders
-    reminder_timer = QTimer()
-    reminder_timer.setInterval(30_000)  # every 30 seconds
-    reminder_timer.timeout.connect(check_reminders)
-    reminder_timer.start()
+    # ── Background services (deferred past first paint) ────────────────────
+    # None of these are needed in the first seconds; starting them via a
+    # singleShot lets the event loop begin and the assistant window paint
+    # before scheduler/proactive/dashboard imports and threads spin up.
+    _services: dict = {}
 
-    # ── Clipboard history monitor ─────────────────────────────────────────────
-    from tools.clipboard_history_tool import start_clipboard_monitor
-    start_clipboard_monitor()
+    def _start_background_services():
+        # Reminder checker
+        from tools.reminder_tool import check_reminders
+        reminder_timer = QTimer()
+        reminder_timer.setInterval(30_000)  # every 30 seconds
+        reminder_timer.timeout.connect(check_reminders)
+        reminder_timer.start()
+        _services["reminder_timer"] = reminder_timer
 
-    # ── Proactive scheduler ───────────────────────────────────────────────────
-    from core.scheduler import _set_instance
-    from core.defaults import seed_default_schedules
-    seed_default_schedules()           # no-op if schedules already exist
+        # Clipboard history monitor
+        from tools.clipboard_history_tool import start_clipboard_monitor
+        start_clipboard_monitor()
 
-    scheduler = ElFagerScheduler()
-    _set_instance(scheduler)          # share the live instance with all tool code
-    try:
-        scheduler.set_speak_callback(voice_out.speak)
-    except Exception:
-        pass
-    scheduler.start()
+        # Proactive scheduler
+        from core.scheduler import _set_instance
+        from core.defaults import seed_default_schedules
+        seed_default_schedules()           # no-op if schedules already exist
 
-    # ── Proactive engine (condition-based, autonomous checks) ─────────────────
-    from core.proactive import ProactiveEngine
-    # brain_fn MUST be chat_background: proactive runs in a daemon thread and
-    # must never splice its turns into the voice pipeline's live conversation.
-    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat_background)
+        scheduler = ElFagerScheduler()
+        _set_instance(scheduler)          # share the live instance with all tool code
+        try:
+            scheduler.set_speak_callback(voice_out.speak)
+        except Exception:
+            pass
+        scheduler.start()
+        _services["scheduler"] = scheduler
 
-    def _notify_hud(scene, prefix, highlight, suffix, tag):
-        """Forward proactive banners to the HUD only if it has been opened."""
-        hud = _hud_ref[0]
-        if hud is not None:
-            hud.notify_hud(scene, prefix, highlight, suffix, tag)
+        # Proactive engine (condition-based, autonomous checks)
+        from core.proactive import ProactiveEngine
+        # brain_fn MUST be chat_background: proactive runs in a daemon thread and
+        # must never splice its turns into the voice pipeline's live conversation.
+        proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat_background)
 
-    proactive.set_hud_notify(_notify_hud)
-    proactive.start()
+        def _notify_hud(scene, prefix, highlight, suffix, tag):
+            """Forward proactive banners to the HUD only if it has been opened."""
+            hud = _hud_ref[0]
+            if hud is not None:
+                hud.notify_hud(scene, prefix, highlight, suffix, tag)
 
-    # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
-    from tools.macro_tool import set_speak_callback as _macro_speak_cb
-    _macro_speak_cb(voice_out.speak)
+        proactive.set_hud_notify(_notify_hud)
+        proactive.start()
+        _services["proactive"] = proactive
 
-    # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
-    from core.dashboard import start_dashboard
-    start_dashboard()
+        # Macro speak callback (enables mid-macro TTS announcements)
+        from tools.macro_tool import set_speak_callback as _macro_speak_cb
+        _macro_speak_cb(voice_out.speak)
+
+        # Read-only LAN dashboard (phone-viewable status page)
+        from core.dashboard import start_dashboard
+        start_dashboard()
+
+        print("[El Fager] Background services started.")
+
+    QTimer.singleShot(1500, _start_background_services)
+
+    # ── Startup health check (daemon thread, ~10 s after launch) ───────────
+    def _startup_health_check():
+        problems = []
+
+        key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not key or key.startswith("sk-ant-xxx"):
+            problems.append("ANTHROPIC_API_KEY missing — the brain cannot answer")
+        else:
+            try:
+                import anthropic
+                anthropic.Anthropic().models.list()  # free auth probe
+            except anthropic.AuthenticationError:
+                problems.append("Anthropic API key invalid — check .env")
+            except Exception:
+                pass  # network blips are not startup-fatal
+
+        if not os.getenv("GROQ_API_KEY", "").strip():
+            problems.append("GROQ_API_KEY not set — slower local Whisper + Edge TTS in use")
+
+        if getattr(memory, "degraded", False):
+            problems.append("Vector memory failed to load (facts still work)")
+
+        if not problems:
+            print("[El Fager] Health check: all critical services OK.")
+            return
+        msg = " | ".join(problems)
+        print(f"[El Fager] Health check: {msg}")
+        try:
+            from winotify import Notification
+            Notification(
+                app_id="El Fager",
+                title="El Fager health check",
+                msg=msg[:256],
+                duration="long",
+            ).show()
+        except Exception:
+            pass
+
+    QTimer.singleShot(
+        10_000,
+        lambda: threading.Thread(target=_startup_health_check, daemon=True).start(),
+    )
 
     # ── Daily briefing ────────────────────────────────────────────────────────
     from core.briefing import already_briefed_today, mark_briefed_today, get_briefing_prompt
