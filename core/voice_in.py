@@ -7,8 +7,9 @@ Speech-to-text with automatic backend selection (best available wins):
 
 VAD (end-of-speech detection):
   Silero VAD neural network loads after Whisper. Replaces the old RMS timer.
-  Recording stops only after 2.5 s of frames the model classifies as non-speech,
-  so natural mid-sentence pauses never trigger an early cut-off.
+  Recording stops after 1.0 s of frames the model classifies as non-speech —
+  short enough to feel responsive, long enough for natural mid-sentence pauses
+  (typically 200–800 ms) not to trigger an early cut-off.
 """
 
 import io
@@ -28,13 +29,13 @@ MAX_RECORD_SECONDS = 60
 # Silero VAD settings
 VAD_CHUNK = 512           # 32 ms at 16 kHz — required frame size
 SPEECH_THRESHOLD = 0.5    # probability above which a frame counts as speech
-END_SILENCE_SEC = 2.5     # seconds of continuous non-speech before stopping
+END_SILENCE_SEC = 1.0     # seconds of continuous non-speech before stopping
 TRAIL_KEEP_SEC = 0.4      # keep a short tail so Whisper sees the sentence boundary
 
 # RMS fallback settings (if Silero VAD fails to load)
 RMS_CHUNK_SEC = 0.1
 RMS_THRESHOLD = 0.01
-RMS_SILENCE_SEC = 2.5
+RMS_SILENCE_SEC = 1.5     # RMS can't tell soft speech from silence — keep a margin
 
 # Hallucination guards.
 # Mo speaks Arabic/English/French (Arabizi decodes as ar or en). Anything else

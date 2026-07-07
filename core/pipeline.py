@@ -1,3 +1,8 @@
+import queue
+import re
+import threading
+import time
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from core.brain import Brain
@@ -32,6 +37,25 @@ def _is_screenshot_trigger(text: str) -> bool:
 def _is_end_phrase(text: str) -> bool:
     words = text.lower().strip().rstrip(".!،").split()
     return len(words) <= 3 and any(p in text.lower() for p in END_PHRASES)
+
+
+# Sentence boundary for streaming TTS: an ender followed by whitespace (so
+# "3.5" never splits mid-number), or a newline. Includes the Arabic '؟'.
+_SENT_END_RE = re.compile(r"[.!?؟…]\s|\n")
+
+
+def _pop_sentences(state: dict) -> "list[str]":
+    """Remove and return all complete sentences from state['buf']."""
+    sentences = []
+    while True:
+        m = _SENT_END_RE.search(state["buf"])
+        if not m:
+            return sentences
+        cut = m.end()
+        s = state["buf"][:cut].strip()
+        state["buf"] = state["buf"][cut:]
+        if s:
+            sentences.append(s)
 
 
 class PipelineWorker(QThread):
@@ -98,7 +122,9 @@ class PipelineWorker(QThread):
                         break  # follow-up window closed — conversation over
 
                     self.state_update.emit("processing", "Transcribing...", "")
+                    t_stt = time.monotonic()
                     transcript = self.voice_in.transcribe(audio)
+                    print(f"[El Fager] timing: STT {time.monotonic() - t_stt:.2f}s")
                     if not transcript:
                         if turn == 0:
                             self.error.emit("Nothing heard — please try again")
@@ -119,21 +145,64 @@ class PipelineWorker(QThread):
             self.done.emit()
 
     def _one_turn(self, transcript: str) -> None:
-        """Process one utterance: think, remember, speak."""
+        """Process one utterance: think, remember, speak.
+
+        The Claude response streams in; complete sentences are handed to
+        voice_out.speak_stream as they arrive, so speech starts on the first
+        sentence instead of after the full reply is buffered."""
+        t_start = time.monotonic()
         self.state_update.emit("processing", transcript, "")
         memory_context = self.memory.get_recent_context(transcript)
 
-        if _is_screenshot_trigger(transcript):
-            from tools.screen_tool import capture_screenshot, delete_temp_screenshot
-            b64, tmp_path = capture_screenshot()
-            if b64 is None:
-                self.error.emit("Screenshot failed — couldn't capture screen")
-                return
-            response = self.brain.chat_with_screenshot(transcript, b64, memory_context)
-            delete_temp_screenshot(tmp_path)
-        else:
-            response = self.brain.chat(transcript, memory_context)
+        sent_q: "queue.Queue[str | None]" = queue.Queue()
+        state = {"buf": ""}
+        streamed = threading.Event()
+        spoke_state = {"emitted": False}
+        first_token = [0.0]
+
+        def on_text(delta: str) -> None:
+            if not first_token[0]:
+                first_token[0] = time.monotonic()
+                print(f"[El Fager] timing: first Claude token "
+                      f"+{first_token[0] - t_start:.2f}s")
+            state["buf"] += delta
+            for s in _pop_sentences(state):
+                streamed.set()
+                if not spoke_state["emitted"]:
+                    spoke_state["emitted"] = True
+                    self.state_update.emit("speaking", transcript, "")
+                sent_q.put(s)
+
+        speaker = threading.Thread(
+            target=self.voice_out.speak_stream,
+            args=(iter(sent_q.get, None),),
+            daemon=True,
+        )
+        speaker.start()
+
+        try:
+            if _is_screenshot_trigger(transcript):
+                from tools.screen_tool import capture_screenshot, delete_temp_screenshot
+                b64, tmp_path = capture_screenshot()
+                if b64 is None:
+                    self.error.emit("Screenshot failed — couldn't capture screen")
+                    return
+                response = self.brain.chat_with_screenshot(
+                    transcript, b64, memory_context, on_text=on_text
+                )
+                delete_temp_screenshot(tmp_path)
+            else:
+                response = self.brain.chat(transcript, memory_context, on_text=on_text)
+        finally:
+            tail = state["buf"].strip()
+            if tail:
+                streamed.set()
+                sent_q.put(tail)
+            sent_q.put(None)  # end-of-stream sentinel — speaker exits after draining
 
         self.memory.store_conversation_summary(transcript, response)
         self.state_update.emit("speaking", transcript, response)
-        self.voice_out.speak(response)
+        speaker.join()
+        if not streamed.is_set():
+            # Nothing streamed (API error text, offline fallback) — speak it whole.
+            self.voice_out.speak(response)

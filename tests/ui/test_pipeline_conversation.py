@@ -8,6 +8,7 @@ from core.pipeline import (
     FOLLOWUP_WINDOW_SEC,
     PipelineWorker,
     _is_end_phrase,
+    _pop_sentences,
 )
 
 
@@ -37,7 +38,7 @@ class FakeBrain:
         self.chats = []
         self.resets = 0
 
-    def chat(self, text, memory_context=None):
+    def chat(self, text, memory_context=None, on_text=None):
         self.chats.append(text)
         return f"reply to: {text}"
 
@@ -51,6 +52,10 @@ class FakeVoiceOut:
 
     def speak(self, text):
         self.spoken.append(text)
+
+    def speak_stream(self, sentences):
+        for s in sentences:
+            self.spoken.append(s)
 
 
 class FakeMemory:
@@ -107,6 +112,58 @@ class TestConversationMode:
         assert w.brain.resets == 1
         # No mic activity for text input
         assert w.voice_in.timeouts == []
+
+
+class StreamingFakeBrain(FakeBrain):
+    """Streams the reply through on_text in arbitrary-sized deltas, the way
+    the real Brain does with the Anthropic streaming API."""
+
+    def chat(self, text, memory_context=None, on_text=None):
+        self.chats.append(text)
+        if on_text is not None:
+            for delta in ("First sen", "tence. Sec", "ond sentence."):
+                on_text(delta)
+        return "First sentence. Second sentence."
+
+
+class TestStreamingSpeech:
+    def test_streamed_sentences_spoken_in_order_without_duplicate(self, qapp):
+        w = PipelineWorker(
+            voice_in=FakeVoiceIn(["hello"]),
+            brain=StreamingFakeBrain(),
+            voice_out=FakeVoiceOut(),
+            memory=FakeMemory(),
+        )
+        w.run()
+        # Sentence 1 streams as soon as its boundary arrives; the tail is
+        # flushed after chat() returns. The full reply is NOT re-spoken.
+        assert w.voice_out.spoken == ["First sentence.", "Second sentence."]
+
+    def test_non_streaming_brain_falls_back_to_full_speak(self, qapp):
+        w = _worker(["hello"])
+        w.run()
+        assert w.voice_out.spoken == ["reply to: hello"]
+
+
+class TestPopSentences:
+    def test_splits_on_period_before_space(self):
+        state = {"buf": "One done. Two in progress"}
+        assert _pop_sentences(state) == ["One done."]
+        assert state["buf"] == "Two in progress"
+
+    def test_decimal_number_not_split(self):
+        state = {"buf": "It costs 3.5 dollars"}
+        assert _pop_sentences(state) == []
+        assert state["buf"] == "It costs 3.5 dollars"
+
+    def test_arabic_question_mark(self):
+        state = {"buf": "كيف حالك؟ تمام"}
+        assert _pop_sentences(state) == ["كيف حالك؟"]
+
+    def test_newline_is_a_boundary(self):
+        state = {"buf": "line one\nline two"}
+        assert _pop_sentences(state) == ["line one"]
+        assert state["buf"] == "line two"
 
 
 class TestEndPhrase:

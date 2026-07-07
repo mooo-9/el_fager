@@ -5830,11 +5830,22 @@ class Brain:
                 raise  # let _dispatch_tool retry with backoff
             return f"Tool error ({name}): {e}"
 
-    def _create_message(self, _telemetry_source: str, **kwargs):
+    def _create_message(self, _telemetry_source: str, on_text=None, **kwargs):
         """All brain API calls route through here: times the call and records
-        usage/cost telemetry. Telemetry never raises; API errors propagate."""
+        usage/cost telemetry. Telemetry never raises; API errors propagate.
+
+        on_text: optional callable fired with each text delta as it streams
+        from the API (used by the voice pipeline to start TTS on the first
+        sentence instead of waiting for the full response). When None the
+        call is a plain blocking create() — identical to the old behaviour."""
         started = time.monotonic()
-        response = self.client.messages.create(**kwargs)
+        if on_text is None:
+            response = self.client.messages.create(**kwargs)
+        else:
+            with self.client.messages.stream(**kwargs) as stream:
+                for delta in stream.text_stream:
+                    on_text(delta)
+                response = stream.get_final_message()
         try:
             from core.telemetry import record_api_usage
             record_api_usage(
@@ -5857,10 +5868,11 @@ class Brain:
         return self.chat(user_message, memory_context, history=[])
 
     def chat(self, user_message: str, memory_context: str = "",
-             history: list | None = None) -> str:
+             history: list | None = None, on_text=None) -> str:
         # history=None -> the shared interactive conversation (voice pipeline
         # owns it and resets it at conversation end). Background callers pass
         # their own list via chat_background().
+        # on_text -> optional streaming callback, see _create_message.
         hist = history if history is not None else self.conversation_history
 
         # Log user turn
@@ -5888,6 +5900,7 @@ class Brain:
             for _iteration in range(_MAX_TOOL_ITERATIONS):
                 response = self._create_message(
                     "chat",
+                    on_text=on_text,
                     model=self._model,
                     max_tokens=1024,
                     system=system,
@@ -5979,7 +5992,8 @@ class Brain:
                 self._logger.log("assistant", text, tools_used)
             return text
 
-    def chat_with_screenshot(self, user_input: str, base64_image: str, memory_context: str = "") -> str:
+    def chat_with_screenshot(self, user_input: str, base64_image: str,
+                             memory_context: str = "", on_text=None) -> str:
         from tools.screen_tool import ocr_screenshot
 
         # Skip the vision API call entirely if we're already known to be offline;
@@ -6028,6 +6042,7 @@ class Brain:
             while True:
                 response = self._create_message(
                     "screenshot",
+                    on_text=on_text,
                     model=self._model,
                     max_tokens=1024,
                     system=system,

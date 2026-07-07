@@ -92,14 +92,6 @@ def _clean(text: str) -> str:
     return text.strip()
 
 
-def _play_wav_bytes(data: bytes):
-    """Write WAV bytes to a temp file and play through pygame, then delete."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    tmp.write(data)
-    tmp.close()
-    _play_file(tmp.name)
-
-
 def _play_file(path: str):
     """Load and play an audio file through pygame, block until done, then clean up."""
     try:
@@ -146,23 +138,66 @@ class VoiceOutput:
         if not text:
             return
 
+        with _SPEAK_LOCK:
+            path = self._synthesize(text)
+            if path:
+                _play_file(path)
+
+    def speak_stream(self, sentences):
+        """Speak an iterable of text chunks with synth/playback pipelining:
+        while chunk N plays, chunk N+1 is already being synthesized, so
+        first audio starts as soon as the first sentence is ready and there
+        are no synth gaps between sentences. Holds _SPEAK_LOCK for the whole
+        stream so proactive/scheduler speech can't interleave mid-reply."""
+        import queue as _queue
+        audio_q: "_queue.Queue[str | None]" = _queue.Queue(maxsize=2)
+
+        def _synth_worker():
+            try:
+                for chunk in sentences:
+                    chunk = _clean(chunk)
+                    if not chunk:
+                        continue
+                    path = self._synthesize(chunk)
+                    if path:
+                        audio_q.put(path)
+            finally:
+                audio_q.put(None)  # end-of-stream sentinel
+
+        with _SPEAK_LOCK:
+            worker = threading.Thread(target=_synth_worker, daemon=True)
+            worker.start()
+            first = True
+            while True:
+                path = audio_q.get()
+                if path is None:
+                    break
+                if first:
+                    print("[El Fager] timing: first TTS audio playing.")
+                    first = False
+                _play_file(path)
+
+    # ── Synthesis (backend selection: Groq Orpheus → Edge TTS) ──────────────────
+
+    def _synthesize(self, text: str) -> "str | None":
+        """Synthesize text to a temp audio file; return its path (None on failure)."""
         arabic = _is_arabic(text)
         groq_key = os.getenv("GROQ_API_KEY", "").strip()
 
-        with _SPEAK_LOCK:
-            # ── 1. Try Groq Orpheus (skip if user chose edge in settings) ───────
-            use_groq = self._backend != "edge"
-            if use_groq and groq_key and not groq_key.startswith("gsk_xxx"):
-                if self._speak_groq(text, arabic):
-                    return
+        # ── 1. Try Groq Orpheus (skip if user chose edge in settings) ───────
+        use_groq = self._backend != "edge"
+        if use_groq and groq_key and not groq_key.startswith("gsk_xxx"):
+            path = self._synth_groq(text, arabic)
+            if path:
+                return path
 
-            # ── 2. Fall back to Edge TTS ─────────────────────────────────────
-            self._speak_edge(text, arabic)
+        # ── 2. Fall back to Edge TTS ─────────────────────────────────────
+        return self._synth_edge(text, arabic)
 
     # ── Groq Orpheus ────────────────────────────────────────────────────────────
 
-    def _speak_groq(self, text: str, arabic: bool) -> bool:
-        """Returns True on success, False on any failure (caller falls through)."""
+    def _synth_groq(self, text: str, arabic: bool) -> "str | None":
+        """Returns a temp WAV path on success, None on any failure (caller falls through)."""
         try:
             from groq import Groq
             client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -176,8 +211,10 @@ class VoiceOutput:
                 input=text,
                 response_format="wav",
             )
-            _play_wav_bytes(response.read())
-            return True
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp.write(response.read())
+            tmp.close()
+            return tmp.name
 
         except Exception as e:
             err = str(e)
@@ -192,19 +229,24 @@ class VoiceOutput:
                 )
             else:
                 print(f"[El Fager] Groq TTS error: {e}")
-            return False
+            return None
 
     # ── Edge TTS (fallback) ─────────────────────────────────────────────────────
 
-    def _speak_edge(self, text: str, arabic: bool):
+    def _synth_edge(self, text: str, arabic: bool) -> "str | None":
         voice = self._voice_ar if arabic else self._voice_en
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tmp.close()
         try:
             asyncio.run(self._edge_synthesize(text, tmp.name, voice))
-            _play_file(tmp.name)
+            return tmp.name
         except Exception as e:
             print(f"[El Fager] Edge TTS error: {e}")
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+            return None
 
     async def _edge_synthesize(self, text: str, path: str, voice: str):
         import edge_tts
