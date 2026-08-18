@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -4775,6 +4776,40 @@ def _disabled_tool_names() -> set[str]:
     return names
 
 
+def _boundaried(phrases, trailing: bool = True):
+    """Compile phrases into one alternation that matches on word boundaries.
+
+    Plain substring matching was firing groups on fragments of unrelated
+    words: "roi" inside "android" pulled in the finance tools, "play" inside
+    "display" pulled in media, "ping" inside "sleeping" pulled in network.
+
+    The boundary assertions are added per edge, and only where the phrase's
+    own edge is a word character. Seven triggers begin or end on punctuation
+    or a space — "ctrl+", "wa ", ".exe", "code:", "bill ", "qr ", ".zip" — and
+    a blanket word boundary would stop every one of them ever matching again.
+
+    trailing=False is for stem hints like "analyz" and "summar", which are
+    meant to catch "analyze" and "summarise" and so must stay open-ended.
+    """
+    parts = []
+    for phrase in phrases:
+        if not phrase:
+            continue
+        pattern = re.escape(phrase)
+        if phrase[0].isalnum() or phrase[0] == "_":
+            pattern = r"(?<!\w)" + pattern
+        if trailing and (phrase[-1].isalnum() or phrase[-1] == "_"):
+            pattern = pattern + r"(?!\w)"
+        parts.append(pattern)
+    return re.compile("|".join(parts), re.IGNORECASE)
+
+
+# Compiled once at import. Rebuilding 32 alternations per turn would cost more
+# than the substring scan it replaces.
+_GROUP_RE = {group: _boundaried(keywords)
+             for group, keywords in _GROUP_TRIGGERS.items()}
+
+
 def _select_tools(message: str, history: list | None = None) -> list:
     """Return a slimmed tool list relevant to the user's message. Recent user
     turns from the conversation also count, so multi-turn follow-ups like
@@ -4787,8 +4822,8 @@ def _select_tools(message: str, history: list | None = None) -> list:
         )
     msg = " ".join(parts).lower()
     names: set[str] = set(_CORE_NAMES)
-    for group, keywords in _GROUP_TRIGGERS.items():
-        if any(kw in msg for kw in keywords):
+    for group, pattern in _GROUP_RE.items():
+        if pattern.search(msg):
             names.update(_TOOL_GROUP_NAMES[group])
     names -= _disabled_tool_names()
     return [t for t in _SLIM_TOOLS if t["name"] in names]
@@ -4844,6 +4879,9 @@ class Brain:
         "tradeoff", "strateg", "refactor", "translate", "write a", "write me",
         "essay", "brainstorm", "in detail",
     )
+    # trailing=False: several of these are stems — "summar" has to reach
+    # "summarise", "analyz" has to reach "analyze".
+    _COMPLEX_RE = _boundaried(_COMPLEX_HINTS, trailing=False)
 
     # Confirmation replies must reach the full model — they're expected to
     # trigger a confirm_* tool call (send email/WhatsApp, delete event), and
@@ -4855,6 +4893,9 @@ class Brain:
         "yes", "yeah", "yep", "sure", "confirm", "go ahead", "do it",
         "send it", "cancel", "no don't", "don't send",
     )
+    # Whole words, both edges: "sure" inside "measure" and "yes" inside "eyes"
+    # were routing ordinary turns to the expensive model.
+    _CONFIRM_RE = _boundaried(_CONFIRM_HINTS)
 
     def _select_model(self, user_message: str) -> str:
         """Pick the model for this turn. Short, simple turns go to the fast
@@ -4865,11 +4906,11 @@ class Brain:
         if not self._fast_path_enabled:
             return self._model
         msg = (user_message or "").strip().lower()
-        if any(h in msg for h in self._CONFIRM_HINTS):
+        if self._CONFIRM_RE.search(msg):
             return self._model
         if len(msg.split()) > 18:
             return self._model
-        if any(h in msg for h in self._COMPLEX_HINTS):
+        if self._COMPLEX_RE.search(msg):
             return self._model
         return self._fast_model
 
