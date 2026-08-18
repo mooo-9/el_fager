@@ -130,3 +130,43 @@ class TestSettingsStillWin:
         after = _names(brain._tools_for_turn("check my unread email", []))
         assert "list_emails" not in after, \
             "a tool disabled mid-conversation survived in the accumulated set"
+
+
+class TestTheActualBenefit:
+    """What holding the set on the Brain buys, stated honestly.
+
+    _select_tools already folds in the last 8 user turns, so within a turn and
+    within that window the array was ALREADY stable — the first measurement
+    that appeared to show a large cache improvement was run-to-run noise.
+
+    The real difference shows only once a conversation outruns the 8-turn
+    window: recomputing from history alone lets the array SHRINK as early
+    turns age out, and a shrunken array is a different prefix and so a fresh
+    cache write. MAX_TURNS_PER_CONVERSATION is 10, so this is reachable.
+    """
+
+    def test_the_array_never_shrinks_once_a_turn_ages_out_of_the_window(self):
+        import core.brain as brain_mod
+
+        turns = ["play some music", "what is on my calendar", "and my tasks",
+                 "check my email", "what is the weather", "what is the news",
+                 "how many days until september", "say hello",
+                 "what time is it", "thanks"]
+
+        # Recomputed from history alone: the media group falls out of the
+        # window and the array gets smaller near the end.
+        hist, sizes = [], []
+        for t in turns:
+            sizes.append(len(brain_mod._select_tools(t, hist)))
+            hist.append({"role": "user", "content": t})
+        assert min(sizes[-3:]) < max(sizes), \
+            "expected the recomputed array to shrink as turns age out"
+
+        # Held on the Brain: monotonic, so the prefix survives.
+        b = Brain.__new__(Brain)
+        b._turn_tool_names = None
+        hist, sizes = [], []
+        for t in turns:
+            sizes.append(len(b._tools_for_turn(t, hist)))
+            hist.append({"role": "user", "content": t})
+        assert sizes == sorted(sizes), f"array shrank mid-conversation: {sizes}"

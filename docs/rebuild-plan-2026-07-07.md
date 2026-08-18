@@ -114,7 +114,7 @@ degrades.
 
 | Change | Measured effect |
 |---|---|
-| Select tools once per turn, stable across a conversation | cache writes 4/24 → 2/30 calls; tokens re-cached 2,151 → 898 per call |
+| Select tools once per turn, stable across a conversation | **overstated at first — see below.** Real effect: one fewer cache write on conversations past 8 turns |
 | Word-boundary trigger matching | three verified false positives gone; 44 → 34 tools on an unrelated phrase |
 | One shared Groq client | 3,145 ms → ~0 ms of client construction on a five-sentence reply |
 
@@ -123,6 +123,22 @@ Measured and **not** changed, because the numbers did not justify it:
 - **ChromaDB memory query** — 0.0 ms on the turn path.
 - **Re-reading `data/settings.json`** — 0.042 ms per read; ten a turn is 0.4 ms.
   Caching it would buy a staleness bug and no time.
+
+**Correction on the tool-selection change.** It was first reported as cutting
+cache writes from 4/24 calls to 2/30 and re-cached tokens by 58%. That
+attribution was wrong. `_select_tools` already folds in the last 8 user turns,
+and `hist` does not change between iterations of a single turn — so the array
+was already identical within a turn and within that window. Re-running the
+same script produced 4/30 writes, the same order as the "improvement", which
+is what exposed it: the first number was run-to-run noise from the 5-minute
+cache TTL, not the change.
+
+What it does buy, measured by counting distinct prefixes rather than cache
+writes: once a conversation outruns the 8-turn history window, recomputing
+from history alone lets the array *shrink* as early turns age out, and a
+shrunken array is a fresh prefix. Over 10 turns that is 4 prefix changes
+before and 3 after. Real, and worth keeping, but narrow — and nothing like
+the original claim.
 
 Still outstanding: the fixed delays (`END_SILENCE_SEC = 1.0`, the 800 ms
 re-arm timer) have not been profiled against real speech, because that needs
