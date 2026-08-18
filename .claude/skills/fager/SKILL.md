@@ -38,5 +38,5 @@ Tasks execute within ~60s of queuing; wait ~70s before declaring failure.
 ## If the channel is unreachable
 
 El Fager isn't running. Say so, and offer either to start it
-(`Start-ScheduledTask -TaskName 'El Fager Watchdog'`) or to execute the
-request directly with your own tools instead.
+(`python main.py` from the repo root) or to execute the request directly
+with your own tools instead.

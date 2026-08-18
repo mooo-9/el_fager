@@ -19,7 +19,7 @@ consumes it:
 | Mine | `core/skills/miner.py` (repeated asks), `core/skills/importer.py` (calendar + gym) | morning proposal check; "import my routines" |
 | Skills | `core/skills/store.py` — skills are **data** (instruction templates), not code | "learn this as a skill", `run_skill` |
 | Automation | `tools/skill_tool.py::schedule_skill` → `core/autonomous_tasks.py` → ProactiveEngine executes via `brain.chat` | auto-proposed after 3 manual runs |
-| Measure | `core/telemetry.py`, `scripts/usage_audit.py`, weekly health check task | Friday report; transcription-quality alert |
+| Measure | `core/telemetry.py`, `scripts/usage_audit.py` | Run on demand; transcription-quality alert |
 
 ## Voice is the primary interface
 
@@ -45,7 +45,5 @@ consumes it:
 2. **Skills are data** — no skill contains code; the brain executes
    instructions with the tools it already has, so every skill inherits every
    safety gate.
-3. **Live trading stays behind the deterministic double-confirmation gate**
-   and can never be embedded in a skill (`ForbiddenSkillError`).
-4. **Test traffic never touches production data** (`EL_FAGER_TEST_MODE`,
+3. **Test traffic never touches production data** (`EL_FAGER_TEST_MODE`,
    enforced suite-wide in `tests/conftest.py`).

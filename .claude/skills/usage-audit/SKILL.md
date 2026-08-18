@@ -24,7 +24,7 @@ python -X utf8 scripts/usage_audit.py
 - **Transcription garbage rate** — user turns containing Hangul/Hebrew/
   Cyrillic/CJK or Icelandic ð/þ are Whisper hallucinations. If this is above
   ~5%, the voice front door is broken; fix STT before building features
-  (see `ALLOWED_LANGUAGES` / `NO_SPEECH_MAX` in `core/voice_in.py`).
+  (see `TRANSCRIBE_LANGUAGE` / `NO_SPEECH_MAX` in `core/voice_in.py`).
 - **Tool usage vs. skills** — tools with high counts deserve investment;
   skills with `runs=0` weeks after creation should be deleted or surfaced
   better, not added to.
