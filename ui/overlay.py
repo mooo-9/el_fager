@@ -1,54 +1,81 @@
 """
-El Fager — native compact assistant (the default surface).
+El Fager — the Ctrl+Space overlay (the primary everyday surface).
 
-W3 hybrid-UI rewrite: this window is the one El Fager opens on Ctrl+Space —
-a single fast native-Qt card with the conversation, live state, and text
-input. No QWebEngine, no mode cycling; the rich full-screen HUD lives in
-ui/hud_window.py and is constructed lazily on demand (tray menu).
+Rebuilt to `docs/design/design_handoff_el_fager/mocks/El Fager Voice Overlay.dc.html`:
+a 384px column on the Dawn palette, topped by the horizon header (a state-hue
+gradient line with a 5px sun straddling it, glowing only while live), and
+showing exactly one exchange at a time rather than a chat thread —
+HEARD → DOING → ANSWER, each phase replacing the last.
 
-Visuals come from ui/theme.py (layered dark palette, warm copper accent,
-distinct listening / thinking / speaking state colors).
+Hard rules this file honours:
+  * Nothing web-rendered here. The window is built once at boot and only
+    shown/hidden; summon is one frame plus a 140ms entrance, and the mic
+    opens before that animation ends.
+  * Glow means live. The sun glows while the mic is open, never as decoration.
+  * State is never colour alone — every state carries a motion signature and
+    a text label.
+  * Organic loops stop when the window hides, so the tray costs no CPU.
+  * Text direction follows the language of the exchange, not the OS locale.
+
+Visuals come from ui/theme.py; no colour literals live here.
 """
 
 import json
+import threading
+from math import cos, pi, sin
 from pathlib import Path
 
 from PyQt6.QtCore import (
     QEvent,
+    QPoint,
     QPropertyAnimation,
+    QRectF,
     Qt,
     QTimer,
     pyqtSignal,
     pyqtSlot,
 )
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QKeyEvent,
+    QLinearGradient,
     QPainter,
     QPen,
+    QRadialGradient,
 )
 from PyQt6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from ui import theme
+from core import progress, sound, staging
+from ui import theme, tokens
 
 _SETTINGS_FILE = Path("data/settings.json")
-_MAX_HISTORY = 15
+
+# Card width per the handoff's CANON table ("Overlay (Ctrl+Space, 384px)").
+_CARD_W = 384
+_SHADOW_PAD = 14
+_STAGE_MIN_H = 132
+
+# The pipeline's own words for the pre-transcription stages; anything else
+# arriving as a "processing" transcript is what the user actually said.
+_PIPELINE_CAPTIONS = {"Transcribing...", "Loading Whisper model..."}
+
+_STATE_LABELS = {
+    "idle": "IDLE",
+    "listening": "LISTENING",
+    "processing": "THINKING",
+    "speaking": "SPEAKING",
+    "error": "ERROR",
+}
 
 
 def _load_settings() -> dict:
@@ -58,10 +85,9 @@ def _load_settings() -> dict:
         except Exception:
             pass
     return {
-        "model": "claude-sonnet-4-6",
+        "model": "claude-sonnet-5",
         "tts_backend": "edge",
         "voice_en": "en-US-GuyNeural",
-        "voice_ar": "ar-EG-ShakirNeural",
         "wake_word_enabled": True,
         "theme": "dark",
         "local_llm_fallback": True,
@@ -74,71 +100,276 @@ def _save_settings(data: dict) -> None:
     _SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _align_left(label: QLabel) -> None:
+    label.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+    label.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
+
+
+def reduced_motion() -> bool:
+    """Honour the OS reduced-motion flag (Windows: "animate controls").
+
+    When it is off the surface still changes state — it just arrives in one
+    paint instead of moving: no entrance, no organic loops.
+    """
+    try:
+        import ctypes
+        SPI_GETCLIENTAREAANIMATION = 0x1042
+        enabled = ctypes.c_bool(True)
+        ctypes.windll.user32.SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0)
+        return not enabled.value
+    except Exception:
+        return False
+
+
+def _c(hex_color: str, alpha: float) -> QColor:
+    c = QColor(hex_color)
+    c.setAlphaF(alpha)
+    return c
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# State ring — pulses in the current state's color
+# Animated primitives. None of these own a timer — the window drives them all
+# from one QTimer it stops on hide, so a hidden overlay costs nothing.
 # ──────────────────────────────────────────────────────────────────────────────
 
-class RingCanvas(QWidget):
+class _Bars(QWidget):
+    """The listening signature: bars breathing on staggered periods."""
+
+    _PERIODS = (1.1, 0.85, 0.7, 0.95, 1.2)
+    _OFFSETS = (0.0, 0.12, 0.05, 0.2, 0.08)
+
+    def __init__(self, count: int = 5, height: int = 18, parent=None):
+        super().__init__(parent)
+        self._n = count
+        self.setFixedSize(count * 6 - 3, height)
+        self._t = 0.0
+        self._color = QColor(theme.STATE_COLORS["listening"])
+
+    def set_color(self, hex_color: str):
+        self._color = QColor(hex_color)
+        self.update()
+
+    def tick(self, dt: float):
+        self._t += dt
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        mid = self._n // 2
+        for i in range(self._n):
+            phase = self._t / self._PERIODS[i % 5] + self._OFFSETS[i % 5]
+            frac = 0.25 + 0.75 * (0.5 - 0.5 * cos(2 * pi * phase))
+            h = self.height() * frac
+            p.setBrush(QColor(theme.ACCENT_BRIGHT) if i == mid else self._color)
+            p.drawRoundedRect(QRectF(i * 6, self.height() - h, 3, h), 1.5, 1.5)
+
+
+class _ShimmerDot(QWidget):
+    """The thinking signature: a dot shimmering on a 1.4s cycle."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(24, 24)
-        self._angle = 0.0
-        self._spinning = False
+        self.setFixedSize(6, 6)
+        self._t = 0.0
+        self._color = QColor(theme.THINKING)
+
+    def tick(self, dt: float):
+        self._t += dt
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        alpha = 0.45 + 0.55 * (0.5 - 0.5 * cos(2 * pi * self._t / 1.4))
+        c = QColor(self._color)
+        c.setAlphaF(alpha)
+        p.setBrush(c)
+        p.drawEllipse(QRectF(0.5, 0.5, 5, 5))
+
+
+class _Ripple(QWidget):
+    """The speaking signature: rings leaving the core on the TTS cadence."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(16, 16)
+        self._t = 0.0
+
+    def tick(self, dt: float):
+        self._t = (self._t + dt) % 1.5
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx = cy = self.width() / 2
+        frac = self._t / 1.5
+        r = 7 * (0.45 + 1.25 * frac)
+        p.setPen(QPen(_c(theme.SPEAKING, 0.6 * (1 - frac)), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(theme.SPEAKING))
+        p.drawEllipse(QRectF(cx - 2.5, cy - 2.5, 5, 5))
+
+
+class _StateDot(QWidget):
+    """Footer mic dot: glows while live, breathes on a 3.6s sine when idle."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(16, 16)
+        self._t = 0.0
         self._color = QColor(theme.STATE_COLORS["idle"])
+        self._live = False
 
-    def set_state_color(self, state: str):
-        self._color = QColor(theme.STATE_COLORS.get(state, theme.TEXT_MUTED))
+    def set_state(self, hex_color: str, live: bool):
+        self._color = QColor(hex_color)
+        self._live = live
         self.update()
 
-    def start_spin(self):
-        self._spinning = True
-        self.update()
-
-    def stop_spin(self):
-        self._spinning = False
-        self._angle = 0.0
-        self.update()
-
-    def tick(self):
-        if self._spinning:
-            self._angle = (self._angle + 12) % 360
+    def tick(self, dt: float):
+        self._t += dt
+        if not self._live:
             self.update()
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        cx, cy = 12, 12
-        r = 8
-
-        if self._spinning:
-            # Background ring
-            dim = QColor(self._color)
-            dim.setAlpha(45)
-            pen = QPen(dim)
-            pen.setWidth(3)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            p.setPen(pen)
-            p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
-
-            # Spinning arc
-            bright = QColor(self._color)
-            bright.setAlpha(230)
-            pen2 = QPen(bright)
-            pen2.setWidth(3)
-            pen2.setCapStyle(Qt.PenCapStyle.RoundCap)
-            p.setPen(pen2)
-            p.drawArc(cx - r, cy - r, r * 2, r * 2, int(-self._angle * 16), 100 * 16)
-        else:
-            # Static small dot
+        cx = cy = self.width() / 2
+        if self._live:
+            glow = QRadialGradient(cx, cy, 8)
+            glow.setColorAt(0.0, _c(self._color.name(), 0.55))
+            glow.setColorAt(1.0, _c(self._color.name(), 0.0))
             p.setPen(Qt.PenStyle.NoPen)
-            dot = QColor(self._color)
-            dot.setAlpha(150)
-            p.setBrush(QBrush(dot))
-            p.drawEllipse(cx - 4, cy - 4, 8, 8)
+            p.setBrush(glow)
+            p.drawEllipse(QRectF(cx - 8, cy - 8, 16, 16))
+            r, alpha = 3.0, 1.0
+        else:
+            # idle breath: scale 1 → 1.1, opacity .45 → .85
+            f = 0.5 - 0.5 * cos(2 * pi * self._t / 3.6)
+            r, alpha = 3.0 * (1 + 0.1 * f), 0.45 + 0.4 * f
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(_c(self._color.name(), alpha))
+        p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+
+
+class _HorizonHeader(QWidget):
+    """The horizon: a state-hue rule with a sun on it, glowing only while live.
+
+    The glow pools above the line and only when a mic is open or an action is
+    armed — it is the one place in this window allowed to glow.
+    """
+
+    _SUN_X = 23.0
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._color = QColor(theme.STATE_COLORS["idle"])
+        self._live = False
+
+    def set_state(self, hex_color: str, live: bool):
+        self._color = QColor(hex_color)
+        self._live = live
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+        name = self._color.name()
+        # The horizon sits a few px above the bottom edge so the sun can
+        # straddle it without the widget clipping its lower half.
+        y = h - 3.0
+
+        if self._live:
+            p.save()
+            p.translate(self._SUN_X + 3, y)
+            p.scale(1.0, 26.0 / 140.0)   # 140x26 ellipse of light
+            glow = QRadialGradient(0, 0, 140)
+            glow.setColorAt(0.0, _c(name, 0.16))
+            glow.setColorAt(0.7, _c(name, 0.0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(glow)
+            p.drawEllipse(QRectF(-140, -140, 280, 280))
+            p.restore()
+
+        line = QLinearGradient(0, 0, w, 0)
+        line.setColorAt(0.0, _c(name, 0.0))
+        line.setColorAt(min(0.99, 18.0 / max(w, 1)), _c(name, 1.0))
+        line.setColorAt(0.42, _c(name, 0.35))
+        line.setColorAt(0.75, _c("#FFFFFF", 0.06))
+        line.setColorAt(1.0, _c("#FFFFFF", 0.06))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(line)
+        p.drawRect(QRectF(0, y, w, 1))
+
+        # the sun straddles the horizon
+        if self._live:
+            halo = QRadialGradient(self._SUN_X + 2.5, y + 0.5, 8)
+            halo.setColorAt(0.0, _c(name, 0.5))
+            halo.setColorAt(1.0, _c(name, 0.0))
+            p.setBrush(halo)
+            p.drawEllipse(QRectF(self._SUN_X - 5.5, y - 7.5, 16, 16))
+        p.setBrush(self._color)
+        p.drawEllipse(QRectF(self._SUN_X, y - 2, 5, 5))
+
+
+class _CircleButton(QPushButton):
+    """30px round footer control. `glyph` is drawn, not typed, so it never
+    depends on a symbol font being present."""
+
+    def __init__(self, glyph: str, tooltip: str, parent=None):
+        super().__init__(parent)
+        self._glyph = glyph
+        self.setFixedSize(30, 30)
+        self.setToolTip(tooltip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("QPushButton { background: transparent; border: none; }")
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        hovered = self.underMouse()
+        p.setPen(QPen(_c("#FFFFFF", 0.25 if hovered else 0.10), 1))
+        p.setBrush(QColor(tokens.SURFACE_1))
+        p.drawEllipse(QRectF(0.5, 0.5, 29, 29))
+
+        ink = QPen(QColor(theme.TEXT_SECONDARY), 1.1)
+        p.setPen(ink)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        if self._glyph == "keyboard":
+            p.drawRoundedRect(QRectF(9, 11, 12, 7.5), 1.5, 1.5)
+            p.drawLine(QPoint(12, 16), QPoint(18, 16))
+        elif self._glyph == "expand":
+            # Four corner brackets — the standard "go full screen" mark, and
+            # the only glyph here that has to read as *bigger*, not *another*.
+            for dx, dy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+                cx = 15 + dx * -5      # 10 or 20
+                cy = 15 + dy * -5
+                p.drawLine(QPoint(cx, cy), QPoint(cx + dx * 4, cy))
+                p.drawLine(QPoint(cx, cy), QPoint(cx, cy + dy * 4))
+        else:  # gear — short thick teeth on a tight ring so it does not
+               # read as a brightness glyph at 30px
+            p.drawEllipse(QRectF(12.0, 12.0, 6, 6))
+            p.setPen(QPen(QColor(theme.TEXT_SECONDARY), 1.6))
+            for i in range(8):
+                a = pi * i / 4
+                p.drawLine(
+                    QPoint(round(15 + 6.0 * cos(a)), round(15 + 6.0 * sin(a))),
+                    QPoint(round(15 + 7.6 * cos(a)), round(15 + 7.6 * sin(a))),
+                )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Bubble message widget
+# Bubble message widget — the overlay no longer threads bubbles, but the
+# Command Center still builds its response list from this.
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MessageBubble(QWidget):
@@ -166,119 +397,19 @@ class MessageBubble(QWidget):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Settings dialog
-# ──────────────────────────────────────────────────────────────────────────────
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("El Fager Settings")
-        self.setMinimumWidth(360)
-        self.setStyleSheet(theme.DIALOG)
-
-        self._settings = _load_settings()
-        form = QFormLayout(self)
-        form.setSpacing(10)
-        form.setContentsMargins(16, 16, 16, 16)
-
-        self._model_combo = QComboBox()
-        self._model_combo.addItems(["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"])
-        self._model_combo.setCurrentText(self._settings.get("model", "claude-sonnet-4-6"))
-        form.addRow("Model:", self._model_combo)
-
-        self._tts_combo = QComboBox()
-        self._tts_combo.addItems(["edge", "groq"])
-        self._tts_combo.setCurrentText(self._settings.get("tts_backend", "edge"))
-        form.addRow("TTS backend:", self._tts_combo)
-
-        self._voice_en_combo = QComboBox()
-        for v in ["en-US-GuyNeural", "en-US-JennyNeural", "en-GB-RyanNeural", "en-AU-WilliamNeural"]:
-            self._voice_en_combo.addItem(v)
-        self._voice_en_combo.setCurrentText(self._settings.get("voice_en", "en-US-GuyNeural"))
-        form.addRow("Voice (EN):", self._voice_en_combo)
-
-        self._voice_ar_combo = QComboBox()
-        for v in ["ar-EG-ShakirNeural", "ar-EG-SalmaNeural", "ar-SA-HamedNeural"]:
-            self._voice_ar_combo.addItem(v)
-        self._voice_ar_combo.setCurrentText(self._settings.get("voice_ar", "ar-EG-ShakirNeural"))
-        form.addRow("Voice (AR):", self._voice_ar_combo)
-
-        self._wake_check = QCheckBox("Enable wake word")
-        self._wake_check.setChecked(self._settings.get("wake_word_enabled", True))
-        form.addRow("Wake word:", self._wake_check)
-
-        self._theme_combo = QComboBox()
-        self._theme_combo.addItems(["dark", "darker", "oled"])
-        self._theme_combo.setCurrentText(self._settings.get("theme", "dark"))
-        form.addRow("Theme:", self._theme_combo)
-
-        self._fallback_check = QCheckBox("Use local LLM when offline")
-        self._fallback_check.setChecked(self._settings.get("local_llm_fallback", True))
-        form.addRow("Local fallback:", self._fallback_check)
-
-        self._ollama_combo = QComboBox()
-        self._ollama_combo.setEditable(True)
-        for m in ["llama3.2:1b", "llama3.2", "llama3.1", "mistral", "phi3"]:
-            self._ollama_combo.addItem(m)
-        self._ollama_combo.setCurrentText(self._settings.get("ollama_model", "llama3.2"))
-        form.addRow("Ollama model:", self._ollama_combo)
-
-        # Ollama status indicator
-        self._ollama_status = QLabel("checking…")
-        self._ollama_status.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
-        form.addRow("Ollama status:", self._ollama_status)
-        self._check_ollama_status()
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self._save_and_accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-
-    def _check_ollama_status(self):
-        try:
-            from core.local_llm import is_ollama_running
-            import threading
-            def _check():
-                running = is_ollama_running()
-                # Use QTimer.singleShot to update label from the main thread
-                from PyQt6.QtCore import QTimer
-                if running:
-                    QTimer.singleShot(0, lambda: (
-                        self._ollama_status.setText("Online ✓"),
-                        self._ollama_status.setStyleSheet(f"color: {theme.SPEAKING}; font-size: 11px;"),
-                    ))
-                else:
-                    QTimer.singleShot(0, lambda: (
-                        self._ollama_status.setText("Offline — install from ollama.ai"),
-                        self._ollama_status.setStyleSheet(f"color: {theme.ERROR}; font-size: 11px;"),
-                    ))
-            threading.Thread(target=_check, daemon=True).start()
-        except Exception:
-            pass
-
-    def _save_and_accept(self):
-        self._settings.update({
-            "model": self._model_combo.currentText(),
-            "tts_backend": self._tts_combo.currentText(),
-            "voice_en": self._voice_en_combo.currentText(),
-            "voice_ar": self._voice_ar_combo.currentText(),
-            "wake_word_enabled": self._wake_check.isChecked(),
-            "theme": self._theme_combo.currentText(),
-            "local_llm_fallback": self._fallback_check.isChecked(),
-            "ollama_model": self._ollama_combo.currentText(),
-        })
-        _save_settings(self._settings)
-        self.accept()
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Main overlay window
 # ──────────────────────────────────────────────────────────────────────────────
 
 class OverlayWindow(QWidget):
     text_submitted = pyqtSignal(str)
+    # The registry notifies on whichever thread staged the action; emitting a
+    # signal hops it back to the GUI thread.
+    staged_changed = pyqtSignal()
+    staged_result = pyqtSignal(str)
+    progress_changed = pyqtSignal()
+    # The footer's expand button. main.py owns the Cockpit (it is lazy and
+    # single-instance), so the overlay asks rather than constructs.
+    expand_requested = pyqtSignal()
 
     def __init__(self, voice_in, brain, voice_out, memory):
         super().__init__()
@@ -288,9 +419,11 @@ class OverlayWindow(QWidget):
         self.memory = memory
         self._worker = None
         self._current_state = "idle"
+        self._phase = "prompt"
         self._wake_listener = None
         self._mic_muted = False
-        self._history: list[tuple[str, str]] = []  # (role, text)
+        self._heard = ""
+        self._answer = ""
 
     def set_wake_listener(self, listener):
         self._wake_listener = listener
@@ -298,242 +431,541 @@ class OverlayWindow(QWidget):
         self._build_ui()
         self._setup_timers()
         self._apply_theme()
+        self._set_phase("prompt")
+        self._paint_state("idle")
+
+        self._staged_cb = self.staged_changed.emit
+        staging.subscribe(self._staged_cb)
+        self.staged_changed.connect(self._refresh_staged)
+        self.staged_result.connect(self._on_staged_result)
+        self._refresh_staged()
+
+        self._progress_cb = self.progress_changed.emit
+        progress.subscribe(self._progress_cb)
+        self.progress_changed.connect(self._refresh_progress)
 
     # ------------------------------------------------------------------ #
     #  Window setup                                                        #
     # ------------------------------------------------------------------ #
 
     def _setup_window(self):
-        # FramelessWindowHint keeps our custom look; removing Tool makes it
-        # appear in the taskbar and respond to Alt+Tab like a real app.
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setWindowTitle("El Fager")
-        self.setMinimumSize(480, 540)
-
-        # Restore saved geometry or default to bottom-center
-        settings = _load_settings()
-        geom = settings.get("window_geometry")
-        if geom and len(geom) == 4:
-            self.setGeometry(*geom)
-        else:
-            self.resize(560, 700)
-            screen = QApplication.primaryScreen().availableGeometry()
-            self.move(
-                (screen.width() - 560) // 2,
-                screen.height() - 720,
-            )
-
+        self.setFixedWidth(_CARD_W + 2 * _SHADOW_PAD)
         self._drag_start = None
         self._drag_origin = None
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setContentsMargins(_SHADOW_PAD, _SHADOW_PAD, _SHADOW_PAD, _SHADOW_PAD)
         outer.setSpacing(0)
 
         self._card = QWidget(self)
         self._card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect(self._card)
+        shadow.setBlurRadius(64)
+        shadow.setOffset(0, 24)
+        shadow.setColor(_c("#000000", 0.6))
+        self._card.setGraphicsEffect(shadow)
         outer.addWidget(self._card)
 
         inner = QVBoxLayout(self._card)
-        inner.setContentsMargins(16, 12, 16, 14)
-        inner.setSpacing(8)
+        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setSpacing(0)
 
-        inner.addLayout(self._build_header())
+        inner.addWidget(self._build_header())
+        inner.addWidget(self._build_stage())
+        inner.addWidget(self._build_receipts())
+        inner.addWidget(self._build_footer())
 
-        sep = QWidget()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(theme.SEPARATOR)
-        inner.addWidget(sep)
-
-        # ── Conversation history ──────────────────────────────────────
-        self._history_scroll = QScrollArea()
-        self._history_scroll.setWidgetResizable(True)
-        self._history_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._history_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._history_scroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+    def _build_receipts(self) -> QWidget:
+        """What actually left the machine — max three, newest first."""
+        self._receipts_box = QWidget(self._card)
+        self._receipts_box.setStyleSheet(
+            f"border-top: 1px solid {tokens.rgba('#FFFFFF', 0.06)};"
         )
-        self._history_scroll.setMinimumHeight(200)
-        self._history_scroll.setStyleSheet(theme.SCROLL_AREA)
+        col = QVBoxLayout(self._receipts_box)
+        col.setContentsMargins(18, 10, 18, 12)
+        col.setSpacing(7)
+        self._receipt_rows: list[QLabel] = []
+        for _ in range(3):
+            row = QLabel("")
+            row.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+                f" font-size: 11px; border: none;"
+            )
+            row.setVisible(False)
+            col.addWidget(row)
+            self._receipt_rows.append(row)
+        self._receipts_box.setVisible(False)
+        return self._receipts_box
 
-        self._history_container = QWidget()
-        self._history_container.setStyleSheet("background: transparent;")
-        self._history_layout = QVBoxLayout(self._history_container)
-        self._history_layout.setContentsMargins(0, 4, 0, 4)
-        self._history_layout.setSpacing(4)
-        self._history_layout.addStretch()
-        self._history_scroll.setWidget(self._history_container)
-        inner.addWidget(self._history_scroll)
+    # ── header ────────────────────────────────────────────────────────────
+    def _build_header(self) -> QWidget:
+        self._header = _HorizonHeader(self._card)
+        row = QHBoxLayout(self._header)
+        row.setContentsMargins(16, 12, 16, 14)
+        row.setSpacing(9)
 
-        # ── Active transcript ─────────────────────────────────────────
-        self._transcript_label = QLabel("")
-        self._transcript_label.setWordWrap(True)
-        self._transcript_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._transcript_label.setStyleSheet(theme.TRANSCRIPT_LABEL)
-        self._transcript_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self._transcript_label.setVisible(False)
-        inner.addWidget(self._transcript_label)
+        name = QLabel("El Fager")
+        name.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-family: {theme.FONT};"
+            f" font-size: 13px; font-weight: 500;"
+        )
+        row.addWidget(name)
 
-        # ── Status bar ───────────────────────────────────────────────
-        self._status_bar = QLabel("")
-        self._status_bar.setStyleSheet(theme.STATUS_BAR)
-        self._status_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_bar.setVisible(False)
-        inner.addWidget(self._status_bar)
-
-        # ── Separator ─────────────────────────────────────────────────
-        sep2 = QWidget()
-        sep2.setFixedHeight(1)
-        sep2.setStyleSheet(theme.SEPARATOR)
-        inner.addWidget(sep2)
-
-        # ── Input ─────────────────────────────────────────────────────
-        input_row = QHBoxLayout()
-        input_row.setSpacing(6)
-
-        self._text_input = QLineEdit()
-        self._text_input.setPlaceholderText("Type here or just speak...")
-        self._text_input.setStyleSheet(theme.TEXT_INPUT)
-        self._text_input.returnPressed.connect(self._on_text_entered)
-        self._text_input.installEventFilter(self)
-        input_row.addWidget(self._text_input)
-        inner.addLayout(input_row)
-
-        # ── Quick action strip ────────────────────────────────────────
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(4)
-        actions_row.addStretch()
-
-        self._mic_btn = QPushButton("Mic")
-        self._mic_btn.setToolTip("Mute/unmute mic")
-        self._mic_btn.setStyleSheet(theme.BTN_GHOST)
-        self._mic_btn.clicked.connect(self._toggle_mute)
-        actions_row.addWidget(self._mic_btn)
-
-        stop_btn = QPushButton("Stop")
-        stop_btn.setToolTip("Stop speaking")
-        stop_btn.setStyleSheet(theme.BTN_GHOST)
-        stop_btn.clicked.connect(self._stop_tts)
-        actions_row.addWidget(stop_btn)
-
-        clear_btn = QPushButton("Clear")
-        clear_btn.setToolTip("Clear conversation history")
-        clear_btn.setStyleSheet(theme.BTN_GHOST)
-        clear_btn.clicked.connect(self._clear_history)
-        actions_row.addWidget(clear_btn)
-
-        settings_btn = QPushButton("Settings")
-        settings_btn.setToolTip("Settings")
-        settings_btn.setStyleSheet(theme.BTN_GHOST)
-        settings_btn.clicked.connect(self._open_settings)
-        actions_row.addWidget(settings_btn)
-
-        inner.addLayout(actions_row)
-
-    def _build_header(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(8)
-
-        self._ring = RingCanvas(self._card)
-        row.addWidget(self._ring)
-
-        name_lbl = QLabel("EL FAGER")
-        name_lbl.setStyleSheet(theme.HEADER_TITLE)
-        row.addWidget(name_lbl)
+        self._state_label = QLabel(_STATE_LABELS["idle"])
+        row.addWidget(self._state_label)
         row.addStretch()
 
-        self._status_label = QLabel("Ready")
-        self._status_label.setStyleSheet(theme.STATUS_LABEL)
-        row.addWidget(self._status_label)
-        row.addSpacing(4)
+        esc = QPushButton("ESC")
+        esc.setCursor(Qt.CursorShape.PointingHandCursor)
+        esc.setToolTip("Dismiss")
+        esc.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; border: 1px solid {tokens.rgba('#FFFFFF', 0.10)};"
+            f" border-radius: 5px; padding: 2px 6px; background: transparent; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY};"
+            f" border-color: {tokens.rgba('#FFFFFF', 0.20)}; }}"
+        )
+        esc.clicked.connect(self._hide)
+        row.addWidget(esc)
+        return self._header
 
-        min_btn = QPushButton("─")
-        min_btn.setFixedSize(22, 20)
-        min_btn.setStyleSheet(theme.BTN_GHOST)
-        min_btn.setToolTip("Hide")
-        min_btn.clicked.connect(self._hide)
-        row.addWidget(min_btn)
+    # ── stage: one exchange, phases replacing each other ──────────────────
+    def _build_stage(self) -> QWidget:
+        stage = QWidget(self._card)
+        stage.setMinimumHeight(_STAGE_MIN_H)
+        col = QVBoxLayout(stage)
+        col.setContentsMargins(18, 18, 18, 14)
+        col.setSpacing(12)
+        col.addStretch()
 
-        minimize_btn = QPushButton("□")
-        minimize_btn.setFixedSize(22, 20)
-        minimize_btn.setStyleSheet(theme.BTN_GHOST)
-        minimize_btn.setToolTip("Minimize")
-        minimize_btn.clicked.connect(self.showMinimized)
-        row.addWidget(minimize_btn)
+        # phase: prompt — nothing said yet
+        self._prompt_box = QWidget()
+        pb = QVBoxLayout(self._prompt_box)
+        pb.setContentsMargins(0, 10, 0, 10)
+        pb.setSpacing(12)
+        self._prompt_bars = _Bars(5, 18)
+        bars_row = QHBoxLayout()
+        bars_row.addStretch()
+        bars_row.addWidget(self._prompt_bars)
+        bars_row.addStretch()
+        pb.addLayout(bars_row)
+        prompt_lbl = QLabel("Say it.")
+        prompt_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        prompt_lbl.setStyleSheet(
+            f"color: {theme.TEXT_SECONDARY}; font-family: {theme.FONT}; font-size: 14px;"
+        )
+        pb.addWidget(prompt_lbl)
+        col.addWidget(self._prompt_box)
 
-        close_btn = QPushButton("✕")
-        close_btn.setFixedSize(22, 20)
-        close_btn.setStyleSheet(theme.BTN_CLOSE)
-        close_btn.setToolTip("Close")
-        close_btn.clicked.connect(self._hide)
-        row.addWidget(close_btn)
+        # phase: hearing — your words at full size while you speak
+        self._hearing_box = QWidget()
+        hb = QHBoxLayout(self._hearing_box)
+        hb.setContentsMargins(0, 0, 0, 0)
+        hb.setSpacing(12)
+        self._hearing_bars = _Bars(3, 20)
+        hb.addWidget(self._hearing_bars, 0, Qt.AlignmentFlag.AlignTop)
+        self._heard_big = QLabel("")
+        self._heard_big.setWordWrap(True)
+        self._heard_big.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-family: {theme.FONT};"
+            f" font-size: {theme.SZ_EMPHASIS}px;"
+        )
+        hb.addWidget(self._heard_big, 1)
+        col.addWidget(self._hearing_box)
 
-        return row
+        # heard, shrunk to a mono caption once the work starts
+        self._heard_small = QLabel("")
+        self._heard_small.setWordWrap(True)
+        self._heard_small.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO}; font-size: 11px;"
+        )
+        col.addWidget(self._heard_small)
+
+        # phase: doing
+        self._doing_box = QWidget()
+        db = QHBoxLayout(self._doing_box)
+        db.setContentsMargins(0, 0, 0, 0)
+        db.setSpacing(8)
+        self._doing_dot = _ShimmerDot()
+        db.addWidget(self._doing_dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._doing_caption = QLabel("")
+        self._doing_caption.setStyleSheet(
+            f"color: {theme.THINKING}; font-family: {theme.FONT_MONO}; font-size: 12px;"
+        )
+        db.addWidget(self._doing_caption, 1)
+        col.addWidget(self._doing_box)
+
+        # phase: answer
+        self._answer_box = QWidget()
+        ab = QHBoxLayout(self._answer_box)
+        ab.setContentsMargins(0, 0, 0, 0)
+        ab.setSpacing(11)
+        self._answer_rule = QWidget()
+        self._answer_rule.setFixedWidth(3)
+        ab.addWidget(self._answer_rule)
+        self._answer_label = QLabel("")
+        self._answer_label.setWordWrap(True)
+        self._answer_label.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-family: {theme.FONT};"
+            f" font-size: {theme.SZ_BODY}px;"
+        )
+        ab.addWidget(self._answer_label, 1)
+        col.addWidget(self._answer_box)
+
+        # speaking strip — click to stop the voice
+        self._speaking_box = QWidget()
+        self._speaking_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        sb = QHBoxLayout(self._speaking_box)
+        sb.setContentsMargins(14, 0, 0, 0)
+        sb.setSpacing(8)
+        self._ripple = _Ripple()
+        sb.addWidget(self._ripple)
+        speak_lbl = QLabel("STREAMING AUDIO · TAP TO MUTE")
+        speak_lbl.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; letter-spacing: 1px;"
+        )
+        sb.addWidget(speak_lbl, 1)
+        self._speaking_box.mousePressEvent = lambda _e: self._stop_tts()
+        col.addWidget(self._speaking_box)
+
+        # phase: error
+        self._error_box = QWidget()
+        eb = QHBoxLayout(self._error_box)
+        eb.setContentsMargins(0, 0, 0, 0)
+        eb.setSpacing(8)
+        self._error_dot = QWidget()
+        self._error_dot.setFixedSize(5, 5)
+        self._error_dot.setStyleSheet(
+            f"background: {theme.ERROR}; border-radius: 2px;"
+        )
+        eb.addWidget(self._error_dot, 0, Qt.AlignmentFlag.AlignTop)
+        self._error_label = QLabel("")
+        self._error_label.setWordWrap(True)
+        self._error_label.setStyleSheet(
+            f"color: {theme.ERROR}; font-family: {theme.FONT_MONO}; font-size: 12px;"
+        )
+        eb.addWidget(self._error_label, 1)
+        col.addWidget(self._error_box)
+
+        col.addWidget(self._build_staged_card())
+        col.addStretch()
+        return stage
+
+    # ── the armed action: shown whenever something is staged ──────────────
+    def _build_staged_card(self) -> QWidget:
+        card = QWidget()
+        card.setObjectName("stagedCard")
+        card.setStyleSheet(
+            f"QWidget#stagedCard {{ background: {tokens.SURFACE_1};"
+            f" border: 1px solid {tokens.rgba(theme.ACCENT, 0.40)};"
+            f" border-radius: 14px; }}"
+        )
+        glow = QGraphicsDropShadowEffect(card)
+        glow.setBlurRadius(20)
+        glow.setOffset(0, 0)
+        glow.setColor(_c(theme.ACCENT, 0.12))
+        card.setGraphicsEffect(glow)
+
+        box = QVBoxLayout(card)
+        box.setContentsMargins(13, 13, 13, 13)
+        box.setSpacing(10)
+
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        self._staged_kicker = QLabel("")
+        self._staged_kicker.setStyleSheet(
+            f"color: {theme.ACCENT_BRIGHT}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; letter-spacing: 1.4px; border: none;"
+        )
+        head.addWidget(self._staged_kicker)
+        self._staged_target = QLabel("")
+        self._staged_target.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-family: {theme.FONT}; font-size: 11px;"
+            f" background: {tokens.SURFACE_2}; border-radius: 9px; padding: 2px 9px;"
+        )
+        head.addWidget(self._staged_target)
+        head.addStretch()
+        box.addLayout(head)
+
+        # the body reads in the target medium's own shape
+        self._staged_body = QLabel("")
+        self._staged_body.setWordWrap(True)
+        self._staged_body.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-family: {theme.FONT};"
+            f" font-size: 13px; background: {tokens.SURFACE_0};"
+            f" border: 1px solid {tokens.rgba('#FFFFFF', 0.07)};"
+            f" border-radius: 10px; padding: 9px 12px;"
+        )
+        box.addWidget(self._staged_body)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(7)
+        self._staged_send = QPushButton("Send")
+        self._staged_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._staged_send.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_ON_ACCENT}; background: {theme.ACCENT};"
+            f" border: none; border-radius: 9px; padding: 6px 14px;"
+            f" font-family: {theme.FONT}; font-size: 12px; font-weight: 500; }}"
+            f"QPushButton:hover {{ background: {theme.ACCENT_BRIGHT}; }}"
+            f"QPushButton:pressed {{ background: {theme.ACCENT_PRESS}; }}"
+            f"QPushButton:disabled {{ background: {tokens.SURFACE_3};"
+            f" color: {theme.TEXT_MUTED}; }}"
+        )
+        self._staged_send.clicked.connect(self._confirm_staged)
+        actions.addWidget(self._staged_send)
+
+        cancel = QPushButton("Cancel")
+        cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_SECONDARY}; background: transparent;"
+            f" border: none; padding: 6px 8px; font-family: {theme.FONT};"
+            f" font-size: 12px; font-weight: 500; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        cancel.clicked.connect(self._cancel_staged)
+        actions.addWidget(cancel)
+        actions.addStretch()
+
+        self._staged_hint = QLabel('SAY "SEND"')
+        self._staged_hint.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; border: none;"
+        )
+        actions.addWidget(self._staged_hint)
+        box.addLayout(actions)
+
+        self._staged_card = card
+        card.setVisible(False)
+        return card
+
+    # ── footer ────────────────────────────────────────────────────────────
+    def _build_footer(self) -> QWidget:
+        foot = QWidget(self._card)
+        foot.setStyleSheet(f"border-top: 1px solid {tokens.rgba('#FFFFFF', 0.06)};")
+        wrap = QVBoxLayout(foot)
+        wrap.setContentsMargins(14, 10, 14, 10)
+        wrap.setSpacing(8)
+
+        # live indicators (pomodoro / focus / offline / memory) stay available
+        self._status_bar = QLabel("")
+        self._status_bar.setStyleSheet(theme.STATUS_BAR + "border: none;")
+        self._status_bar.setVisible(False)
+        wrap.addWidget(self._status_bar)
+
+        # voice mode
+        self._voice_row = QWidget()
+        vr = QHBoxLayout(self._voice_row)
+        vr.setContentsMargins(0, 0, 0, 0)
+        vr.setSpacing(10)
+        self._mic_dot = _StateDot()
+        self._mic_dot.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mic_dot.setToolTip("Mute / unmute the mic")
+        self._mic_dot.mousePressEvent = lambda _e: self._toggle_mute()
+        vr.addWidget(self._mic_dot)
+        self._mic_label = QLabel("MIC IS LIVE WHILE OPEN")
+        self._mic_label.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; letter-spacing: 1.2px; border: none;"
+        )
+        vr.addWidget(self._mic_label)
+        vr.addStretch()
+        self._settings_btn = _CircleButton("gear", "Settings")
+        self._settings_btn.clicked.connect(self._open_settings)
+        vr.addWidget(self._settings_btn)
+        self._type_btn = _CircleButton("keyboard", "Type instead")
+        self._type_btn.clicked.connect(lambda: self._set_typed_mode(True))
+        vr.addWidget(self._type_btn)
+        self._expand_btn = _CircleButton("expand", "Open the Cockpit  (full screen)")
+        self._expand_btn.clicked.connect(self._expand_to_cockpit)
+        vr.addWidget(self._expand_btn)
+        wrap.addWidget(self._voice_row)
+
+        # typed mode — same brain, same exchange
+        self._typed_row = QWidget()
+        tr = QHBoxLayout(self._typed_row)
+        tr.setContentsMargins(0, 0, 0, 0)
+        tr.setSpacing(10)
+        self._text_input = QLineEdit()
+        self._text_input.setPlaceholderText("Type it — same brain, same exchange")
+        self._text_input.setStyleSheet(
+            f"QLineEdit {{ background: {tokens.SURFACE_1};"
+            f" border: 1px solid {tokens.rgba(theme.ACCENT, 0.35)};"
+            f" border-radius: {tokens.R_PILL}px; color: {theme.TEXT_PRIMARY};"
+            f" padding: 7px 14px; font-family: {theme.FONT}; font-size: 13px; }}"
+            f"QLineEdit::placeholder {{ color: {theme.TEXT_MUTED}; }}"
+        )
+        self._text_input.returnPressed.connect(self._on_text_entered)
+        self._text_input.installEventFilter(self)
+        tr.addWidget(self._text_input, 1)
+        hide_btn = QPushButton("HIDE")
+        hide_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        hide_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_MUTED}; font-family: {theme.FONT_MONO};"
+            f" font-size: 10px; background: transparent; border: none; padding: 4px 8px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+        )
+        hide_btn.clicked.connect(lambda: self._set_typed_mode(False))
+        tr.addWidget(hide_btn)
+        self._typed_row.setVisible(False)
+        wrap.addWidget(self._typed_row)
+        return foot
 
     def _apply_theme(self):
         settings = _load_settings()
         self._card.setStyleSheet(theme.card_style(settings.get("theme", "dark")))
 
     def _setup_timers(self):
-        # Ring animation tick — only runs while a turn is in flight
+        # One loop drives every organic motion, and it only runs while the
+        # window is on screen — a hidden overlay costs nothing.
         self._anim_timer = QTimer(self)
-        self._anim_timer.setInterval(30)
-        self._anim_timer.timeout.connect(self._ring.tick)
+        self._anim_timer.setInterval(33)
+        self._anim_timer.timeout.connect(self._tick)
 
-        # Status bar polling every second (two tiny local JSON reads)
         self._status_poll_timer = QTimer(self)
         self._status_poll_timer.setInterval(1000)
         self._status_poll_timer.timeout.connect(self._update_status_bar)
-        self._status_poll_timer.start()
+
+    def _tick(self):
+        dt = 0.033
+        if self._prompt_box.isVisible():
+            self._prompt_bars.tick(dt)
+        if self._hearing_box.isVisible():
+            self._hearing_bars.tick(dt)
+        if self._doing_box.isVisible():
+            self._doing_dot.tick(dt)
+        if self._speaking_box.isVisible():
+            self._ripple.tick(dt)
+        self._mic_dot.tick(dt)
 
     # ------------------------------------------------------------------ #
-    #  Conversation history bubbles                                        #
+    #  Phase + state rendering                                             #
     # ------------------------------------------------------------------ #
 
-    def _add_bubble(self, role: str, text: str):
-        from datetime import datetime
-        self._history.append((role, text))
-        if len(self._history) > _MAX_HISTORY:
-            self._history.pop(0)
-            # Rebuild all bubbles
-            self._rebuild_bubbles()
-            return
-        ts = datetime.now().strftime("%H:%M")
-        bubble = MessageBubble(role, text[:500], ts, self._history_container)
-        # Insert before the trailing stretch
-        count = self._history_layout.count()
-        self._history_layout.insertWidget(count - 1, bubble)
-        # Scroll to bottom
-        QTimer.singleShot(50, self._scroll_to_bottom)
+    # ------------------------------------------------------------------ #
+    #  The armed action                                                    #
+    # ------------------------------------------------------------------ #
 
-    def _rebuild_bubbles(self):
-        # Remove all except stretch
-        while self._history_layout.count() > 1:
-            item = self._history_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        for role, text in self._history:
-            bubble = MessageBubble(role, text[:500], "", self._history_container)
-            count = self._history_layout.count()
-            self._history_layout.insertWidget(count - 1, bubble)
-        QTimer.singleShot(50, self._scroll_to_bottom)
+    _VERBS = {"calendar": "Delete"}
+    _HINTS = {"calendar": 'SAY "DELETE"'}
 
-    def _scroll_to_bottom(self):
-        sb = self._history_scroll.verticalScrollBar()
-        sb.setValue(sb.maximum())
+    @pyqtSlot()
+    def _refresh_staged(self):
+        action = staging.current()
+        if action is None:
+            self._staged_card.setVisible(False)
+        else:
+            self._staged_kicker.setText(f"{action.medium.upper()} →")
+            self._staged_target.setText(action.target)
+            _align_left(self._staged_body)
+            self._staged_body.setText(action.body)
+            self._staged_send.setText(self._VERBS.get(action.medium, "Send"))
+            self._staged_send.setEnabled(True)
+            self._staged_hint.setText(
+                self._HINTS.get(action.medium, 'SAY "SEND"')
+            )
+            self._staged_card.setVisible(True)
 
-    def _clear_history(self):
-        self._history.clear()
-        while self._history_layout.count() > 1:
-            item = self._history_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        rows = staging.receipts()
+        for i, row in enumerate(self._receipt_rows):
+            if i < len(rows):
+                row.setText(f"{rows[i]['summary']} · {rows[i]['at']}")
+                row.setVisible(True)
+            else:
+                row.setVisible(False)
+        self._receipts_box.setVisible(bool(rows))
+
+        self._paint_state(self._current_state)
+        self._resize_to_content()
+
+    @pyqtSlot()
+    def _refresh_progress(self):
+        """The caption says which tool is working, not a generic spinner."""
+        label = progress.active_label()
+        if label and self._phase in ("hearing", "doing"):
+            self._doing_caption.setText(f"{label}…")
+            tint = tokens.SKILL_TINT.get(
+                progress.skill_for(label.replace(" ", "_")) or "", theme.THINKING
+            )
+            self._doing_caption.setStyleSheet(
+                f"color: {tint}; font-family: {theme.FONT_MONO}; font-size: 12px;"
+            )
+
+    def _confirm_staged(self):
+        """Confirm off the GUI thread — a send opens apps and waits on focus."""
+        self._staged_send.setEnabled(False)
+        threading.Thread(target=self._run_confirm, daemon=True).start()
+
+    def _run_confirm(self):
+        try:
+            result = staging.confirm()
+        except Exception as e:
+            result = f"[send failed: {e}]"
+        self.staged_result.emit(result)
+
+    def _cancel_staged(self):
+        staging.cancel()
+
+    @pyqtSlot(str)
+    def _on_staged_result(self, result: str):
+        self._answer = result
+        _align_left(self._answer_label)
+        self._answer_label.setText(result)
+        self._set_phase("answering")
+
+    def _set_phase(self, phase: str):
+        """One exchange at a time: each phase replaces the one before it."""
+        self._phase = phase
+        self._prompt_box.setVisible(phase == "prompt")
+        self._hearing_box.setVisible(phase == "hearing")
+        self._heard_small.setVisible(
+            bool(self._heard) and phase in ("doing", "answering", "error")
+        )
+        self._doing_box.setVisible(phase == "doing")
+        self._answer_box.setVisible(phase == "answering" and bool(self._answer))
+        self._speaking_box.setVisible(
+            phase == "answering" and self._current_state == "speaking"
+        )
+        self._error_box.setVisible(phase == "error")
+        self._resize_to_content()
+
+    def _paint_state(self, state: str):
+        """Hue + label together — the design forbids signalling by colour alone."""
+        color = theme.STATE_COLORS.get(state, theme.TEXT_MUTED)
+        armed = staging.current() is not None
+        # Glow = live: a mic is open OR an action is armed. Never decoration.
+        live = armed or (state in ("listening", "speaking") and not self._mic_muted)
+        self._header.set_state(color, live or state != "idle")
+        self._mic_dot.set_state(color, live)
+        self._state_label.setText(_STATE_LABELS.get(state, state.upper()))
+        self._state_label.setStyleSheet(
+            f"color: {color}; font-family: {theme.FONT_MONO}; font-size: 10px;"
+            f" font-weight: 500; letter-spacing: 1.4px;"
+        )
+        self._prompt_bars.set_color(color if state == "listening" else theme.ACCENT)
+        self._hearing_bars.set_color(color if state == "listening" else theme.ACCENT)
+        rule = theme.SPEAKING if state == "speaking" else theme.ACCENT
+        self._answer_rule.setStyleSheet(
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 {rule}, stop:1 transparent); border-radius: 2px;"
+        )
+
+    def _resize_to_content(self):
+        # The card grows with the exchange but never past the screen — a long
+        # answer is spoken, and the caption is a caption, not a transcript.
+        wanted = self.sizeHint().height()
+        screen = QApplication.screenAt(self.pos()) or QApplication.primaryScreen()
+        if screen is not None:
+            wanted = min(wanted, int(screen.availableGeometry().height() * 0.7))
+        self.setFixedHeight(wanted)
 
     # ------------------------------------------------------------------ #
-    #  Live status bar                                                     #
+    #  Live status indicators                                              #
     # ------------------------------------------------------------------ #
 
     def _update_status_bar(self):
@@ -553,7 +985,7 @@ class OverlayWindow(QWidget):
                         if remaining > 0:
                             m, s = divmod(remaining, 60)
                             label = data.get("label", "Focus")
-                            indicators.append(f"⏱ {label} {m}:{s:02d}")
+                            indicators.append(f"{label.upper()} {m}:{s:02d}")
         except Exception:
             pass
 
@@ -563,21 +995,21 @@ class OverlayWindow(QWidget):
             if focus_file.exists():
                 data = json.loads(focus_file.read_text(encoding="utf-8"))
                 if data.get("active"):
-                    indicators.append("🔴 Focus ON")
+                    indicators.append("FOCUS ON")
         except Exception:
             pass
 
         # Offline / local LLM
         try:
             if getattr(self.brain, "_offline_mode", False):
-                indicators.append("☁️ Offline")
+                indicators.append("OFFLINE")
         except Exception:
             pass
 
         # Vector memory failed to load (facts still work)
         try:
             if getattr(self.memory, "degraded", False):
-                indicators.append("⚠ Memory off")
+                indicators.append("MEMORY OFF")
         except Exception:
             pass
 
@@ -588,18 +1020,19 @@ class OverlayWindow(QWidget):
             self._status_bar.setVisible(False)
 
     # ------------------------------------------------------------------ #
-    #  Quick actions                                                       #
+    #  Controls                                                            #
     # ------------------------------------------------------------------ #
 
     def _toggle_mute(self):
         self._mic_muted = not self._mic_muted
-        self._mic_btn.setText("Muted" if self._mic_muted else "Mic")
+        self._mic_label.setText("MIC MUTED" if self._mic_muted else "MIC IS LIVE WHILE OPEN")
         try:
             if self._mic_muted:
                 self.voice_in.stop_recording()
             # Un-mute just happens naturally at next pipeline start
         except Exception:
             pass
+        self._paint_state(self._current_state)
 
     def _stop_tts(self):
         try:
@@ -607,25 +1040,43 @@ class OverlayWindow(QWidget):
         except Exception:
             pass
 
+    def _set_typed_mode(self, on: bool):
+        self._typed_row.setVisible(on)
+        self._voice_row.setVisible(not on)
+        self._resize_to_content()
+        if on:
+            self._text_input.setFocus()
+
+    def _expand_to_cockpit(self):
+        """Small surface hands off to the big one: the overlay gets out of the
+        way first, so the Cockpit opens onto a clear screen."""
+        self._hide()
+        self.expand_requested.emit()
+
     def _open_settings(self):
-        dlg = SettingsDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._apply_theme()
-            settings = _load_settings()
-            # Propagate model change to brain
-            new_model = settings.get("model", "claude-sonnet-4-6")
-            if hasattr(self.brain, "_model"):
-                self.brain._model = new_model
-            # Propagate TTS/voice changes to voice_out
-            if hasattr(self.voice_out, "apply_settings"):
-                self.voice_out.apply_settings(settings)
-            # Propagate wake word toggle
-            if self._wake_listener is not None and hasattr(self._wake_listener, "available"):
-                should_run = settings.get("wake_word_enabled", True)
-                if should_run and not getattr(self._wake_listener, "_running", False):
-                    self._wake_listener.start()
-                elif not should_run and getattr(self._wake_listener, "_running", False):
-                    self._wake_listener.stop()
+        """The design's Settings surface; changes apply as they're made."""
+        if getattr(self, "_settings_window", None) is None:
+            from ui.settings import SettingsWindow
+            self._settings_window = SettingsWindow(
+                on_applied=self._apply_settings, memory=self.memory)
+        self._settings_window.open()
+
+    def _apply_settings(self, settings: dict):
+        self._apply_theme()
+        # Propagate model change to brain
+        new_model = settings.get("model", "claude-sonnet-5")
+        if hasattr(self.brain, "_model"):
+            self.brain._model = new_model
+        # Propagate TTS/voice changes to voice_out
+        if hasattr(self.voice_out, "apply_settings"):
+            self.voice_out.apply_settings(settings)
+        # Propagate wake word toggle
+        if self._wake_listener is not None and hasattr(self._wake_listener, "available"):
+            should_run = settings.get("wake_word_enabled", True)
+            if should_run and not getattr(self._wake_listener, "_running", False):
+                self._wake_listener.start()
+            elif not should_run and getattr(self._wake_listener, "_running", False):
+                self._wake_listener.stop()
 
     # ------------------------------------------------------------------ #
     #  State management                                                    #
@@ -634,75 +1085,75 @@ class OverlayWindow(QWidget):
     @pyqtSlot(str, str, str)
     def on_state_update(self, state: str, transcript: str, response: str):
         self._current_state = state
-        self._ring.set_state_color(state)
-        self._status_label.setStyleSheet(
-            f"color: {theme.STATE_COLORS.get(state, theme.TEXT_SECONDARY)};"
-            f" font-size: 11px; font-family: {theme.FONT};"
-        )
 
         if state == "listening":
-            self._status_label.setText("Listening...")
-            self._transcript_label.setVisible(False)
-            self._text_input.setEnabled(False)
-            self._anim_timer.start()
-            self._ring.start_spin()
+            self._heard = ""
+            self._answer = ""
+            self._heard_big.setText("")
+            self._set_phase("prompt")
 
         elif state == "processing":
-            # Keep ring spinning during thinking; also starts it for text-mode
-            # turns where the listening state is skipped entirely.
-            self._anim_timer.start()
-            self._ring.start_spin()
-            self._status_label.setText("Thinking...")
-            if transcript and transcript != "Transcribing...":
-                self._transcript_label.setText(f'"{transcript}"')
-                self._transcript_label.setVisible(True)
-                self._add_bubble("user", transcript)
+            if transcript and transcript not in _PIPELINE_CAPTIONS:
+                self._heard = transcript
+                _align_left(self._heard_big)
+                self._heard_big.setText(transcript)
+                _align_left(self._heard_small)
+                self._heard_small.setText(transcript)
+                sound.play("heard")    # the utterance commits hearing → doing
+                self._doing_caption.setText("working…")
+                # HEARD holds the stage for a beat before it shrinks into
+                # DOING — STT gives us the line all at once, so this is where
+                # the design's "your words large" moment lives.
+                self._set_phase("hearing")
+                QTimer.singleShot(450, self._heard_settles)
             else:
-                self._transcript_label.setText(transcript)
-                self._transcript_label.setVisible(bool(transcript))
+                self._doing_caption.setText((transcript or "working…").lower())
+                self._set_phase("doing")
 
         elif state == "speaking":
-            self._anim_timer.stop()
-            self._ring.stop_spin()
-            self._status_label.setText("Speaking...")
-            if transcript:
-                self._transcript_label.setText(f'"{transcript}"')
-                self._transcript_label.setVisible(True)
             if response:
-                self._add_bubble("assistant", response)
-                self._transcript_label.setVisible(False)
+                self._answer = response
+                _align_left(self._answer_label)
+                self._answer_label.setText(response)
+            self._set_phase("answering")
+
+        self._paint_state(state)
+
+    def _heard_settles(self):
+        """The heard line shrinks to a caption — unless the answer beat us."""
+        if self._phase == "hearing":
+            self._set_phase("doing")
 
     @pyqtSlot(str)
     def on_error(self, message: str):
         self._current_state = "error"
-        self._ring.set_state_color("error")
-        self._anim_timer.stop()
-        self._ring.stop_spin()
-        self._status_label.setText("Error")
-        self._status_label.setStyleSheet(
-            f"color: {theme.ERROR}; font-size: 11px; font-family: {theme.FONT};"
-        )
-        self._transcript_label.setText(message)
-        self._transcript_label.setVisible(True)
-        self._text_input.setEnabled(True)
-        self._text_input.setFocus()
+        self._error_label.setText(message.upper())
+        self._set_phase("error")
+        self._paint_state("error")
+        # Only a mic-class failure opens typing on its own (the design's
+        # "mic busy/denied" edge state); other errors just report and clear.
+        low = message.lower()
+        if "heard" in low or "mic" in low or "whisper" in low:
+            self._set_typed_mode(True)
+        # the design returns the surface to rest on its own after 4s
+        QTimer.singleShot(4000, self._recover_from_error)
+
+    def _recover_from_error(self):
+        if self._current_state == "error" and self.isVisible():
+            self._current_state = "idle"
+            self._heard = ""
+            self._set_phase("prompt")
+            self._paint_state("idle")
 
     @pyqtSlot()
     def on_pipeline_done(self):
-        self._text_input.setEnabled(True)
         if self._current_state == "speaking":
+            sound.play("resolved")    # the run finished
             self._text_input.clear()
-            self._set_ready()
+            self._paint_state("idle")
             QTimer.singleShot(800, self._auto_restart_listen)
         elif self._current_state == "listening":
-            self._anim_timer.stop()
-            self._ring.stop_spin()
-            self._set_ready()
-
-    def _set_ready(self):
-        self._status_label.setText("Ready")
-        self._status_label.setStyleSheet(theme.STATUS_LABEL)
-        self._ring.set_state_color("idle")
+            self._paint_state("idle")
 
     def _auto_restart_listen(self):
         if self.isVisible() and not (self._worker and self._worker.isRunning()):
@@ -730,33 +1181,64 @@ class OverlayWindow(QWidget):
         if self._mic_muted:
             return
         self._reset_ui()
-        self.show()
-        self._fade_in()
+        self._show_anchored()
         self._start_pipeline()
+
+    def present(self):
+        """Show the surface at rest — anchored and animated, but no mic.
+        Used at launch, where appearing is not the same as being summoned."""
+        self._reset_ui()
+        self._show_anchored()
+        self.activateWindow()
 
     def _show_and_start(self):
         if self._worker and self._worker.isRunning():
             return
         self._reset_ui()
-        # Show immediately and start the mic in the same tick — the fade
-        # animates in parallel, so launch-to-listening isn't gated on it.
-        self.show()
-        self._fade_in()
+        # Shown and listening in the same tick — the 140ms entrance animates
+        # in parallel, so the mic is never gated on it.
+        self._show_anchored()
         if not self._mic_muted:
             self._start_pipeline()
 
-    def _fade_in(self):
+    def _show_anchored(self):
+        """Anchor to the screen edge nearest the cursor, then enter in 140ms."""
+        self._resize_to_content()
+        screen = QApplication.screenAt(self.cursor().pos()) or QApplication.primaryScreen()
+        area = screen.availableGeometry()
+        cursor_x = self.cursor().pos().x()
+        near_right = cursor_x >= area.center().x()
+        x = area.right() - self.width() - 10 if near_right else area.left() + 10
+        y = area.bottom() - self.height() - 56
+        self.move(x, y + 6)
+        self.show()
+        self.raise_()
+        sound.play("summon")          # with the 140ms visual snap
+        if not reduced_motion():
+            self._anim_timer.start()      # nothing breathes under reduced motion
+        self._status_poll_timer.start()
+        self._enter(QPoint(x, y))
+
+    def _enter(self, target: QPoint):
+        if reduced_motion():
+            self.move(target)
+            self.setWindowOpacity(1.0)
+            return
         self.setWindowOpacity(0.0)
-        anim = QPropertyAnimation(self, b"windowOpacity")
-        anim.setDuration(120)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
-        self._fade_anim = anim
+        fade = QPropertyAnimation(self, b"windowOpacity", self)
+        fade.setDuration(tokens.T_FAST)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        slide = QPropertyAnimation(self, b"pos", self)
+        slide.setDuration(tokens.T_FAST)
+        slide.setEndValue(target)
+        for anim in (fade, slide):
+            anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+        self._enter_anims = (fade, slide)
 
     def _hide(self):
-        self._anim_timer.stop()
-        self._ring.stop_spin()
+        self._anim_timer.stop()          # organic loops pause when hidden
+        self._status_poll_timer.stop()
         if self._worker and self._worker.isRunning():
             self.voice_in.stop_recording()
             self.voice_out.stop()
@@ -766,10 +1248,15 @@ class OverlayWindow(QWidget):
         self._current_state = "idle"
 
     def _reset_ui(self):
-        self._set_ready()
-        self._transcript_label.setVisible(False)
-        self._text_input.setEnabled(True)
+        self._heard = ""
+        self._answer = ""
+        self._heard_big.setText("")
+        self._heard_small.setText("")
+        self._answer_label.setText("")
         self._text_input.clear()
+        self._current_state = "idle"
+        self._set_phase("prompt")
+        self._paint_state("idle")
 
     # ------------------------------------------------------------------ #
     #  Pipeline                                                            #
@@ -800,28 +1287,31 @@ class OverlayWindow(QWidget):
         if self._worker and self._worker.isRunning():
             return
         self._reset_ui()
-        self.show()
+        self._show_anchored()
         self._start_pipeline(text_input="what's on my screen")
 
     def query_memory(self):
         if self._worker and self._worker.isRunning():
             return
         self._reset_ui()
-        self.show()
+        self._show_anchored()
         self._start_pipeline(text_input="what do you know about me?")
 
     def run_briefing(self, prompt: str):
         if self._worker and self._worker.isRunning():
             return
         self._reset_ui()
-        self.show()
+        self._show_anchored()
         self._start_pipeline(text_input=prompt)
 
     def _on_text_entered(self):
         text = self._text_input.text().strip()
         if not text or (self._worker and self._worker.isRunning()):
             return
-        self._text_input.setEnabled(False)
+        self._heard = text
+        _align_left(self._heard_small)
+        self._heard_small.setText(text)
+        self._text_input.clear()
         self._start_pipeline(text_input=text)
 
     # ------------------------------------------------------------------ #
@@ -838,11 +1328,13 @@ class OverlayWindow(QWidget):
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Escape:
             self._hide()
+        elif event.key() == Qt.Key.Key_T and not self._typed_row.isVisible():
+            self._set_typed_mode(True)
         else:
             super().keyPressEvent(event)
 
     # ------------------------------------------------------------------ #
-    #  Window dragging (frameless window moves by dragging the header)    #
+    #  Window dragging (frameless window moves by dragging the card)      #
     # ------------------------------------------------------------------ #
 
     def mousePressEvent(self, event):
@@ -871,15 +1363,10 @@ class OverlayWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def closeEvent(self, event):
+        staging.unsubscribe(getattr(self, "_staged_cb", None))
+        progress.unsubscribe(getattr(self, "_progress_cb", None))
         event.ignore()
-        self._save_geometry()
-        self.hide()
-
-    def _save_geometry(self):
-        settings = _load_settings()
-        g = self.geometry()
-        settings["window_geometry"] = [g.x(), g.y(), g.width(), g.height()]
-        _save_settings(settings)
+        self._hide()
 
     def paintEvent(self, event):
         p = QPainter(self)
