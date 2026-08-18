@@ -110,6 +110,24 @@ limit rather than the synthesis. Worth knowing independently: on the free
 tier the neural voice lasts a few dozen sentences a day and then silently
 degrades.
 
+### What was fixed, and what was measured and left alone
+
+| Change | Measured effect |
+|---|---|
+| Select tools once per turn, stable across a conversation | cache writes 4/24 → 2/30 calls; tokens re-cached 2,151 → 898 per call |
+| Word-boundary trigger matching | three verified false positives gone; 44 → 34 tools on an unrelated phrase |
+| One shared Groq client | 3,145 ms → ~0 ms of client construction on a five-sentence reply |
+
+Measured and **not** changed, because the numbers did not justify it:
+
+- **ChromaDB memory query** — 0.0 ms on the turn path.
+- **Re-reading `data/settings.json`** — 0.042 ms per read; ten a turn is 0.4 ms.
+  Caching it would buy a staleness bug and no time.
+
+Still outstanding: the fixed delays (`END_SILENCE_SEC = 1.0`, the 800 ms
+re-arm timer) have not been profiled against real speech, because that needs
+a microphone rather than a typed turn.
+
 Done-criteria: measured, reproducible latency improvement on both text and voice turns,
 with before/after numbers. No regression in tool-calling correctness.
 
