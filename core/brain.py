@@ -4815,6 +4815,11 @@ class Brain:
         self.memory = memory
         self.conversation_history: list[dict] = []
         self._offline_mode = False
+        # Tool names selected so far this conversation. The Anthropic cache
+        # prefix runs tools -> system -> messages, so a changing tools array
+        # invalidates the whole cached prefix. Holding the set and only ever
+        # adding to it keeps the prefix stable across a conversation.
+        self._turn_tool_names: "set[str] | None" = None
         try:
             _sf = "data/settings.json"
             _s = json.loads(open(_sf, encoding="utf-8").read()) if os.path.exists(_sf) else {}
@@ -6364,6 +6369,10 @@ class Brain:
 
         tools_used: list[str] = []
         last_text = ""
+        # Once per turn, not once per iteration: recomputing this inside the
+        # loop re-sent a different tools array on every tool round trip and
+        # threw away ~20k tokens of cached prefix each time.
+        turn_tools = self._tools_for_turn(user_message, hist)
 
         try:
             for _iteration in range(_MAX_TOOL_ITERATIONS):
@@ -6373,7 +6382,7 @@ class Brain:
                     model=turn_model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_message, hist),
+                    tools=turn_tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6569,5 +6578,29 @@ class Brain:
                 memory_context,
             )
 
+    def _tools_for_turn(self, user_message: str, history: list) -> list:
+        """The tool list for this turn, stable for as long as it can be.
+
+        _select_tools already folds in recent turns, so the set it returns
+        grows as a conversation goes on. Unioning it into what the
+        conversation has already sent means the array only ever changes when
+        a genuinely new group is triggered — one cache write at that point,
+        rather than one per turn and per tool iteration.
+        """
+        selected = {t["name"] for t in _select_tools(user_message, history)}
+        if self._turn_tool_names is None:
+            self._turn_tool_names = selected
+        else:
+            self._turn_tool_names |= selected
+        # Switching a skill off in Settings has to take effect now, even for a
+        # group this conversation already activated — so disabled names are
+        # subtracted from the accumulated set, not just from the new one.
+        names = self._turn_tool_names - _disabled_tool_names()
+        # Rebuilt from _SLIM_TOOLS rather than kept as objects so the order is
+        # always the source order — the cache key is the serialised array, and
+        # the same set in a different order is a different prefix.
+        return [t for t in _SLIM_TOOLS if t["name"] in names]
+
     def reset_conversation(self):
         self.conversation_history = []
+        self._turn_tool_names = None
