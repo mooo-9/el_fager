@@ -225,11 +225,20 @@ class TestBriefing:
         assert w._briefing_age() is None
         w.close()
 
+    @pytest.mark.parametrize("age_minutes", [
+        5,          # written moments ago
+        300,        # five hours — lands on yesterday if run after midnight
+        24 * 60,    # unambiguously yesterday
+    ])
     def test_a_ttl_of_zero_means_only_on_request(self, qapp, cache_file,
-                                                 settings_file):
+                                                 settings_file, age_minutes):
+        # However old the cached line is, 0 means the model is not called
+        # until Rewrite is pressed. This used to depend on the hour: past
+        # midnight a five-hour-old briefing reads as yesterday's, and the
+        # freshness check returned None, which skipped the TTL guard.
         settings_file.write_text(json.dumps({"briefing_ttl_minutes": 0}),
                                  encoding="utf-8")
-        _age_briefing(cache_file, minutes=300)
+        _age_briefing(cache_file, minutes=age_minutes)
         brain = MagicMock()
         w = _window(brain=brain)
         w.refresh_briefing()

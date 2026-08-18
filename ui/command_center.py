@@ -1269,7 +1269,14 @@ class CommandCenterWindow(QWidget):
         if not force:
             ttl = self._briefing_ttl()
             age = self._briefing_age()
-            if age is not None and (ttl == 0 or age < ttl):
+            if ttl == 0:
+                # 0 means only on Rewrite. Checking age first let a briefing
+                # from yesterday through, because _briefing_age returns None
+                # across a date change — so "never regenerate on open" quietly
+                # regenerated on the first open after midnight.
+                self._briefing_state.setText(self._briefing_stamp(age))
+                return
+            if age is not None and age < ttl:
                 self._briefing_state.setText(self._briefing_stamp(age))
                 return
             if self._pending:
