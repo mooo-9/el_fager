@@ -67,6 +67,7 @@ class HotkeySignaler(QObject):
     memory_query_triggered = pyqtSignal()
     memory_clear_triggered = pyqtSignal()
     wake_word_detected = pyqtSignal()
+    second_launch = pyqtSignal()      # the desktop icon, clicked again
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,23 +94,71 @@ def _make_tray_image() -> Image.Image:
 _INSTANCE_MUTEX = None  # kept alive at module level so GC doesn't release it
 
 
+# A second launch hands off to the running instance through this event rather
+# than dying quietly. Auto-reset, so each click wakes the waiter exactly once.
+_SHOW_EVENT_NAME = "ElFagerShowRequested"
+
+
+def _signal_running_instance() -> bool:
+    """Ask the instance that owns the mutex to show itself. True if it heard."""
+    import ctypes
+    EVENT_MODIFY_STATE = 0x0002
+    handle = ctypes.windll.kernel32.OpenEventW(EVENT_MODIFY_STATE, False,
+                                               _SHOW_EVENT_NAME)
+    if not handle:
+        return False
+    try:
+        return bool(ctypes.windll.kernel32.SetEvent(handle))
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
+def _watch_for_second_launch(signaler) -> None:
+    """Wait on the show event and raise the surface when a second launch asks.
+
+    Clicking the desktop icon while El Fager was already running used to start
+    a process that found the mutex, showed a toast telling Mo to go and find
+    the tray himself, and exited. Under pythonw there is no console either, so
+    the icon simply looked broken. Now the running instance comes forward.
+    """
+    import ctypes
+    import threading
+
+    handle = ctypes.windll.kernel32.CreateEventW(None, False, False,
+                                                 _SHOW_EVENT_NAME)
+    if not handle:
+        return
+
+    def wait_loop():
+        while True:
+            # INFINITE wait; the thread is a daemon and dies with the process.
+            if ctypes.windll.kernel32.WaitForSingleObject(handle, 0xFFFFFFFF) != 0:
+                return
+            signaler.second_launch.emit()
+
+    threading.Thread(target=wait_loop, daemon=True).start()
+
+
 def _acquire_instance_lock() -> None:
     """Exit immediately if another El Fager process is already running."""
     global _INSTANCE_MUTEX
     import ctypes
     _INSTANCE_MUTEX = ctypes.windll.kernel32.CreateMutexW(None, True, "ElFagerSingleInstance")
     if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-        print("[El Fager] Already running — only one instance allowed.")
-        try:
-            from winotify import Notification
-            Notification(
-                app_id="El Fager",
-                title="El Fager",
-                msg="Already running. Check the system tray.",
-                duration="short",
-            ).show()
-        except Exception:
-            pass
+        print("[El Fager] Already running — asking that instance to show itself.")
+        if not _signal_running_instance():
+            # The mutex is held but nothing is listening: an older build, or a
+            # process wedged mid-shutdown. Say so rather than exiting silently.
+            try:
+                from winotify import Notification
+                Notification(
+                    app_id="El Fager",
+                    title="El Fager",
+                    msg="Already running, but not responding. Check the system tray.",
+                    duration="short",
+                ).show()
+            except Exception:
+                pass
         sys.exit(0)
 
 
@@ -175,6 +224,19 @@ def main():
     signaler.triggered.connect(overlay.toggle)       # Ctrl+Space → assistant
     signaler.analyze_triggered.connect(overlay.analyze_screen)
     signaler.memory_query_triggered.connect(overlay.query_memory)
+
+    def _on_second_launch():
+        """The desktop icon, clicked while El Fager was already running.
+
+        present(), not toggle(): clicking an app's icon means "come here",
+        and toggle would hide the window if it happened to be open already.
+        """
+        overlay.present()
+        overlay.raise_()
+        overlay.activateWindow()
+
+    signaler.second_launch.connect(_on_second_launch)
+    _watch_for_second_launch(signaler)
 
     def _on_memory_clear():
         from PyQt6.QtWidgets import QMessageBox
