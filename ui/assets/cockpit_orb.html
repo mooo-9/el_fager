@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>El Fager — the Ember</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #02040A; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+<canvas id="orb"></canvas>
+<script>
+// ── El Fager — the Ember ─────────────────────────────────────────────────────
+// A dot-matrix sphere: points spread evenly over a sphere by the Fibonacci
+// lattice, turned about a tilted axis, drawn with depth as both size and
+// alpha so the silhouette reads dense and the far face falls away. Two
+// smaller clusters drift above it, one warm and one pale.
+//
+// The Ember's identity is its colour, not its geometry — the state palette
+// below is unchanged from the design, except that rest is now amber rather
+// than slate, so the sphere reads as El Fager's and not as anyone else's.
+//
+// Python drives it through window.orb (see ui/cockpit.py). The loop parks
+// itself whenever the window hides, so a cockpit in the tray costs no GPU.
+
+const COLORS = {
+  idle:      [240, 153,  80],
+  listening: [ 56, 224, 255],
+  thinking:  [240, 153,  80],
+  speaking:  [255, 215, 130],
+  error:     [255,  80,  66],
+};
+
+let aState = 'idle';
+let ambient = false;
+let changedAt = 0;
+let bloomAt = 0;
+let raf = null;
+let running = false;
+
+const cur = { r: 240, g: 153, b: 80 };
+
+const c = document.getElementById('orb');
+
+function sizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.clientWidth * dpr;
+  c.height = c.clientHeight * dpr;
+}
+window.addEventListener('resize', sizeCanvas);
+sizeCanvas();
+
+// Honour the OS reduced-motion flag: the sphere stops turning and rests.
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ── Geometry, built once ─────────────────────────────────────────────────────
+// The Fibonacci lattice gives an even spread with no pole clumping, which is
+// what makes the silhouette read as a solid edge rather than a wire globe.
+const N = 2600;
+const PTS = new Float32Array(N * 3);
+(function buildSphere() {
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = golden * i;
+    PTS[i * 3]     = Math.cos(th) * r;
+    PTS[i * 3 + 1] = y;
+    PTS[i * 3 + 2] = Math.sin(th) * r;
+  }
+})();
+
+// Two drifting clusters. Gaussian-ish scatter so they read as puffs of dust
+// rather than as second spheres competing with the centre.
+function buildCluster(n, seed) {
+  const a = new Float32Array(n * 3);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < n; i++) {
+    const g = () => (rnd() + rnd() + rnd() - 1.5) * 0.9;
+    a[i * 3] = g(); a[i * 3 + 1] = g() * 0.7; a[i * 3 + 2] = g();
+  }
+  return a;
+}
+const CL_A = buildCluster(150, 12345);   // warm, upper left
+const CL_B = buildCluster(130, 98765);   // pale, upper right
+
+const TILT = -0.32;                       // radians; the axis leans back left
+const sinT = Math.sin(TILT), cosT = Math.cos(TILT);
+
+// ── Colour ───────────────────────────────────────────────────────────────────
+// The sphere is not one flat colour: bands of neighbouring hues travel over it,
+// and the whole set wanders slowly. The band centre is still the *state*
+// colour, so the design's language survives — listening is recognisably cyan,
+// error recognisably red — and what moves is the spread around it.
+//
+// Hues are quantised into a small lookup rebuilt once a frame; converting per
+// point would mean 2,600 conversions every frame for a difference no eye can
+// resolve.
+const LUT_N = 28;
+const LUT = new Uint8Array(LUT_N * 3);
+
+function rgb2hsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  const l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn;
+  const s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  let h;
+  if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0));
+  else if (mx === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+
+function hue2rgb(p, q, t) {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+  return p;
+}
+
+function hsl2rgb(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360;
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [
+    Math.round(hue2rgb(p, q, h + 1 / 3) * 255),
+    Math.round(hue2rgb(p, q, h) * 255),
+    Math.round(hue2rgb(p, q, h - 1 / 3) * 255),
+  ];
+}
+
+// ── Speech ───────────────────────────────────────────────────────────────────
+// While it is speaking the sphere has to *move*, not merely change colour.
+// `env` is a 0..1 envelope eased toward a speech-shaped target, and it drives
+// a ripple that runs over the surface plus a lift in spin and brightness.
+//
+// The target is built from three rates rather than one so the motion reads as
+// speech and not as a metronome: syllables, a slower phrase swell, and a drift
+// that keeps successive phrases from landing identically.
+let env = 0;
+let yawAccum = 0;
+let lastNow = 0;
+
+// Measured over a 20s window: mean 0.51, never below 0.25, loud a quarter of
+// the time, ~2.5 peaks/sec. The floor matters as much as the peaks — an
+// envelope that returns to zero between syllables reads as a broken sphere
+// rather than as a talking one.
+function speechTarget(t) {
+  const syllable = 0.5 + 0.5 * Math.sin(t * 15.7);
+  const phrase   = 0.55 + 0.45 * Math.sin(t * 3.1 + 1.1);
+  const drift    = 0.8 + 0.2 * Math.sin(t * 0.7 + 0.4);
+  return Math.min(1, (0.34 + 0.66 * syllable * phrase) * drift * 1.2);
+}
+
+const tick = (now) => {
+  raf = requestAnimationFrame(tick);
+  if (!c || !c.width) return;
+  const ctx = c.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.width / dpr, H = c.height / dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const t = reduced ? 0 : now / 1000;
+  const target = COLORS[aState] || COLORS.idle;
+  // Ease toward the state colour rather than cutting to it — a state change
+  // should feel like the sphere warming, not like a lamp switching.
+  cur.r += (target[0] - cur.r) * 0.06;
+  cur.g += (target[1] - cur.g) * 0.06;
+  cur.b += (target[2] - cur.b) * 0.06;
+  const R0 = Math.round(cur.r), G0 = Math.round(cur.g), B0 = Math.round(cur.b);
+
+  // Ease the envelope toward speech while it talks, and back to still when it
+  // stops. Rising fast and falling slower is what makes it read as a voice
+  // rather than as a flicker. This has to settle before anything reads it.
+  const speaking = aState === 'speaking' && !reduced;
+  const want = speaking ? speechTarget(t) : 0;
+  env += (want - env) * (want > env ? 0.30 : 0.10);
+  if (env < 0.001) env = 0;
+
+  // Rebuild the hue ramp for this frame. The spread opens up while it speaks,
+  // so a talking sphere is not just brighter but more colourful.
+  const [baseH, baseS, baseL] = rgb2hsl(R0, G0, B0);
+  // Error stays unambiguously red: a warning light that drifts through pink
+  // and orange stops reading as a warning. Every other state is free to move.
+  const chroma = aState === 'error' ? 0.22 : 1;
+  // The band on screen at any instant stays narrow — a wide one turns gold
+  // into a pink-to-green rainbow and the state stops being recognisable.
+  // The *wander* is what makes it visibly change colour, slowly, over time.
+  const wander = chroma * (14 * Math.sin(t * 0.13) + 6 * Math.sin(t * 0.31 + 2.0));
+  const spread = chroma * (12 + env * 8);
+  for (let k = 0; k < LUT_N; k++) {
+    const f = k / (LUT_N - 1);                       // 0 … 1 across the band
+    const h = baseH + wander + spread * (f * 2 - 1);
+    // The warm end of the ramp also sits a little brighter, which is what
+    // stops the gradient reading as flat tinting.
+    const l = Math.min(0.82, baseL * (0.80 + 0.40 * f));
+    const s = Math.min(1, baseS * (0.88 + 0.24 * f));
+    const [rr, gg, bb] = hsl2rgb(h, s, l);
+    LUT[k * 3] = rr; LUT[k * 3 + 1] = gg; LUT[k * 3 + 2] = bb;
+  }
+
+  const cx = W / 2, cy = H / 2;
+  const dim = ambient ? 0.34 : 1;
+  // One slow breath, a bloom that swells briefly on a voice wake, and the
+  // whole sphere leaning larger as the voice gets louder.
+  const breath = 1 + Math.sin(t * 0.55) * 0.012;
+  const since = (now - bloomAt) / 1000;
+  const bloom = bloomAt && since < 1.1 ? Math.sin((1 - since / 1.1) * Math.PI) * 0.06 : 0;
+  const R = Math.min(W, H) * 0.26 * breath * (1 + bloom) * (1 + env * 0.055);
+
+  // Spin is integrated, not derived from t, so quickening it while speaking
+  // does not jump the rotation.
+  const dt = lastNow ? Math.min(0.05, (now - lastNow) / 1000) : 0;
+  lastNow = now;
+  if (!reduced) yawAccum += dt * (0.17 + env * 0.30);
+  const yaw = yawAccum;
+  const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+  const FOV = 2.6;
+
+  // ── Sway ───────────────────────────────────────────────────────────────
+  // The sphere travels as well as ripples: side to side and up and down, on
+  // two rates that do not divide into each other, so the path never settles
+  // into a visible loop. A slow drift is always there so it is alive at rest;
+  // speech adds the larger part of the movement on top.
+  // Only the sphere moves — the ground line and the clusters stay put, which
+  // is what makes it read as moving *within* the scene rather than the whole
+  // scene sliding.
+  const swayX = R * (0.020 * Math.sin(t * 0.31) + env * 0.14 * Math.sin(t * 1.9));
+  const swayY = R * (0.014 * Math.sin(t * 0.23 + 1.3) + env * 0.10 * Math.sin(t * 2.7 + 0.6));
+  const bx = cx + swayX, by = cy + swayY;
+
+  // ── the sphere ─────────────────────────────────────────────────────────
+  // Two ripple bands cross the surface while it speaks: one running up the
+  // sphere and a slower one across it, so the interference never repeats
+  // visibly. Points are pushed along their own normal, which for a unit
+  // sphere is the point itself.
+  // Amplitude is deliberately small. Anything past roughly ±8% of the radius
+  // stops reading as a sphere that is speaking and starts reading as a blob:
+  // the silhouette has to stay unmistakably round at full volume.
+  const rip1 = env * 0.055, rip2 = env * 0.028;
+  for (let i = 0; i < N; i++) {
+    let x0 = PTS[i * 3], y0 = PTS[i * 3 + 1], z0 = PTS[i * 3 + 2];
+
+    if (env > 0) {
+      const swell = 1
+        + rip1 * Math.sin(y0 * 9.0 - t * 7.2)
+        + rip2 * Math.sin(x0 * 7.4 + z0 * 5.2 + t * 4.6);
+      x0 *= swell; y0 *= swell; z0 *= swell;
+    }
+
+    // spin about Y, then lean the whole axis toward the viewer
+    const xr = x0 * cosY - z0 * sinY;
+    const zr = x0 * sinY + z0 * cosY;
+    const yr = y0 * cosT - zr * sinT;
+    const zz = y0 * sinT + zr * cosT;
+
+    const p = FOV / (FOV + zz);
+    const sx = bx + xr * R * p;
+    const sy = by + yr * R * p;
+
+    // Depth carries both size and alpha: the near face is bright and fat,
+    // the far face is a faint dusting seen through the front.
+    const d = (zz + 1) / 2;                 // 0 near … 1 far
+    const a = (0.92 - d * 0.74) * dim * (1 + env * 0.30);
+    if (a <= 0.02) continue;
+    const rad = (1.55 - d * 0.95) * p * (1 + env * 0.22);
+
+    // Two slow waves crossing the *unrotated* sphere decide where in the hue
+    // ramp this point sits. Reading the original coordinates rather than the
+    // spun ones fixes the bands to the surface, so colour turns with the
+    // sphere instead of sliding across it like a spotlight.
+    const band = 0.5 + 0.25 * Math.sin(y0 * 2.6 - t * 0.9)
+                     + 0.25 * Math.sin(x0 * 1.9 + z0 * 1.4 + t * 0.6);
+    let k = (band * (LUT_N - 1)) | 0;
+    if (k < 0) k = 0; else if (k >= LUT_N) k = LUT_N - 1;
+    const k3 = k * 3;
+    ctx.fillStyle = 'rgba(' + LUT[k3] + ',' + LUT[k3 + 1] + ',' + LUT[k3 + 2]
+                  + ',' + a.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(sx, sy, rad, 0, 6.283185);
+    ctx.fill();
+  }
+
+  // ── the two clusters ───────────────────────────────────────────────────
+  function drawCluster(arr, ox, oy, scale, tone, drift, phase) {
+    const n = arr.length / 3;
+    const dy = Math.sin(t * drift + phase) * 6;
+    const dx = Math.cos(t * drift * 0.7 + phase) * 5;
+    const spin = t * 0.11 + phase;
+    const cs = Math.cos(spin), sn = Math.sin(spin);
+    for (let i = 0; i < n; i++) {
+      const x0 = arr[i * 3], y0 = arr[i * 3 + 1], z0 = arr[i * 3 + 2];
+      const xr = x0 * cs - z0 * sn;
+      const zr = x0 * sn + z0 * cs;
+      const p = FOV / (FOV + zr);
+      const sx = ox + dx + xr * scale * p;
+      const sy = oy + dy + y0 * scale * p;
+      const d = (zr + 1.6) / 3.2;
+      const a = (0.62 - d * 0.42) * dim;
+      if (a <= 0.02) continue;
+      ctx.fillStyle = 'rgba(' + tone[0] + ',' + tone[1] + ',' + tone[2] + ',' + a.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(sx, sy, (1.25 - d * 0.7) * p, 0, 6.283185);
+      ctx.fill();
+    }
+  }
+  const clusterR = Math.min(W, H) * 0.075;
+  drawCluster(CL_A, cx - R * 1.45, cy - R * 0.86, clusterR, [235, 128, 72], 0.5, 0);
+  drawCluster(CL_B, cx + R * 1.42, cy - R * 0.92, clusterR * 0.86, [214, 226, 238], 0.42, 2.2);
+
+  // ── the ground line the design keeps under the stage ───────────────────
+  ctx.globalAlpha = 0.5 * dim;
+  const hg = ctx.createLinearGradient(cx - 320, 0, cx + 320, 0);
+  hg.addColorStop(0, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0)');
+  hg.addColorStop(0.5, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0.34)');
+  hg.addColorStop(1, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(cx - 320, cy + R + 44, 640, 1);
+  ctx.globalAlpha = 1;
+};
+
+// ── the API Python drives ────────────────────────────────────────────────────
+window.orb = {
+  setState(s) {
+    if (!COLORS[s]) return;
+    aState = s;
+    changedAt = performance.now();
+    if (s !== 'idle') ambient = false;
+  },
+  setAmbient(on) { ambient = !!on; },
+  bloom() { bloomAt = performance.now(); },   // voice wake only; click is silent
+  start() {
+    if (running) return;
+    running = true;
+    sizeCanvas();
+    raf = requestAnimationFrame(tick);
+  },
+  stop() {                                    // hidden window ⇒ no GPU at all
+    running = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+  },
+  get state() { return aState; },
+  get ready() { return true; },
+};
+
+window.orb.start();
+</script>
