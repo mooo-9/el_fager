@@ -10,15 +10,16 @@ import os, struct, sys
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ICON = os.path.join(os.path.dirname(os.path.dirname(HERE)), "data", "el_fager.ico")
-REPO = r"C:\claude proj\el_fager"
 SIZES = [256, 128, 64, 48, 32, 24, 16]
+
+# Which mark to assemble: the frames build_icon_<name>.py just wrote.
+PREFIX = sys.argv[1] if len(sys.argv) > 1 else "dawn"
 
 frames = []
 for s in SIZES:
-    path = os.path.join(HERE, f"sphere_{s}.png")
+    path = os.path.join(HERE, f"{PREFIX}_{s}.png")
     if not os.path.exists(path):
-        sys.exit(f"missing {path} — run build_icon.py first")
+        sys.exit(f"missing {path} — run the matching build_icon_*.py first")
     im = Image.open(path).convert("RGBA")
     assert im.size == (s, s), f"{path} is {im.size}, expected {(s, s)}"
     buf = os.path.join(HERE, f"_ico_{s}.png")
