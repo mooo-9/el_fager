@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#040508;overflow:hidden}
+a{color:#F09950;text-decoration:none}
+a:hover{color:#FFBE7E}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+</style>
+</helmet>
+<div data-screen-label="HUD" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:#040508">
+  <canvas ref="{{ hudRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+
+  <!-- corner readouts -->
+  <div style="position:absolute;top:36px;left:40px">
+    <div style="font:500 34px 'Spline Sans Mono',monospace;color:#F2EDE6">{{ clock }}</div>
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em;margin-top:5px">{{ dateStr }} · CAIRO 34°</div>
+  </div>
+  <div style="position:absolute;top:36px;right:40px;text-align:right">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">NEXT</div>
+    <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:5px">Gym — push day</div>
+    <div style="font:400 12px 'Spline Sans Mono',monospace;color:#F09950;margin-top:2px">19:00 · IN 1H 13M</div>
+  </div>
+  <div style="position:absolute;bottom:104px;left:40px">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">TODAY</div>
+    <div style="font:400 13px/1.75 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:7px">2 TASKS OPEN · 1,840 / 2,400 KCAL<br>MAIL CLEAR EXCEPT STRIPE</div>
+  </div>
+  <div style="position:absolute;bottom:104px;right:40px;text-align:right">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">SKILLS ONLINE</div>
+    <div style="font:400 13px/1.75 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:7px">GMAIL · WHATSAPP · TODOIST<br>BROWSER · SCREEN · +7</div>
+  </div>
+
+  <!-- center voice line + state label -->
+  <div style="position:absolute;left:0;right:0;bottom:172px;text-align:center;pointer-events:none;padding:0 20%">
+    <sc-if value="{{ hasLine }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 17px/1.7 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;text-wrap:pretty">{{ hudLine }}<span style="display:inline-block;width:7px;height:16px;background:{{ stateColor }};border-radius:1px;vertical-align:-2px;margin:0 4px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ caretOpacity }}"></span></div>
+    </sc-if>
+    <sc-if value="{{ hasCaption }}" hint-placeholder-val="{{ false }}">
+      <div style="display:inline-flex;align-items:center;gap:8px;margin-top:12px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#A48BF5">{{ toolCaption }}</div></div>
+    </sc-if>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:116px;text-align:center;pointer-events:none">
+    <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.3em;color:#F2EDE6;opacity:.9">{{ stateLabel }}</div>
+    <div style="font:300 15px 'Alexandria',sans-serif;color:#9BA3B5;margin-top:4px">{{ stateLabelAr }}</div>
+  </div>
+
+  <!-- controls -->
+  <div style="position:absolute;left:0;right:0;bottom:28px;display:flex;justify-content:center;align-items:center;gap:9px">
+    <div onClick="{{ playDemo }}" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 18px;border-radius:99px;background:rgba(240,153,80,0.12);border:1px solid rgba(240,153,80,0.35)" style-hover="background:rgba(240,153,80,0.22)"><svg width="9" height="11" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#FFBE7E"></path></svg><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">{{ playLabel }}</div></div>
+    <div style="width:1px;height:20px;background:rgba(255,255,255,0.1);margin:0 6px"></div>
+    <div onClick="{{ setIdle }}" style="cursor:pointer;padding:7px 14px;border-radius:99px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);opacity:{{ opIdle }}" style-hover="border-color:rgba(255,255,255,0.22)"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#7E8AA3">IDLE</div></div>
+    <div onClick="{{ setListening }}" style="cursor:pointer;padding:7px 14px;border-radius:99px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);opacity:{{ opListening }}" style-hover="border-color:rgba(255,255,255,0.22)"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#F09950">LISTENING</div></div>
+    <div onClick="{{ setThinking }}" style="cursor:pointer;padding:7px 14px;border-radius:99px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);opacity:{{ opThinking }}" style-hover="border-color:rgba(255,255,255,0.22)"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#A48BF5">THINKING</div></div>
+    <div onClick="{{ setSpeaking }}" style="cursor:pointer;padding:7px 14px;border-radius:99px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);opacity:{{ opSpeaking }}" style-hover="border-color:rgba(255,255,255,0.22)"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#FFD9A3">SPEAKING</div></div>
+    <div onClick="{{ setError }}" style="cursor:pointer;padding:7px 14px;border-radius:99px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);opacity:{{ opError }}" style-hover="border-color:rgba(255,255,255,0.22)"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#F2604F">ERROR</div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;orbIntensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.5,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;HUD&quot;},&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;}}">
+class Component extends DCLogic {
+  state = { hud: 'idle', changedAt: 0, clock: '', hudLine: '', toolCaption: '', speakingCaret: false, playing: false };
+  hudRef = React.createRef();
+  cur = { r: 126, g: 138, b: 163 };
+  pulses = [];
+  lastPulse = 0;
+  timers = [];
+
+  componentDidMount() {
+    this.sizeCanvas();
+    this.resizeHandler = () => this.sizeCanvas();
+    window.addEventListener('resize', this.resizeHandler);
+    this.raf = requestAnimationFrame(this.tick);
+    this.clockIv = setInterval(() => this.setState({ clock: this.now() }), 1000);
+    this.setState({ clock: this.now() });
+  }
+  componentWillUnmount() {
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('resize', this.resizeHandler);
+    clearInterval(this.clockIv);
+    this.clearTimers();
+  }
+  sizeCanvas() {
+    const c = this.hudRef.current;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = c.clientWidth * dpr;
+    c.height = c.clientHeight * dpr;
+  }
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; if (this.iv) { clearInterval(this.iv); this.iv = null; } }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  setHud(s, extra) {
+    this.pulses = [];
+    this.setState(Object.assign({ hud: s, changedAt: performance.now() }, extra || {}));
+  }
+  manual(s) {
+    this.clearTimers();
+    this.setHud(s, { hudLine: '', toolCaption: '', playing: false, speakingCaret: false });
+  }
+
+  stream(text, onPart, onDone, tick) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2);
+      onPart(text.slice(0, i));
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; if (onDone) onDone(); }
+    }, tick || 45);
+  }
+
+  playDemo() {
+    this.clearTimers();
+    this.setHud('idle', { hudLine: '', toolCaption: '', playing: true, speakingCaret: false });
+    this.wait(() => {
+      this.setHud('listening', { speakingCaret: true });
+      const q = 'يا فجر — إيه أخبار النهارده؟';
+      this.stream(q, (p) => this.setState({ hudLine: p }), () => {
+        this.wait(() => {
+          this.setHud('thinking', { hudLine: '', toolCaption: 'reading calendar…', speakingCaret: false });
+          this.wait(() => this.setState({ toolCaption: 'checking gmail + todoist…' }), 900);
+          this.wait(() => {
+            this.setHud('speaking', { toolCaption: '', speakingCaret: true });
+            const a = 'يوم هادي — standup الساعة ١١:٣٠، الإيميلات نضيفة ما عدا Stripe، والجيم كمان ساعة. نمت ٧:٤٠ — أحسن يوم الأسبوع.';
+            this.stream(a, (p) => this.setState({ hudLine: p }), () => {
+              this.wait(() => this.setHud('idle', { hudLine: '', playing: false, speakingCaret: false }), 1600);
+            }, 38);
+          }, 2100);
+        }, 500);
+      }, 55);
+    }, 900);
+  }
+
+  tick = (now) => {
+    this.raf = requestAnimationFrame(this.tick);
+    const c = this.hudRef.current;
+    if (!c || !c.width) return;
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = c.width / dpr, H = c.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const t = now / 1000;
+    const S = this.state.hud;
+    const I = Math.max(0.3, Math.min(2, this.props.orbIntensity ?? 1));
+
+    const COLORS = { idle: [126,138,163], listening: [240,153,80], thinking: [164,139,245], speaking: [255,217,163], error: [242,96,79] };
+    const tg = COLORS[S] || COLORS.idle;
+    this.cur.r += (tg[0] - this.cur.r) * 0.07;
+    this.cur.g += (tg[1] - this.cur.g) * 0.07;
+    this.cur.b += (tg[2] - this.cur.b) * 0.07;
+    const col = (a) => 'rgba(' + (this.cur.r|0) + ',' + (this.cur.g|0) + ',' + (this.cur.b|0) + ',' + a + ')';
+
+    const cx = W / 2, cy = H / 2 - 40;
+
+    let amp = 0;
+    if (S === 'idle') amp = 0.12 + 0.1 * Math.sin(t * 2 * Math.PI / 3.6);
+    if (S === 'listening') amp = 0.28 + 0.5 * Math.abs(Math.sin(t * 3.1) * 0.6 + Math.sin(t * 7.7) * 0.4);
+    if (S === 'thinking') amp = 0.22 + 0.08 * Math.sin(t * 2.2);
+    if (S === 'speaking') amp = 0.25 + 0.55 * Math.max(0, Math.sin(t * 5.3)) * (0.65 + 0.35 * Math.sin(t * 0.9));
+    if (S === 'error') amp = 0.15;
+
+    let master = 1;
+    if (S === 'error') {
+      const dt = now - this.state.changedAt;
+      if (dt < 380) master = (Math.floor(dt / 95) % 2) ? 0.15 : 1;
+      else master = 0.75;
+    }
+    ctx.globalAlpha = master;
+
+    const R = (Math.min(W, H) * 0.075 + amp * 34 * I);
+
+    let g = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 4.6);
+    g.addColorStop(0, col(0.15 * I));
+    g.addColorStop(1, col(0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 4.6, 0, 7); ctx.fill();
+
+    g = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,236,210,0.95)');
+    g.addColorStop(0.45, col(0.9));
+    g.addColorStop(1, col(0.05));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+
+    const N = 130;
+    const speed = { idle: 0.05, listening: 0.14, thinking: 0.55, speaking: 0.2, error: 0.02 }[S] || 0.05;
+    const jit = { idle: 3, listening: 18, thinking: 8, speaking: 8, error: 2 }[S] || 3;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + t * speed * Math.PI * 2;
+      let wob = Math.sin(ang * 5 + t * 2.4) * jit * (S === 'listening' ? (0.4 + amp) : 1);
+      if (S === 'thinking') wob += Math.sin(ang * 2 - t * 4.4) * 10;
+      const rad = R + 52 + wob;
+      const px = cx + Math.cos(ang) * rad;
+      const py = cy + Math.sin(ang) * rad * 0.98;
+      ctx.fillStyle = col(0.28 + 0.3 * Math.abs(Math.sin(ang * 3 + t)));
+      ctx.beginPath(); ctx.arc(px, py, 1.6, 0, 7); ctx.fill();
+    }
+
+    if (S === 'thinking') {
+      for (let k = 0; k < 3; k++) {
+        const ang = t * 2.6 + k * (Math.PI * 2 / 3);
+        const px = cx + Math.cos(ang) * (R + 28);
+        const py = cy + Math.sin(ang) * (R + 28) * 0.55;
+        ctx.fillStyle = col(0.9);
+        ctx.beginPath(); ctx.arc(px, py, 3.4, 0, 7); ctx.fill();
+      }
+    }
+
+    if (S === 'speaking' && now - this.lastPulse > 420) {
+      this.lastPulse = now;
+      this.pulses.push(now);
+    }
+    this.pulses = this.pulses.filter((p) => now - p < 1500);
+    for (const p of this.pulses) {
+      const k = (now - p) / 1500;
+      ctx.strokeStyle = col(0.35 * (1 - k));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 42 + k * 230, 0, 7); ctx.stroke();
+    }
+
+    ctx.globalAlpha = master * 0.5;
+    const hw = Math.min(W * 0.32, 420);
+    const hg = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
+    hg.addColorStop(0, col(0));
+    hg.addColorStop(0.5, col(0.5));
+    hg.addColorStop(1, col(0));
+    ctx.fillStyle = hg;
+    ctx.fillRect(cx - hw, cy + R + 110, hw * 2, 1);
+    ctx.globalAlpha = 1;
+  };
+
+  renderVals() {
+    const S = this.state.hud;
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'THINKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const labelsAr = { idle: 'ساكن', listening: 'سامعك', thinking: 'بفكّر', speaking: 'بتكلم', error: 'في مشكلة' };
+    const colors = { idle: '#7E8AA3', listening: '#F09950', thinking: '#A48BF5', speaking: '#FFD9A3', error: '#F2604F' };
+    const d = new Date();
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const op = (s) => (S === s ? '1' : '0.55');
+    return {
+      hudRef: this.hudRef,
+      clock: this.state.clock,
+      dateStr: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()],
+      stateLabel: labels[S],
+      stateLabelAr: labelsAr[S],
+      stateColor: colors[S],
+      hudLine: this.state.hudLine,
+      hasLine: !!this.state.hudLine,
+      caretOpacity: this.state.speakingCaret ? '1' : '0',
+      toolCaption: this.state.toolCaption,
+      hasCaption: !!this.state.toolCaption,
+      playLabel: this.state.playing ? 'PLAYING…' : 'PLAY DEMO',
+      playDemo: () => this.playDemo(),
+      setIdle: () => this.manual('idle'),
+      setListening: () => this.manual('listening'),
+      setThinking: () => this.manual('thinking'),
+      setSpeaking: () => this.manual('speaking'),
+      setError: () => this.manual('error'),
+      opIdle: op('idle'), opListening: op('listening'), opThinking: op('thinking'), opSpeaking: op('speaking'), opError: op('error')
+    };
+  }
+}
+</script>
+</body>
+</html>

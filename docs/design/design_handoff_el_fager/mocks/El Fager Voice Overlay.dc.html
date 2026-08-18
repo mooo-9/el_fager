@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#07080C;overflow:hidden}
+a{color:#F09950;text-decoration:none}
+a:hover{color:#FFBE7E}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(1.1);opacity:.85}}
+@keyframes fgrBar{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes fgrRipple{0%{transform:scale(.45);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+</style>
+</helmet>
+<div data-screen-label="Desktop" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(1400px 900px at 30% -10%,#0B0E16 0%,#07080C 55%),#07080C">
+  <div style="position:absolute;left:0;right:0;bottom:0;height:340px;background:radial-gradient(1100px 340px at 62% 100%,rgba(240,153,80,0.10) 0%,rgba(240,153,80,0) 70%);pointer-events:none"></div>
+
+  <div style="position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;opacity:{{ hintOpacity }};transition:opacity 220ms cubic-bezier(.37,0,.63,1)">
+    <div style="text-align:center">
+      <div style="display:inline-flex;gap:6px;align-items:center">
+        <div style="font:500 13px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:7px 12px;background:#0D1017">CTRL</div>
+        <div style="font:400 13px 'Spline Sans Mono',monospace;color:#5C6478">+</div>
+        <div style="font:500 13px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:7px 26px;background:#0D1017">SPACE</div>
+      </div>
+      <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px">Click the desktop, then summon — or tap the ember in the tray.</div>
+      <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#3E4557;margin-top:8px">EACH TAP OF ▸ SPEAKS A DIFFERENT REQUEST — BRIEF, ACTION, FAILURE</div>
+    </div>
+  </div>
+
+  <!-- taskbar -->
+  <div style="position:absolute;left:0;right:0;bottom:0;height:46px;background:rgba(13,16,23,0.92);border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;padding:0 18px;gap:14px">
+    <div style="display:grid;grid-template-columns:7px 7px;gap:2px;opacity:.5"><div style="width:7px;height:7px;background:#5C6478;border-radius:1.5px"></div><div style="width:7px;height:7px;background:#5C6478;border-radius:1.5px"></div><div style="width:7px;height:7px;background:#5C6478;border-radius:1.5px"></div><div style="width:7px;height:7px;background:#5C6478;border-radius:1.5px"></div></div>
+    <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+    <div style="width:26px;height:26px;border-radius:7px;background:#131722;border:1px solid rgba(255,255,255,0.08)"></div>
+    <div style="width:26px;height:26px;border-radius:7px;background:#131722;border:1px solid rgba(255,255,255,0.08)"></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:16px">
+      <div onClick="{{ toggleOverlay }}" title="El Fager" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;border-radius:8px" style-hover="background:rgba(255,255,255,0.05)">
+        <div style="position:relative;width:14px;height:14px;display:grid;place-items:center">
+          <div style="position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle,rgba(240,153,80,0.5) 0%,rgba(240,153,80,0) 70%);animation:fgrBreath 3.6s ease-in-out infinite"></div>
+          <div style="width:6px;height:6px;border-radius:50%;background:{{ stateColor }};transition:background 220ms"></div>
+        </div>
+        <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">{{ stateLabel }}</div>
+      </div>
+      <div style="text-align:right"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#9BA3B5">{{ clock }}</div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478">{{ dateStr }}</div></div>
+    </div>
+  </div>
+
+  <!-- VOICE OVERLAY -->
+  <div data-screen-label="Voice Overlay" style="position:absolute;right:24px;bottom:70px;width:400px;opacity:{{ overlayOpacity }};transform:translateY({{ overlayShift }}) scale({{ overlayScale }});pointer-events:{{ overlayPointer }};transition:opacity 140ms cubic-bezier(.22,1,.36,1),transform 140ms cubic-bezier(.22,1,.36,1)">
+    <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+
+      <!-- horizon header -->
+      <div style="position:relative;display:flex;align-items:center;gap:9px;padding:12px 16px 14px">
+        <div style="position:absolute;left:0;bottom:0;width:220px;height:26px;background:radial-gradient(140px 26px at 26px 100%,color-mix(in srgb,{{ stateColor }} {{ glowPct }},transparent),transparent 70%);pointer-events:none;transition:background 220ms"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0,{{ stateColor }} 18px,color-mix(in srgb,{{ stateColor }} 35%,transparent) 42%,rgba(255,255,255,0.06) 75%);transition:background 220ms"></div>
+        <div style="position:absolute;left:23px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:{{ stateColor }};box-shadow:0 0 8px {{ stateColor }};transition:background 220ms"></div>
+        <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap">El Fager</div>
+        <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:{{ stateColor }};transition:color 220ms">{{ stateLabel }}</div>
+        <div onClick="{{ dismiss }}" style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px;cursor:pointer" style-hover="color:#F2EDE6;border-color:rgba(255,255,255,0.2)">ESC</div>
+      </div>
+
+      <!-- THE STAGE — one exchange -->
+      <div style="padding:18px 18px 14px;min-height:132px;display:flex;flex-direction:column;justify-content:center;gap:12px">
+
+        <sc-if value="{{ showPrompt }}" hint-placeholder-val="{{ true }}">
+          <div style="text-align:center;padding:10px 0">
+            <div style="display:inline-flex;align-items:flex-end;gap:3px;height:18px;margin-bottom:12px"><div style="width:3px;height:7px;border-radius:2px;background:#F09950;animation:fgrBar 1.1s ease-in-out infinite"></div><div style="width:3px;height:12px;border-radius:2px;background:#F09950;animation:fgrBar .85s ease-in-out infinite;animation-delay:.12s"></div><div style="width:3px;height:16px;border-radius:2px;background:#FFBE7E;animation:fgrBar .7s ease-in-out infinite;animation-delay:.05s"></div><div style="width:3px;height:12px;border-radius:2px;background:#F09950;animation:fgrBar .95s ease-in-out infinite;animation-delay:.2s"></div><div style="width:3px;height:7px;border-radius:2px;background:#F09950;animation:fgrBar 1.2s ease-in-out infinite;animation-delay:.08s"></div></div>
+            <div style="font:400 14px 'Space Grotesk','Alexandria',sans-serif;color:#9BA3B5">Say it. <span style="font-family:'Alexandria',sans-serif;font-weight:300">اتكلم براحتك</span></div>
+          </div>
+        </sc-if>
+
+        <!-- heard: big while listening, caption after -->
+        <sc-if value="{{ showHeardBig }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="display:flex;align-items:flex-end;gap:2.5px;height:20px;flex:none;padding-top:2px"><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:15px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:10px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+            <div dir="auto" style="font:400 17px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;flex:1">{{ heard }}<span style="display:inline-block;width:7px;height:16px;background:#F09950;border-radius:1px;vertical-align:-2px;margin:0 4px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showHeardSmall }}" hint-placeholder-val="{{ false }}">
+          <div dir="auto" style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">{{ heard }}</div>
+        </sc-if>
+
+        <!-- doing -->
+        <sc-if value="{{ isThinking }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite;flex:none"></div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#A48BF5">{{ toolCaption }}</div></div>
+        </sc-if>
+
+        <!-- answer -->
+        <sc-if value="{{ showAnswer }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:11px">
+            <div style="width:3px;border-radius:2px;background:linear-gradient(180deg,{{ answerRule }},transparent);flex:none"></div>
+            <div dir="auto" style="font:400 15px/1.65 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;flex:1">{{ answer }}<span style="display:inline-block;width:6px;height:14px;background:#FFD9A3;border-radius:1px;vertical-align:-2px;margin:0 3px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ answerCaret }}"></span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSpeaking }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px;padding-left:14px"><div style="position:relative;width:16px;height:16px;display:grid;place-items:center;flex:none"><div style="position:absolute;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,217,163,0.6);animation:fgrRipple 1.5s ease-out infinite"></div><div style="width:5px;height:5px;border-radius:50%;background:#FFD9A3"></div></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">STREAMING AUDIO · TAP TO MUTE</div></div>
+        </sc-if>
+
+        <!-- error -->
+        <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:flex-start;gap:8px"><div style="width:5px;height:5px;border-radius:50%;background:#F2604F;flex:none;margin-top:5px"></div><div style="font:400 12px/1.6 'Spline Sans Mono',monospace;color:#F2604F;flex:1">{{ errorText }}</div></div>
+        </sc-if>
+
+        <!-- staged action -->
+        <sc-if value="{{ showStaged }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#131722;border:1px solid rgba(240,153,80,0.4);border-radius:14px;padding:13px;box-shadow:0 0 20px rgba(240,153,80,0.12)">
+            <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">WHATSAPP →</div><div style="display:inline-flex;align-items:center;gap:5px;font:400 11px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border-radius:99px;padding:2px 9px"><div style="width:12px;height:12px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 7.5px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar Adel</div></div>
+            <div dir="rtl" style="background:#0D1017;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px 12px;margin-top:10px;font:300 12.5px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟</div>
+            <div style="display:flex;gap:7px;margin-top:11px;align-items:center">
+              <div onClick="{{ confirmSend }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:9px;padding:6px 14px;cursor:pointer" style-hover="background:#FFBE7E" style-active="background:#D07E35">Send</div>
+              <div onClick="{{ cancelAction }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:6px 8px;cursor:pointer" style-hover="color:#F2EDE6">Cancel</div>
+              <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:auto">SAY "ابعت" OR "SEND"</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- receipts ledger -->
+      <sc-if value="{{ hasReceipts }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:10px 18px 12px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="0">
+            <div style="display:flex;align-items:center;gap:8px"><div style="width:4px;height:4px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">{{ r.text }} · {{ r.time }}</div></div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- footer: voice controls, typing hidden behind key icon -->
+      <div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06)">
+        <sc-if value="{{ typedMode }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(240,153,80,0.35);border-radius:99px;padding:7px 7px 7px 14px">
+            <input ref="{{ inputRef }}" value="{{ typed }}" onChange="{{ onType }}" onKeyDown="{{ onKeyDown }}" placeholder="Type it — same brain, same exchange" style="flex:1;background:transparent;border:none;outline:none;font:400 12.5px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;min-width:0"></input>
+            <div onClick="{{ toggleTyped }}" style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;cursor:pointer;padding:4px 8px" style-hover="color:#F2EDE6">HIDE</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ voiceMode }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px;padding-left:6px"><div style="width:6px;height:6px;border-radius:50%;background:{{ stateColor }};box-shadow:0 0 7px {{ stateColor }};transition:background 220ms"></div><div style="font:400 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#5C6478">MIC IS LIVE WHILE OPEN</div></div>
+            <div style="flex:1"></div>
+            <div onClick="{{ toggleTyped }}" title="Type instead" style="width:30px;height:30px;border-radius:50%;background:#131722;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;cursor:pointer;flex:none" style-hover="border-color:rgba(255,255,255,0.25)"><svg width="13" height="13" viewBox="0 0 14 14"><rect x="1" y="3.5" width="12" height="7.5" rx="1.5" fill="none" stroke="#9BA3B5" stroke-width="1.1"></rect><line x1="3.5" y1="9" x2="10.5" y2="9" stroke="#9BA3B5" stroke-width="1.1"></line></svg></div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <!-- demo scaffolding — outside the product surface -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px">
+      <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#3E4557">DEMO — SIMULATE SPEECH:</div>
+      <div onClick="{{ micDemo }}" title="Speak (demo)" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;border:1px dashed rgba(255,255,255,0.18);border-radius:99px;padding:5px 13px" style-hover="border-color:rgba(240,153,80,0.5)"><svg width="8" height="10" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#9BA3B5"></path></svg><div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9BA3B5">{{ demoLabel }}</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;streamSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:18,&quot;min&quot;:6,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;$preview&quot;:{&quot;width&quot;:&quot;1280px&quot;,&quot;height&quot;:&quot;800px&quot;}}">
+class Component extends DCLogic {
+  state = {
+    open: false,
+    aState: 'idle',
+    phase: 'empty', // empty | hearing | doing | answering | staged | error
+    heard: '',
+    answer: '',
+    toolCaption: '',
+    errorText: '',
+    receipts: [],
+    typed: '',
+    typedMode: false,
+    demoIdx: 0,
+    clock: ''
+  };
+  inputRef = React.createRef();
+  timers = [];
+
+  componentDidMount() {
+    this.keyHandler = (e) => {
+      if (e.code === 'Space' && e.ctrlKey) { e.preventDefault(); this.state.open ? this.dismiss() : this.summon(); }
+      else if (e.key === 'Escape') this.dismiss();
+    };
+    window.addEventListener('keydown', this.keyHandler);
+    this.clockIv = setInterval(() => this.setState({ clock: this.now() }), 1000);
+    this.setState({ clock: this.now() });
+  }
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this.keyHandler);
+    clearInterval(this.clockIv);
+    this.clearTimers();
+  }
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; if (this.iv) { clearInterval(this.iv); this.iv = null; } }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  summon() { this.setState({ open: true, aState: 'listening', phase: 'empty' }); }
+  dismiss() {
+    this.clearTimers();
+    this.setState({ open: false, aState: 'idle', phase: 'empty', heard: '', answer: '', toolCaption: '', errorText: '' });
+  }
+
+  stream(text, onPart, onDone, tick) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2);
+      onPart(text.slice(0, i));
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; if (onDone) onDone(); }
+    }, tick || (this.props.streamSpeed ?? 18));
+  }
+
+  // one exchange replaces the previous one entirely
+  beginExchange(utterance, viaVoice) {
+    this.clearTimers();
+    this.setState({ answer: '', toolCaption: '', errorText: '' });
+    const go = () => this.route(utterance);
+    if (viaVoice) {
+      this.setState({ aState: 'listening', phase: 'hearing', heard: '' });
+      this.stream(utterance, (p) => this.setState({ heard: p }), () => this.wait(go, 450), 55);
+    } else {
+      this.setState({ heard: utterance, phase: 'hearing' });
+      this.wait(go, 150);
+    }
+  }
+
+  route(text) {
+    const t = text.toLowerCase();
+    if (/fail/.test(t) || /النت/.test(text)) {
+      this.setState({ aState: 'thinking', phase: 'doing', toolCaption: 'connecting whatsapp bridge…' });
+      this.wait(() => {
+        this.setState({ aState: 'error', phase: 'error', errorText: 'WHATSAPP BRIDGE TIMED OUT — RETRYING IN 30S. NOTHING WAS SENT.', toolCaption: '' });
+        this.wait(() => { if (this.state.phase === 'error') this.setState({ aState: 'listening', phase: 'empty', heard: '' }); }, 4000);
+      }, 1400);
+      return;
+    }
+    const isAction = /omar|عمر|send|ابعت/.test(t) || /ابعت/.test(text);
+    this.setState({ aState: 'thinking', phase: 'doing', toolCaption: 'reading calendar…' });
+    this.wait(() => this.setState({ toolCaption: isAction ? 'drafting whatsapp → Omar…' : 'checking todoist + health log…' }), 750);
+    this.wait(() => {
+      if (isAction) {
+        this.setState({ aState: 'speaking', phase: 'staged', toolCaption: '' });
+        this.stream('Staged — look it over before it goes.', (p) => this.setState({ answer: p }), () => this.setState({ aState: 'idle' }));
+      } else {
+        this.setState({ aState: 'speaking', phase: 'answering', toolCaption: '' });
+        this.stream("Clear after the 3pm review. Deep work till 5, gym at 7 — and protein's 32g behind.", (p) => this.setState({ answer: p }), () => {
+          this.wait(() => this.setState({ aState: 'listening' }), 700);
+        });
+      }
+    }, 1600);
+  }
+
+  confirmSend() {
+    this.clearTimers();
+    const receipts = [{ text: 'whatsapp → Omar · sent', time: this.now() }, ...this.state.receipts].slice(0, 3);
+    this.setState({ receipts, phase: 'answering', aState: 'speaking', answer: '' });
+    this.stream('تمام — اتبعتت.', (p) => this.setState({ answer: p }), () => this.wait(() => this.setState({ aState: 'listening', phase: 'empty', heard: '', answer: '' }), 1400), 45);
+  }
+  cancelAction() {
+    this.clearTimers();
+    this.setState({ phase: 'empty', heard: '', answer: '', aState: 'listening' });
+  }
+
+  micDemo() {
+    // never interrupt work or wipe an armed action — trust rule
+    if (this.state.aState === 'thinking' || this.state.phase === 'staged' || this.state.phase === 'hearing') return;
+    const scripts = ['إيه شكل بعد الضهر النهارده؟', 'ابعت لعمر إن الميتنج اتأجل لبكرة', 'ابعت رسالة بس النت فاصل — fail'];
+    const line = scripts[this.state.demoIdx % scripts.length];
+    this.setState({ demoIdx: this.state.demoIdx + 1 });
+    this.beginExchange(line, true);
+  }
+
+  renderVals() {
+    const S = this.state.aState;
+    const P = this.state.phase;
+    const colors = { idle: '#7E8AA3', listening: '#F09950', thinking: '#A48BF5', speaking: '#FFD9A3', error: '#F2604F' };
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'THINKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const d = new Date();
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const open = this.state.open;
+    const demoLabels = ['ASK THE BRIEF', 'SEND TO OMAR', 'TRY A FAILURE'];
+    return {
+      clock: this.state.clock,
+      dateStr: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()],
+      stateColor: colors[S],
+      stateLabel: labels[S],
+      glowPct: (S === 'idle' ? 0 : 16) + '%',
+      hintOpacity: open ? '0' : '1',
+      overlayOpacity: open ? '1' : '0',
+      overlayShift: open ? '0px' : '6px',
+      overlayScale: open ? '1' : '0.985',
+      overlayPointer: open ? 'auto' : 'none',
+      showPrompt: P === 'empty',
+      showHeardBig: P === 'hearing',
+      showHeardSmall: !!this.state.heard && (P === 'doing' || P === 'answering' || P === 'staged' || P === 'error'),
+      heard: this.state.heard,
+      isThinking: P === 'doing',
+      toolCaption: this.state.toolCaption,
+      showAnswer: !!this.state.answer,
+      answer: this.state.answer,
+      answerRule: S === 'speaking' ? '#FFD9A3' : '#F09950',
+      answerCaret: S === 'speaking' ? '1' : '0',
+      isSpeaking: S === 'speaking',
+      showError: P === 'error',
+      errorText: this.state.errorText,
+      showStaged: P === 'staged',
+      receipts: this.state.receipts,
+      hasReceipts: this.state.receipts.length > 0,
+      typedMode: this.state.typedMode,
+      voiceMode: !this.state.typedMode,
+      typed: this.state.typed,
+      inputRef: this.inputRef,
+      demoLabel: demoLabels[this.state.demoIdx % 3],
+      onType: (e) => this.setState({ typed: e.target.value }),
+      onKeyDown: (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && this.state.typed.trim()) { const t = this.state.typed.trim(); this.setState({ typed: '' }); this.beginExchange(t, false); }
+        if (e.key === 'Escape') this.dismiss();
+      },
+      toggleTyped: () => {
+        const on = !this.state.typedMode;
+        this.setState({ typedMode: on });
+        if (on) this.wait(() => { if (this.inputRef.current) this.inputRef.current.focus(); }, 60);
+      },
+      toggleOverlay: () => (this.state.open ? this.dismiss() : this.summon()),
+      dismiss: () => this.dismiss(),
+      micDemo: () => this.micDemo(),
+      confirmSend: () => this.confirmSend(),
+      cancelAction: () => this.cancelAction()
+    };
+  }
+}
+</script>
+</body>
+</html>

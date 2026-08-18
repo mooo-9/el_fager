@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#02040A}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.12);opacity:1}}
+@keyframes fgrPing{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.8);opacity:0}}
+</style>
+</helmet>
+<div data-screen-label="Sound Cues" style="min-height:100vh;background:radial-gradient(1000px 700px at 30% 0%,#050B18 0%,#02040A 60%);padding:64px;box-sizing:border-box;font-family:'Space Grotesk','Alexandria',sans-serif">
+  <div style="max-width:1080px;margin:0 auto">
+    <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">PHASE 9 — SOUND CUES</div>
+    <div style="font:600 34px 'Space Grotesk',sans-serif;color:#EAF2F7;margin:12px 0 8px;letter-spacing:-.01em">The audio half of the state system</div>
+    <div style="font:400 15px/1.7 'Space Grotesk',sans-serif;color:#9FB1C2;max-width:820px;text-wrap:pretty">Real, synthesized cues — click any card to hear it. All are short (≤300ms), warm (sine + soft detune), and quiet by design; they confirm a state change, never demand attention. These are reference tones an engineer can match, generated live with Web Audio.</div>
+
+    <div style="display:flex;align-items:center;gap:14px;margin-top:24px">
+      <div onClick="{{ playAll }}" style="display:inline-flex;align-items:center;gap:9px;background:#38E0FF;border-radius:99px;padding:10px 20px;cursor:pointer" style-hover="background:#8FF0FF"><svg width="10" height="12" viewBox="0 0 10 12"><path d="M0.5 0.8 9.2 6 0.5 11.2Z" fill="#04121A"></path></svg><div style="font:500 13px 'Space Grotesk',sans-serif;color:#04121A">Play the whole sequence</div></div>
+      <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5F7183">summon → listen → work → speak → confirm → error</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:28px">
+      <sc-for list="{{ cues }}" as="c" hint-placeholder-count="7">
+        <div onClick="{{ c.play }}" style="background:#050B18;border:1px solid {{ c.border }};border-radius:16px;padding:22px;cursor:pointer;transition:border-color 140ms,background 140ms" style-hover="background:#081120;border-color:rgba(56,224,255,0.4)">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="position:relative;width:40px;height:40px;display:grid;place-items:center;flex:none">
+              <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,{{ c.glow }},transparent 70%);opacity:{{ c.playing }}"></div>
+              <sc-if value="{{ c.isPinging }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;width:34px;height:34px;border-radius:50%;border:1.5px solid {{ c.dot }};animation:fgrPing .5s ease-out"></div></sc-if>
+              <div style="width:13px;height:13px;border-radius:50%;background:{{ c.dot }};box-shadow:0 0 12px {{ c.glow }}"></div>
+            </div>
+            <div style="flex:1">
+              <div style="display:flex;align-items:baseline;gap:8px"><div style="font:500 16px 'Space Grotesk',sans-serif;color:#EAF2F7">{{ c.name }}</div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5F7183">{{ c.dur }}</div></div>
+              <div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9FB1C2;margin-top:3px">{{ c.desc }}</div>
+            </div>
+            <div style="font:400 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5F7183;flex:none">{{ c.notes }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin-top:24px;background:rgba(56,224,255,0.06);border:1px solid rgba(56,224,255,0.2);border-radius:12px;padding:16px 22px;display:flex;gap:28px;align-items:center">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#38E0FF;flex:none">MIX RULES</div>
+      <div style="font:400 13px/1.6 'Space Grotesk',sans-serif;color:#9FB1C2">−18 LUFS target · no cue while TTS is speaking except error · all cues duck under live mic · volume follows OS · each category optional in Settings → Voice → Sound cues.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1180px&quot;,&quot;height&quot;:&quot;820px&quot;}}">
+class Component extends DCLogic {
+  state = { playing: null, pinging: null };
+  ctx = null;
+  bus = null;
+  ensure() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.buildBus();
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  }
+  // shared output bus: soft-knee compressor → master, plus a short convolver reverb send
+  buildBus() {
+    const ac = this.ctx;
+    const master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 22; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.18;
+    comp.connect(master);
+    // gentle reverb tail — decaying noise impulse (≈0.9s), warm
+    const len = Math.floor(ac.sampleRate * 0.9);
+    const imp = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = imp.getChannelData(c);
+      for (let i = 0; i < len; i++) { const t = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3.2); }
+    }
+    const rev = ac.createConvolver(); rev.buffer = imp;
+    const revGain = ac.createGain(); revGain.gain.value = 0.16;
+    rev.connect(revGain); revGain.connect(master);
+    this.bus = { dry: comp, wet: rev };
+  }
+
+  // a soft plucked/struck note: fundamental + quiet 2nd/3rd partials, detuned unison,
+  // lowpass "body" that closes over the decay, percussive attack transient
+  note(freq, start, dur, peak, opt) {
+    const ac = this.ctx, o = opt || {};
+    const bright = o.bright ?? 1;
+    const g = ac.createGain();
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(freq * (5 * bright), start);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(300, freq * 1.6), start + dur);
+    lp.Q.value = 0.3;
+    g.connect(lp); lp.connect(this.bus.dry); lp.connect(this.bus.wet);
+    // partials: fundamental + octave + fifth-above-octave, plus two detuned unisons
+    const parts = [[1, 1], [1.002, 0.7], [0.997, 0.7], [2, 0.18 * bright], [3, 0.08 * bright]];
+    parts.forEach(([mult, amp], i) => {
+      const osc = ac.createOscillator();
+      osc.type = i < 3 ? 'sine' : 'triangle';
+      osc.frequency.value = freq * mult;
+      const pg = ac.createGain(); pg.gain.value = amp;
+      osc.connect(pg); pg.connect(g);
+      osc.start(start); osc.stop(start + dur + 0.05);
+    });
+    // ADSR: fast but not instant attack (8ms), short decay to sustain, exp release
+    const atk = o.atk ?? 0.008, rel = dur;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(peak, start + atk);
+    g.gain.exponentialRampToValueAtTime(peak * 0.55, start + atk + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + rel);
+    // attack transient — a tiny filtered noise click gives it a physical onset
+    if (o.click !== false) this.noise(start, 0.02, peak * 0.5, freq * 3, 3);
+  }
+  // FM voice — a modulator detunes the carrier for metallic/glassy timbres
+  fm(freq, start, dur, peak, ratio, index, opt) {
+    const ac = this.ctx, o = opt || {};
+    const car = ac.createOscillator(); car.type = 'sine'; car.frequency.value = freq;
+    const mod = ac.createOscillator(); mod.type = 'sine'; mod.frequency.value = freq * ratio;
+    const modG = ac.createGain(); modG.gain.setValueAtTime(freq * index, start);
+    modG.gain.exponentialRampToValueAtTime(Math.max(1, freq * index * 0.15), start + dur);
+    mod.connect(modG); modG.connect(car.frequency);
+    const g = ac.createGain();
+    car.connect(g); g.connect(this.bus.dry); g.connect(this.bus.wet);
+    const atk = o.atk ?? 0.005;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(peak, start + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    car.start(start); car.stop(start + dur + 0.05);
+    mod.start(start); mod.stop(start + dur + 0.05);
+    if (o.click) this.noise(start, 0.015, peak * 0.4, freq * 4, 3);
+  }
+  noise(start, dur, peak, center, q) {
+    const ac = this.ctx;
+    const n = Math.max(1, Math.floor(ac.sampleRate * dur));
+    const buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 0.6;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = center || 900; f.Q.value = q || 0.7;
+    const g = ac.createGain();
+    src.connect(f); f.connect(g); g.connect(this.bus.dry);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(peak, start + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    src.start(start); src.stop(start + dur);
+  }
+
+  cueDefs() {
+    return [
+      { id: 'summon', name: 'Summon', dur: '300ms', notes: 'GLASS BELL · D5→A5', dot: '#38E0FF', glow: 'rgba(56,224,255,0.5)', desc: 'Glassy FM bell rising a fifth as the orb wakes. Bright, crystalline, unmistakable.', fn: (t) => { this.fm(587.33, t, 0.26, 0.13, 3.5, 2.2, { atk: 0.004 }); this.fm(880, t + 0.08, 0.28, 0.14, 3.5, 1.8); } },
+      { id: 'heard', name: 'Heard', dur: '35ms', notes: 'DRY MALLET TICK', dot: '#38E0FF', glow: 'rgba(56,224,255,0.5)', desc: 'A single dry mallet tick, mostly transient — the shortest, driest cue in the set.', fn: (t) => { this.noise(t, 0.012, 0.16, 2400, 2.5); this.note(1567.98, t, 0.04, 0.08, { bright: 1.8, atk: 0.002, click: false }); } },
+      { id: 'step', name: 'Step complete', dur: '120ms', notes: 'HOLLOW WOODBLOCK', dot: '#F09950', glow: 'rgba(240,153,80,0.5)', desc: 'A hollow woodblock knock — pure body, no shimmer — each time a ledger step turns green.', fn: (t) => { this.noise(t, 0.02, 0.14, 800, 4); this.note(392, t, 0.11, 0.12, { bright: 0.55 }); } },
+      { id: 'run', name: 'Task resolved', dur: '520ms', notes: 'WARM PLUCKED FIFTH · D3+A3', dot: '#F09950', glow: 'rgba(240,153,80,0.5)', desc: 'A warm, dark plucked fifth with a long resonant tail — the fullest, lowest cue.', fn: (t) => { this.note(146.83, t, 0.5, 0.17, { bright: 0.6 }); this.note(220, t + 0.006, 0.52, 0.11, { bright: 0.6 }); this.note(293.66, t + 0.012, 0.4, 0.06, { bright: 0.7, click: false }); } },
+      { id: 'armed', name: 'Staged / armed', dur: '360ms', notes: 'HOLLOW FM · SUSPENDED FOURTH', dot: '#FFD782', glow: 'rgba(255,215,130,0.5)', desc: 'A hollow, slightly metallic FM tone that hangs unresolved — audibly "waiting".', fn: (t) => { this.fm(523.25, t, 0.18, 0.12, 2, 1.4); this.fm(698.46, t + 0.09, 0.32, 0.13, 2, 1.6, { atk: 0.02 }); } },
+      { id: 'sent', name: 'Sent', dur: '380ms', notes: 'SINE ARP RESOLVES · A5→D5→A4', dot: '#56C99C', glow: 'rgba(86,201,156,0.5)', desc: 'A pure three-note sine arpeggio settling downward and ringing out — clean release.', fn: (t) => { this.note(880, t, 0.1, 0.12, { bright: 1.3, click: false }); this.note(698.46, t + 0.07, 0.12, 0.13, { bright: 1.3, click: false }); this.note(587.33, t + 0.15, 0.34, 0.15, { bright: 1.2, click: false }); } },
+      { id: 'error', name: 'Error', dur: '2×150ms', notes: 'BUZZED DETUNE · TWO KNOCKS', dot: '#FF5042', glow: 'rgba(255,80,66,0.5)', desc: 'Two low knocks with a faint dissonant buzz — clearly "wrong" but soft, never a buzzer.', fn: (t) => { this.fm(155.56, t, 0.14, 0.15, 1.41, 1.2, { click: false }); this.fm(146.83, t + 0.17, 0.17, 0.15, 1.41, 1.4, { click: false }); } }
+    ];
+  }
+
+  play(def) {
+    this.ensure();
+    def.fn(this.ctx.currentTime + 0.02);
+    this.setState({ playing: def.id, pinging: def.id });
+    setTimeout(() => { if (this.state.pinging === def.id) this.setState({ pinging: null }); }, 500);
+    setTimeout(() => { if (this.state.playing === def.id) this.setState({ playing: null }); }, 650);
+  }
+  playAll() {
+    this.ensure();
+    const seq = ['summon', 'heard', 'run', 'armed', 'sent', 'error'];
+    const defs = this.cueDefs();
+    let t = 0;
+    seq.forEach((id) => {
+      const d = defs.find((x) => x.id === id);
+      setTimeout(() => this.play(d), t);
+      t += 700;
+    });
+  }
+
+  renderVals() {
+    return {
+      cues: this.cueDefs().map((d) => ({
+        name: d.name, dur: d.dur, notes: d.notes, desc: d.desc, dot: d.dot, glow: d.glow,
+        playing: this.state.playing === d.id ? '1' : '0',
+        isPinging: this.state.pinging === d.id,
+        border: this.state.playing === d.id ? 'rgba(56,224,255,0.45)' : 'rgba(255,255,255,0.07)',
+        play: () => this.play(d)
+      })),
+      playAll: () => this.playAll()
+    };
+  }
+}
+</script>
+</body>
+</html>
