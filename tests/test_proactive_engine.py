@@ -314,7 +314,7 @@ class TestTranscriptionQuality:
         monkeypatch.chdir(tmp_path)
         self._write_day(tmp_path, [
             "what is the weather", "hello", "sabah el kheir",
-            "check my email", "ازيك يا فجر", "quelle heure est-il",
+            "check my email", "what is on my calendar",
         ])
         engine._check_transcription_quality()
         engine._deliver.assert_not_called()

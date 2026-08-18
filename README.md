@@ -1,6 +1,6 @@
 # El Fager — Personal AI Assistant
 
-Your always-on JARVIS for Windows 11. Lives in the system tray, wakes up with `Ctrl+Space`, listens to you in Arabic/English/French/Arabizi, thinks with Claude, and talks back.
+Your JARVIS for Windows 11. Starts when you launch it, lives in the system tray while it runs, wakes up with `Ctrl+Space`, listens to you in English, thinks with Claude, and talks back.
 
 ---
 
@@ -66,8 +66,9 @@ The Whisper download happens in the background — El Fager will show "Loading W
 
 | Action | What Happens |
 |---|---|
-| `Ctrl+Space` | Opens the overlay and starts listening immediately |
-| Speak naturally | Arabic, English, French, Arabizi — all work |
+| `Ctrl+Space` or `Ctrl+F12` | Opens the overlay and starts listening immediately |
+| `Ctrl+Shift+Space` or `Ctrl+Shift+F12` | Opens the Command Center |
+| Speak naturally | English |
 | Stop speaking | El Fager detects silence (~1.5s) and starts thinking |
 | `Escape` | Closes the overlay and cancels any in-progress recording |
 | `Ctrl+Space` again | Closes overlay if already open |
@@ -162,11 +163,10 @@ python -m pip install google-auth google-auth-oauthlib google-auth-httplib2 goog
 
 ## Voices
 
-TTS picks the best available backend: Groq Orpheus (neural, needs `GROQ_API_KEY`) with Edge TTS as the always-available fallback. Language is auto-detected per response.
+TTS picks the best available backend: Groq Orpheus (neural, needs `GROQ_API_KEY`) with Edge TTS as the always-available fallback.
 
 | Language | Orpheus (`.env` var) | Edge fallback (`.env` var) |
 |---|---|---|
-| Arabic | `fahad` (`TTS_VOICE_AR`) | `ar-EG-ShakirNeural` (`EDGE_VOICE_AR`) |
 | English | `daniel` (`TTS_VOICE_EN`) | `en-US-GuyNeural` (`EDGE_VOICE_EN`) |
 
 See the docstring in `core/voice_out.py` for all Orpheus voice options.

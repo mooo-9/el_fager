@@ -40,7 +40,6 @@ Append under a `# ── Section Name ──…` comment (add one for a new doma
 - Add the tool name(s) to a group in `_TOOL_GROUP_NAMES` (~line 4696), or
   create a new `frozenset({...})` group.
 - New group ⇒ add trigger phrases to `_GROUP_TRIGGERS` (~line 4864).
-  **Include Arabic trigger phrases** — Mo speaks to it in Egyptian Arabic.
 - Core always-on tools go in `_CORE_NAMES` instead (rare; keep that list small).
 
 ## 4. Dispatch — `_dispatch_tool_once` in `core/brain.py` (~line 5088)

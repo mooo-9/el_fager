@@ -50,12 +50,16 @@ class FakeVoiceOut:
     def __init__(self):
         self.spoken = []
 
-    def speak(self, text):
+    # should_stop is the barge-in hook: the pipeline hands it to every speak
+    # call so an utterance can be cut mid-word.
+    def speak(self, text, should_stop=None):
         self.spoken.append(text)
+        return False
 
-    def speak_stream(self, sentences):
+    def speak_stream(self, sentences, should_stop=None):
         for s in sentences:
             self.spoken.append(s)
+        return False
 
 
 class FakeMemory:
@@ -156,9 +160,9 @@ class TestPopSentences:
         assert _pop_sentences(state) == []
         assert state["buf"] == "It costs 3.5 dollars"
 
-    def test_arabic_question_mark(self):
-        state = {"buf": "كيف حالك؟ تمام"}
-        assert _pop_sentences(state) == ["كيف حالك؟"]
+    def test_question_mark(self):
+        state = {"buf": "How are you? Fine"}
+        assert _pop_sentences(state) == ["How are you?"]
 
     def test_newline_is_a_boundary(self):
         state = {"buf": "line one\nline two"}
@@ -167,7 +171,7 @@ class TestPopSentences:
 
 
 class TestEndPhrase:
-    @pytest.mark.parametrize("text", ["thanks", "Thank you.", "خلاص", "bye", "that's all"])
+    @pytest.mark.parametrize("text", ["thanks", "Thank you.", "stop", "bye", "that's all"])
     def test_end_phrases(self, text):
         assert _is_end_phrase(text) is True
 

@@ -81,7 +81,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "get_all_headlines", "args": {"n": 2}},
             {"tool": "hue_wake_up",       "args": {"light": "all", "duration_minutes": 15}},
             {"tool": "set_system_volume", "args": {"level": 40}},
-            {"tool": "play_music",        "args": {"query": "morning chill arabic"}},
+            {"tool": "play_music",        "args": {"query": "morning chill"}},
         ],
     },
     # ── Night ─────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "hue_scene",         "args": {"scene_name": "energize", "light": "all"}},
             {"tool": "hue_brightness",    "args": {"level": 100, "light": "all"}},
             {"tool": "set_system_volume", "args": {"level": 80}},
-            {"tool": "play_music",        "args": {"query": "workout hype arabic"}},
+            {"tool": "play_music",        "args": {"query": "workout hype"}},
         ],
     },
     # ── Prayer ────────────────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "get_next_prayer",   "args": {}},
             {"tool": "get_all_headlines", "args": {"n": 3}},
             {"tool": "set_system_volume", "args": {"level": 70}},
-            {"tool": "play_music",        "args": {"query": "podcast learning arabic"}},
+            {"tool": "play_music",        "args": {"query": "podcast learning"}},
         ],
     },
 ]

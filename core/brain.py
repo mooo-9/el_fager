@@ -39,13 +39,19 @@ About Mo:
 Personality:
 - Calm, sharp, direct — like a brilliant friend, not a corporate chatbot
 - Always call him Mo
-- Arabic input → respond in Egyptian Arabic slang (عامية مصرية)
-- English input → respond in English
-- Mixed/Arabizi input → match the mix
-- CRITICAL: Always respond in the SAME language Mo used. Never switch languages unless asked.
+- CRITICAL: Always respond in English, whatever language Mo writes or speaks in.
 - Be concise — 1-2 sentences MAX. Spoken answers must be short. Never bullet lists or paragraphs unless Mo explicitly asks for detail.
 - Always use 12-hour AM/PM time format (3:45 PM, 9:30 AM). Never use 24-hour format (15:45, 09:30) in any response.
 - Dry humor when it comes naturally, never forced
+
+You are SPOKEN ALOUD. Write for the ear, not the page:
+- Use contractions — "you've", "it's", "I'll", "that's". Writing them out sounds stilted read aloud.
+- Open with the answer, not a preamble. Never "Sure!", "Certainly", "Great question", "Let me check" — just say the thing.
+- One idea per sentence. Long clause-stacked sentences lose a listener who cannot re-read.
+- Say numbers the way you would out loud: "half an hour", "just after four", "about twenty minutes".
+- No markdown, no symbols, no emoji, no parentheticals — none of it survives being spoken.
+- Vary how you start. Beginning every answer the same way is the tell that gives away a machine.
+- When you don't know, say so plainly and briefly. Never pad with hedging.
 
 Available tools: file_search, open_file, read_file_content, open_app, run_command, get_clipboard, set_clipboard, web_search, fetch_page, set_reminder, list_reminders, cancel_reminder, remember_fact, forget_topic, what_do_you_know, list_facts.
 When Mo says "translate this", "fix this", "summarize this", "what does this mean" with no specified content — silently call get_clipboard first.
@@ -86,6 +92,14 @@ When Mo says "delete WhatsApp contact [name]" or "remove [name] from WhatsApp" �
 Notion tools: search_notion, read_notion_page, append_to_notion, create_notion_page.
 page_id can be the last segment of a Notion URL or a bare UUID — pass either form directly.
 If Notion not set up, tell Mo to add NOTION_TOKEN to .env (from notion.so/profile/integrations → Create integration, then share pages with the integration).
+Obsidian tools — read: search_vault, ask_vault, read_note, list_notes | write: create_note, append_to_note, append_to_daily_note | manage: delete_note, rename_note, move_note | graph: get_backlinks, get_outgoing_links, list_vault_tags, search_vault_by_tag | index: index_vault.
+Obsidian is Mo's local Markdown vault — it needs no API key. Note names can be a title ("Ideas"), a vault path ("Uni/CS/Lecture 1"), or a [[wikilink]]; pass any form directly.
+When Mo says "note that", "add to my notes", "log this", or "put this in Obsidian" without naming a note — use append_to_daily_note.
+When Mo asks what he wrote or thought about a topic — use ask_vault (meaning-based, finds notes that never use his exact words). Use search_vault only for an exact string, a filename, or a phrase he quotes.
+Follow up on ask_vault hits with read_note to get the full note before answering.
+delete_note moves the note to the vault trash, so it is recoverable — still confirm with Mo before deleting, renaming, or moving anything.
+rename_note repoints every [[wikilink]] in the vault automatically, so prefer it over delete-then-create.
+If the vault isn't found, tell Mo to add OBSIDIAN_VAULT=C:\\path\\to\\vault to .env.
 Todoist tools: list_tasks, add_task, complete_task, delete_task.
 When Mo mentions a to-do, assignment, or task — call add_task proactively. Filter examples: 'today', 'overdue', 'p1' (urgent), '#ProjectName'.
 If Todoist not set up, tell Mo to add TODOIST_TOKEN to .env (from todoist.com/app/settings/integrations → API token).
@@ -111,7 +125,7 @@ Telegram tools: send_telegram, get_telegram_messages, add_telegram_contact, list
 When Mo says "send a Telegram to [name]" or "message [name] on Telegram" — use send_telegram. Always look up the contact first; if not found, say so and suggest add_telegram_contact.
 When Mo asks "any new Telegram messages?" or "check Telegram" — use get_telegram_messages. The output includes chat_ids Mo can use to add contacts.
 News tools: get_news, get_all_headlines, search_news, read_news_article.
-When Mo asks for news, headlines, or "what's happening" — use get_news(category). Categories: world, arabic, tech, science, egypt, business, sports. Default is world. For a broad morning briefing use get_all_headlines.
+When Mo asks for news, headlines, or "what's happening" — use get_news(category). Categories: world, tech, science, egypt, business, sports. Default is world. For a broad morning briefing use get_all_headlines.
 When Mo says "search for news about X" or "any news on X" — use search_news(query). Results are numbered so Mo can say "read article 2".
 When Mo says "read that article", "tell me more about article 1", "open article 3" — use read_news_article with the index. Summarise the returned text in 3-5 sentences — never read the raw text aloud.
 Weather tools: get_weather, get_weather_forecast, get_hourly_weather.
@@ -182,10 +196,6 @@ Benchmarks Mo should know (answer proactively):
 - Healthy business margins: gross > 40%, EBIT > 15%, net > 10%
 - Egypt SME loan rate: roughly CBE rate + 3-5% (so ~30-32% total in 2024-2025 era)
 - Rule of 72: years to double = 72 / annual_rate
-═══ ARABIC FINANCIAL VOCABULARY ═══
-معدل الفائدة = interest rate | تضخم = inflation | تدفق نقدي = cash flow | هامش الربح = profit margin
-رأس المال = capital | تقييم = valuation | عائد على الاستثمار = ROI | نقطة التعادل = break-even
-مصروفات = expenses | دخل = income | فاتورة = invoice | ميزانية = budget | مدخرات = savings
 
 ══ EGYPT BUSINESS ENVIRONMENT ══
 Corporate tax: 22.5% standard rate. SME tax incentives may apply.
@@ -195,7 +205,6 @@ Business registration: Commercial Registry + Tax Card + Social Insurance (takes 
 Free zones: GAFI manages — 0% corporate tax, 0% customs in most free zones. Nasr City, 10th of Ramadan, Port Said popular.
 Labor law: minimum wage 6,000 EGP/month (2024). End-of-service = 1 month/year.
 Foreign currency: since 2024 liberalization, USD/EGP ~48-50. FX accounts now widely accessible.
-Stock exchange: EGX managed by FRA (Financial Regulatory Authority). T+2 settlement.
 Central Bank (CBE): sets monetary policy. Key meetings: MPC meetings every 6-8 weeks.
 Key sectors: Banking, Real Estate, Petrochemicals, Fertilizers, FMCG, Tourism, Telecom.
 
@@ -906,6 +915,256 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "search_vault",
+        "description": "Search Mo's local Obsidian vault for notes matching a query. Matches note titles and contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term to find notes"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default: 5"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "read_note",
+        "description": "Read the full text of an Obsidian note. Accepts a note title, a vault-relative path, or a [[wikilink]].",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path (e.g. 'Uni/CS/Lecture 1'), or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "create_note",
+        "description": "Create a new note in the Obsidian vault. Content is Markdown and may use [[wikilinks]] and #tags.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Note title (becomes the filename)"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Optional Markdown body"
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "Optional vault-relative folder, e.g. 'Uni/CS'. Created if missing. Defaults to vault root."
+                }
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "append_to_note",
+        "description": "Append a line of Markdown to the end of an Obsidian note. Creates the note if it doesn't exist.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Markdown text to append as a new line"
+                }
+            },
+            "required": ["name", "text"]
+        }
+    },
+    {
+        "name": "append_to_daily_note",
+        "description": "Append a timestamped bullet to today's Obsidian daily note. Use for quick capture when Mo doesn't name a specific note.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to capture in today's note"
+                }
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "list_notes",
+        "description": "List Obsidian notes, most recently modified first. Optionally scoped to a folder.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "folder": {
+                    "type": "string",
+                    "description": "Optional vault-relative folder to list. Defaults to the whole vault."
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum notes to list. Default: 30"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "ask_vault",
+        "description": "Meaning-based search of Mo's Obsidian vault. Finds relevant notes even when they never use the query's exact words. Use this for 'what did I write/think about X'; use search_vault only for exact strings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "What to look for, in natural language"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum passages to return. Default: 5"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "index_vault",
+        "description": "Refresh the vault's semantic index. Runs automatically before ask_vault, so only call it when Mo asks to reindex or wants index status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rebuild": {
+                    "type": "boolean",
+                    "description": "Discard and rebuild the whole index instead of syncing changes. Default: false"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "delete_note",
+        "description": "Move an Obsidian note to the vault's .trash folder. Recoverable, not erased. Confirm with Mo first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "rename_note",
+        "description": "Rename an Obsidian note and repoint every [[wikilink]] in the vault to the new title.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Current note title, vault path, or wikilink"
+                },
+                "new_title": {
+                    "type": "string",
+                    "description": "New title (without the .md extension)"
+                }
+            },
+            "required": ["name", "new_title"]
+        }
+    },
+    {
+        "name": "move_note",
+        "description": "Move an Obsidian note into another folder, creating the folder if needed. Wikilinks are name-based and survive the move.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "Destination vault-relative folder, e.g. 'Uni/CS'"
+                }
+            },
+            "required": ["name", "folder"]
+        }
+    },
+    {
+        "name": "get_backlinks",
+        "description": "List the Obsidian notes that link to a given note.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results. Default: 20"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "get_outgoing_links",
+        "description": "List the notes a given Obsidian note links to, flagging links that have no note yet.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "list_vault_tags",
+        "description": "List every tag used in the Obsidian vault with how many notes carry it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum tags to list. Default: 40"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "search_vault_by_tag",
+        "description": "List Obsidian notes carrying a tag, in frontmatter or body. Nested tags (#math/calculus) match their parent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tag": {
+                    "type": "string",
+                    "description": "Tag name, with or without the leading #"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results. Default: 20"
+                }
+            },
+            "required": ["tag"]
+        }
+    },
+    {
         "name": "list_tasks",
         "description": "List Mo's Todoist tasks. Filter examples: 'today', 'overdue', 'p1' (urgent), '#ProjectName', 'no date'.",
         "input_schema": {
@@ -1141,7 +1400,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "url":      {"type": "string", "description": "Full YouTube URL or bare video ID"},
-                "language": {"type": "string", "description": "Preferred language code, e.g. 'en' or 'ar'. Auto-detects if omitted."}
+                "language": {"type": "string", "description": "Preferred transcript language code. Default: 'en'."}
             },
             "required": ["url"]
         }
@@ -1210,7 +1469,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "text":            {"type": "string", "description": "Text to translate"},
-                "target_language": {"type": "string", "description": "Target language name or code (e.g. 'French', 'fr', 'Arabic', 'ar')"},
+                "target_language": {"type": "string", "description": "Target language name or code (e.g. 'French', 'fr', 'Spanish', 'es')"},
                 "source_language": {"type": "string", "description": "Source language or 'auto'. Default: auto"}
             },
             "required": ["text", "target_language"]
@@ -1223,7 +1482,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "query":    {"type": "string", "description": "Person or topic to look up"},
-                "language": {"type": "string", "description": "'en', 'ar', or 'auto' (default). Auto picks based on query language."}
+                "language": {"type": "string", "description": "Wikipedia edition to search. Default: 'en'."}
             },
             "required": ["query"]
         }
@@ -1386,11 +1645,11 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "get_news",
-        "description": "Fetch top headlines from an RSS feed. Categories: world, arabic, tech, science, egypt, business, sports.",
+        "description": "Fetch top headlines from an RSS feed. Categories: world, tech, science, egypt, business, sports.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "category": {"type": "string", "description": "Feed category: world | arabic | tech | science | egypt | business | sports. Default: world"},
+                "category": {"type": "string", "description": "Feed category: world | tech | science | egypt | business | sports. Default: world"},
                 "n": {"type": "integer", "description": "Number of headlines. Default: 5"}
             }
         }
@@ -2130,7 +2389,7 @@ TOOLS: list[dict[str, Any]] = [
     # ── Spotify Tools ──────────────────────────────────────────────────────────
     {
         "name": "play_music",
-        "description": "Search and play a song, artist, album, or playlist on Spotify. Detects mood keywords (chill, focus, workout, sad, happy, arabic, sleep) and picks a matching playlist.",
+        "description": "Search and play a song, artist, album, or playlist on Spotify. Detects mood keywords (chill, focus, workout, sad, happy, sleep) and picks a matching playlist.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -4257,6 +4516,13 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "list_repos", "list_issues", "list_prs", "get_repo_info",
         "get_youtube_transcript",
     }),
+    "obsidian": frozenset({
+        "search_vault", "ask_vault", "read_note", "list_notes",
+        "create_note", "append_to_note", "append_to_daily_note",
+        "delete_note", "rename_note", "move_note",
+        "get_backlinks", "get_outgoing_links", "list_vault_tags",
+        "search_vault_by_tag", "index_vault",
+    }),
     "image": frozenset({
         "generate_image", "generate_variation", "list_generated_images", "open_image",
         "delete_image", "clear_all_images", "search_images", "get_image_info",
@@ -4356,41 +4622,45 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "files":       ["open file", "read file", "find file", "search file", "open app",
                     "open application", "run command", "folder", "directory", ".exe",
                     "create folder", "make folder", "new folder", "rename", "copy file",
-                    "move file", "delete file", "list folder", "what's in", "show me the files",
-                    "انشئ مجلد", "احذف الملف", "انقل الملف"],
+                    "move file", "delete file", "list folder", "what's in", "show me the files"],
     "clipboard":   ["clipboard", "what did i copy", "paste", "copied"],
     "productivity":["calendar", "event", "meeting", "email", "mail", "inbox", "task",
                     "todo", "pomodoro", "focus mode", "flashcard", "appointment",
                     "schedule meeting", "unread", "compose", "template",
                     "block distractions", "study mode"],
-    "mouse":       ["click", "type", "press", "drag", "scroll", "move mouse", "right click", "double click", "keyboard", "hotkey", "ctrl+", "اضغط", "اكتب", "اسكرول"],
-    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open", "التطبيق", "نافذة", "برنامج"],
-    "browser":     ["browser", "open chrome", "navigate to", "go to website", "fill form", "click the button", "log in to", "scrape", "automate", "web page", "website", "افتح الموقع", "متصفح"],
+    "mouse":       ["click", "type", "press", "drag", "scroll", "move mouse", "right click", "double click", "keyboard", "hotkey", "ctrl+"],
+    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open"],
+    "browser":     ["browser", "open chrome", "navigate to", "go to website", "fill form", "click the button", "log in to", "scrape", "automate", "web page", "website"],
     "media":       ["play", "music", "song", "pause music", "skip", "next track", "spotify",
-                    "what's playing", "volume up", "volume down", "موسيقى", "اغنية"],
+                    "what's playing", "volume up", "volume down"],
     "system":      ["volume", "brightness", "mute", "battery", "process", "cpu",
                     "ram", "memory usage", "kill process", "task manager"],
     "messaging":   ["whatsapp", "telegram", "send to", "text to", "message to",
-                    "wa ", "واتساب", "تليجرام"],
+                    "wa "],
     "cloud":       ["notion", "drive", "github", "repo", "repository", "google doc",
                     "spreadsheet", "sheet", "upload to", "issue", "pull request", "youtube",
                     "transcript", "summarise video", "summarize video"],
+    "obsidian":    ["obsidian", "vault", "my notes", "note that", "take a note",
+                    "make a note", "new note", "daily note", "wikilink", "backlink",
+                    "what did i write", "note it down", "add to my note", "in my note",
+                    "what did i think about", "what do my notes", "linked to",
+                    "links to", "rename note", "delete note", "move note",
+                    "tagged", "my tags", "reindex", "note about"],
     "image":       ["image", "picture", "photo", "generate", "draw", "wallpaper",
-                    "illustration", "صورة", "ارسم"],
+                    "illustration"],
     "journal":     ["journal", "diary", "mood", "expense", "spent", "spend", "spending",
                     "analytics", "weekly report", "weekly summary", "history", "conversation",
                     "what did we", "what did i do", "talked about", "insight", "trend",
                     "yesterday", "what happened", "daily activity", "recap", "streak",
                     "consistency", "how consistent",
-                    "income", "revenue", "invoice", "savings", "cash flow", "profit",
-                    "يوميات", "مصاريف", "مزاج"],
+                    "income", "revenue", "invoice", "savings", "cash flow", "profit"],
     "finance":     ["invoice", "invoices", "client", "bill ", "billing",
                     "income", "earned", "got paid", "payment received",
                     "cash flow", "profit", "loss", "p&l",
                     "budget", "over budget", "savings", "savings goal", "save up",
                     "financial report", "how much did i make", "how much i made",
                     "log income", "received payment",
-                    "فاتورة", "ايراد", "دخل", "ميزانية", "مدخرات"],
+                    ],
     "bizmath":     ["startup", "saas", "mrr", "arr", "ltv", "cac", "churn", "burn rate",
                     "runway", "break even", "break-even", "margin analysis",
                     "roi", "return on investment", "dcf", "valuation", "multiple",
@@ -4408,27 +4678,25 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "system_health": ["disk space", "how much ram", "cpu usage", "system health", "cpu percent",
                       "is my laptop ok", "how's my pc", "what's using memory", "uptime",
                       "top processes", "what's eating", "memory usage", "system status",
-                      "جهاز", "ذاكرة", "مساحة", "معالج"],
+                      ],
     "network":     ["internet", "wifi", "wi-fi", "connection", "ping", "network", "speed test",
-                    "ip address", "connected", "my ip", "public ip", "local ip",
-                    "انترنت", "واي فاي", "اتصال"],
+                    "ip address", "connected", "my ip", "public ip", "local ip"],
     "pdf":         ["pdf", "merge pdf", "compress pdf", "create pdf", "split pdf",
                     "pdf pages", "PDF", "extract pages", "combine pdf", "pdf info",
-                    "pdf text", "بي دي اف"],
+                    "pdf text"],
     "capture":     ["record screen", "screen record", "record my screen", "start recording",
                     "stop recording", "capture video", "screen video", "recording",
-                    "snapshot", "سجل الشاشة", "تسجيل"],
-    "printer":     ["print", "printer", "printing", "print this", "print file",
-                    "اطبع", "طباعة", "طابعة"],
+                    "snapshot"],
+    "printer":     ["print", "printer", "printing", "print this", "print file"],
     "archive":     ["zip", "unzip", "archive", "compress files", "extract", ".zip",
-                    "pack files", "bundle files", "zipped", "اضغط الملفات", "استخرج"],
+                    "pack files", "bundle files", "zipped"],
     "image_edit":  ["resize image", "crop image", "compress image", "convert image",
                     "rotate image", "make image smaller", "image to jpg", "image to png",
-                    "flip image", "shrink image", "scale image", "اعدل الصورة", "قص الصورة"],
+                    "flip image", "shrink image", "scale image"],
     "units":       ["convert", "how many", "how much is", "degrees celsius", "degrees fahrenheit",
                     "kilometers to miles", "kg to lbs", "lbs to kg", "meters to feet",
                     "temperature convert", "inches to", "gallons to", "megabytes to",
-                    "gigabytes to", "تحويل", "درجة حرارة"],
+                    "gigabytes to"],
     "git":         ["git status", "git commit", "git push", "git pull", "git log", "git diff",
                     "git add", "commit my changes", "push my code", "what changed in git",
                     "stage files", "local repo", "git repo", "version control"],
@@ -4440,7 +4708,7 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "autonomous task", "background task", "my queued tasks", "what tasks do you have",
         "what tasks have you", "tasks queued", "cancel task", "remove task",
         "el fager do", "execute later", "run this later", "task queue",
-        "you do this", "do x for me", "tonight please", "مهمة تلقائية", "انجز هذا لاحقا",
+        "you do this", "do x for me", "tonight please",
     ],
     "notifications": [
         "send my phone", "ping me", "notify my phone", "send notification",
@@ -4453,7 +4721,7 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "skill", "skills", "learn this", "make it a skill", "save this as",
         "automate", "automation", "automatically", "routine", "schedule this",
         "every morning", "every day", "every night", "every week",
-        "stop doing", "suggestions", "proposal", "مهارة", "اتعلمها", "روتين",
+        "stop doing", "suggestions", "proposal",
     ],
     "usage": [
         "cost me", "you cost", "api usage", "api cost", "your cost",
@@ -4463,12 +4731,48 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "missions": [
         "mission", "missions", "big task", "multi-step", "step by step plan",
         "overnight", "work through", "plan and execute", "and then", "then write",
-        "مهمة كبيرة", "خطة",
     ],
 }
 
 # Build a name→slim_tool lookup once for O(1) filtering
 _SLIM_BY_NAME: dict[str, dict] = {t["name"]: t for t in _SLIM_TOOLS}
+
+# ── Skill permissions (Settings → Skills) ────────────────────────────────────
+# The six surfaces the user can switch off, and the tools each one owns. A
+# disabled skill's tools are never sent with the request, and a tool that
+# isn't in the request cannot be called — that is the whole gate.
+_ALL_TOOL_NAMES: frozenset[str] = frozenset(t["name"] for t in TOOLS)
+
+SKILL_TOOLS: dict[str, frozenset[str]] = {
+    # Template CRUD is local text, so it stays available with Gmail off.
+    "gmail": frozenset(
+        n for n in _ALL_TOOL_NAMES if "email" in n and "template" not in n
+    ),
+    "whatsapp": frozenset(n for n in _ALL_TOOL_NAMES if "whatsapp" in n),
+    "calendar": frozenset(n for n in _ALL_TOOL_NAMES if "calendar" in n),
+    "todoist": frozenset({"add_task", "complete_task", "delete_task", "list_tasks"}),
+    "browser": frozenset(n for n in _ALL_TOOL_NAMES if n.startswith("browser_")),
+    "screen": frozenset({
+        "analyze_screen", "ocr_screenshot", "screenshot_coords", "screen_agent",
+    }),
+}
+
+
+def _disabled_tool_names() -> set[str]:
+    """Tools belonging to skills switched off in Settings → Skills.
+
+    Read per request rather than cached, like core.sound.enabled(), so a
+    toggle takes hold on the very next turn instead of after a restart.
+    """
+    try:
+        with open("data/settings.json", encoding="utf-8") as f:
+            disabled = json.load(f).get("skills_disabled", [])
+    except Exception:
+        return set()
+    names: set[str] = set()
+    for skill in disabled:
+        names |= SKILL_TOOLS.get(skill, frozenset())
+    return names
 
 
 def _select_tools(message: str, history: list | None = None) -> list:
@@ -4486,6 +4790,7 @@ def _select_tools(message: str, history: list | None = None) -> list:
     for group, keywords in _GROUP_TRIGGERS.items():
         if any(kw in msg for kw in keywords):
             names.update(_TOOL_GROUP_NAMES[group])
+    names -= _disabled_tool_names()
     return [t for t in _SLIM_TOOLS if t["name"] in names]
 
 
@@ -4513,14 +4818,55 @@ class Brain:
         try:
             _sf = "data/settings.json"
             _s = json.loads(open(_sf, encoding="utf-8").read()) if os.path.exists(_sf) else {}
-            self._model: str = _s.get("model", "claude-sonnet-4-6")
+            self._model: str = _s.get("model", "claude-sonnet-5")
+            self._fast_model: str = _s.get("fast_model", "claude-haiku-4-5-20251001")
+            self._fast_path_enabled: bool = _s.get("fast_path_enabled", True)
         except Exception:
-            self._model = "claude-sonnet-4-6"
+            self._model = "claude-sonnet-5"
+            self._fast_model = "claude-haiku-4-5-20251001"
+            self._fast_path_enabled = True
         try:
             from core.conversation_log import ConversationLogger
             self._logger = ConversationLogger()
         except Exception:
             self._logger = None
+
+    # Turns containing any of these route to the full model — they benefit from
+    # deeper reasoning. Everything short and simple goes to the fast model.
+    _COMPLEX_HINTS = (
+        "why", "how come", "explain", "analyz", "analys", "compare", "summar",
+        "research", "debug", "step by step", "pros and cons", "trade-off",
+        "tradeoff", "strateg", "refactor", "translate", "write a", "write me",
+        "essay", "brainstorm", "in detail",
+    )
+
+    # Confirmation replies must reach the full model — they're expected to
+    # trigger a confirm_* tool call (send email/WhatsApp, delete event), and
+    # Haiku has proven unreliable at actually calling the tool instead of
+    # just replying conversationally (it hallucinated "draft expired" without
+    # ever calling confirm_whatsapp_send). These stay short, so the full
+    # model still returns fast for them.
+    _CONFIRM_HINTS = (
+        "yes", "yeah", "yep", "sure", "confirm", "go ahead", "do it",
+        "send it", "cancel", "no don't", "don't send",
+    )
+
+    def _select_model(self, user_message: str) -> str:
+        """Pick the model for this turn. Short, simple turns go to the fast
+        (Haiku) model for near-instant replies; longer, reasoning-heavy, or
+        confirmation turns use the full model. Toggle with fast_path_enabled
+        in settings.json. Chosen once per turn so the whole tool loop stays
+        on one model."""
+        if not self._fast_path_enabled:
+            return self._model
+        msg = (user_message or "").strip().lower()
+        if any(h in msg for h in self._CONFIRM_HINTS):
+            return self._model
+        if len(msg.split()) > 18:
+            return self._model
+        if any(h in msg for h in self._COMPLEX_HINTS):
+            return self._model
+        return self._fast_model
 
     _DISPATCH_RETRY_DELAYS = (1.0, 3.0)  # 2 retries with backoff on transient errors
 
@@ -4530,17 +4876,27 @@ class Brain:
         Non-transient errors are caught inside _dispatch_tool_once and
         returned as a normal "Tool error (...)" string without retrying.
         """
+        from core import progress
+
+        # Every tool call passes through here, so this is where the step
+        # ledger is written — the surfaces show what a turn is doing.
+        step = progress.step_started(name)
         last_exc: Exception | None = None
         for delay in self._DISPATCH_RETRY_DELAYS:
             try:
-                return self._dispatch_tool_once(name, tool_input)
+                result = self._dispatch_tool_once(name, tool_input)
+                progress.step_finished(step, ok=True)
+                return result
             except Exception as e:
                 last_exc = e
                 time.sleep(delay)
         try:
-            return self._dispatch_tool_once(name, tool_input)
+            result = self._dispatch_tool_once(name, tool_input)
+            progress.step_finished(step, ok=True)
+            return result
         except Exception as e:
             last_exc = e
+        progress.step_finished(step, ok=False)
         attempts = len(self._DISPATCH_RETRY_DELAYS) + 1
         return f"Tool error ({name}): {last_exc} (failed after {attempts} attempts)"
 
@@ -4688,6 +5044,72 @@ class Brain:
                     tool_input.get("content", ""),
                     tool_input.get("parent_page_id"),
                 )
+            # Obsidian — local Markdown vault
+            elif name == "search_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.search_vault(
+                    tool_input["query"], tool_input.get("n", 5)
+                )
+            elif name == "read_note":
+                from tools import obsidian_tool
+                return obsidian_tool.read_note(tool_input["name"])
+            elif name == "create_note":
+                from tools import obsidian_tool
+                return obsidian_tool.create_note(
+                    tool_input["title"],
+                    tool_input.get("content", ""),
+                    tool_input.get("folder"),
+                )
+            elif name == "append_to_note":
+                from tools import obsidian_tool
+                return obsidian_tool.append_to_note(
+                    tool_input["name"], tool_input["text"]
+                )
+            elif name == "append_to_daily_note":
+                from tools import obsidian_tool
+                return obsidian_tool.append_to_daily_note(tool_input["text"])
+            elif name == "list_notes":
+                from tools import obsidian_tool
+                return obsidian_tool.list_notes(
+                    tool_input.get("folder"), tool_input.get("n", 30)
+                )
+            elif name == "ask_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.ask_vault(
+                    tool_input["query"], tool_input.get("n", 5)
+                )
+            elif name == "index_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.index_vault(tool_input.get("rebuild", False))
+            elif name == "delete_note":
+                from tools import obsidian_tool
+                return obsidian_tool.delete_note(tool_input["name"])
+            elif name == "rename_note":
+                from tools import obsidian_tool
+                return obsidian_tool.rename_note(
+                    tool_input["name"], tool_input["new_title"]
+                )
+            elif name == "move_note":
+                from tools import obsidian_tool
+                return obsidian_tool.move_note(
+                    tool_input["name"], tool_input["folder"]
+                )
+            elif name == "get_backlinks":
+                from tools import obsidian_tool
+                return obsidian_tool.get_backlinks(
+                    tool_input["name"], tool_input.get("n", 20)
+                )
+            elif name == "get_outgoing_links":
+                from tools import obsidian_tool
+                return obsidian_tool.get_outgoing_links(tool_input["name"])
+            elif name == "list_vault_tags":
+                from tools import obsidian_tool
+                return obsidian_tool.list_vault_tags(tool_input.get("n", 40))
+            elif name == "search_vault_by_tag":
+                from tools import obsidian_tool
+                return obsidian_tool.search_vault_by_tag(
+                    tool_input["tag"], tool_input.get("n", 20)
+                )
             # Phase 4C — Todoist
             elif name == "list_tasks":
                 from tools import todoist_tool
@@ -4800,7 +5222,7 @@ class Brain:
                 from tools import wikipedia_tool
                 return wikipedia_tool.wikipedia_lookup(
                     tool_input["query"],
-                    tool_input.get("language", "auto"),
+                    tool_input.get("language", "en"),
                 )
             # Phase 6E — Prayer Times
             elif name == "get_prayer_times":
@@ -5899,6 +6321,29 @@ class Brain:
         voice pipeline's resets."""
         return self.chat(user_message, memory_context, history=[])
 
+    def synthesize(self, prompt: str, system: str = "",
+                   model: "str | None" = None, max_tokens: int = 400) -> str:
+        """One-shot text: no tools, no history, no shared system prompt.
+
+        For callers that already hold the facts and only need them written up
+        — the Command Center's briefing prose, which is composed from cards it
+        has already fetched. Going through chat() would make the model re-fetch
+        the same things over four or five round trips, each one carrying ~8k
+        tokens of system prompt and ~4k of tool schemas. This is a single call
+        on the fast model. It still routes through _create_message, so it
+        lands in telemetry like everything else.
+        """
+        response = self._create_message(
+            "synthesize",
+            model=model or self._fast_model,
+            max_tokens=max_tokens,
+            system=system or "You are El Fager, Mo's assistant.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return next(
+            (block.text for block in response.content if block.type == "text"), ""
+        )
+
     def chat(self, user_message: str, memory_context: str = "",
              history: list | None = None, on_text=None) -> str:
         # history=None -> the shared interactive conversation (voice pipeline
@@ -5912,6 +6357,7 @@ class Brain:
             self._logger.log("user", user_message)
 
         system = self._build_system(memory_context)
+        turn_model = self._select_model(user_message)
 
         hist.append({"role": "user", "content": user_message})
         messages = _window_history(hist)
@@ -5924,7 +6370,7 @@ class Brain:
                 response = self._create_message(
                     "chat",
                     on_text=on_text,
-                    model=self._model,
+                    model=turn_model,
                     max_tokens=1024,
                     system=system,
                     tools=_select_tools(user_message, hist),

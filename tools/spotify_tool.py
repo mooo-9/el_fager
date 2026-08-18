@@ -44,7 +44,6 @@ MOODS: dict = {
     "study":   "lofi study music playlist",
     "hype":    "hype energy playlist",
     "workout": "workout motivation gym playlist",
-    "arabic":  "arabic music hits playlist",
     "sleep":   "sleep ambient music playlist",
 }
 

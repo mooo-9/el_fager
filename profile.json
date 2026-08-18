@@ -3,7 +3,9 @@
   "full_name": "Mohamed",
   "location": "Cairo, Egypt",
   "occupation": "Final-year Business Informatics student",
-  "languages": ["Egyptian Arabic", "English", "French", "Arabizi"],
+  "languages": [
+    "English"
+  ],
   "desktop": "C:\\Users\\Mohab1\\OneDrive\\Desktop",
   "documents": "C:\\Users\\Mohab1\\OneDrive\\Documents",
   "downloads": "C:\\Users\\Mohab1\\Downloads",

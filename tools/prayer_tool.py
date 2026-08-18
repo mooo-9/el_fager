@@ -7,7 +7,6 @@ from datetime import datetime
 import httpx
 
 _PRAYER_NAMES_EN = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
-_PRAYER_NAMES_AR = ["الفجر", "الشروق", "الظهر", "العصر", "المغرب", "العشاء"]
 
 _API = "https://api.aladhan.com/v1/timingsByCity"
 
@@ -50,22 +49,22 @@ def get_prayer_times(date: str = None) -> str:
 
         lines = [f"Prayer times for Cairo — {readable_date}:\n"]
         pairs = [
-            ("Fajr",    "الفجر",   timings.get("Fajr")),
-            ("Sunrise", "الشروق",  timings.get("Sunrise")),
-            ("Dhuhr",   "الظهر",   timings.get("Dhuhr")),
-            ("Asr",     "العصر",   timings.get("Asr")),
-            ("Maghrib", "المغرب",  timings.get("Maghrib")),
-            ("Isha",    "العشاء",  timings.get("Isha")),
+            ("Fajr", timings.get("Fajr")),
+            ("Sunrise", timings.get("Sunrise")),
+            ("Dhuhr", timings.get("Dhuhr")),
+            ("Asr", timings.get("Asr")),
+            ("Maghrib", timings.get("Maghrib")),
+            ("Isha", timings.get("Isha")),
         ]
-        for en, ar, t in pairs:
+        for en, t in pairs:
             if t:
                 # Strip timezone suffix (e.g. "(EET)")
                 t_clean = t.split(" ")[0]
-                lines.append(f"  {ar} ({en}):  {t_clean}")
+                lines.append(f"  {en}:  {t_clean}")
 
         # Highlight next prayer
         now = datetime.now()
-        for en, ar, t in pairs:
+        for en, t in pairs:
             if not t:
                 continue
             try:
@@ -74,7 +73,7 @@ def get_prayer_times(date: str = None) -> str:
                     f"{now.strftime('%Y-%m-%d')} {t_clean}", "%Y-%m-%d %H:%M"
                 )
                 if prayer_dt > now:
-                    lines.append(f"\nNext prayer: {ar} ({en}) at {t_clean}")
+                    lines.append(f"\nNext prayer: {en} at {t_clean}")
                     break
             except ValueError:
                 pass

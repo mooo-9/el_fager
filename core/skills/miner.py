@@ -36,7 +36,7 @@ _STOPWORDS = {
 
 def normalize(text: str) -> str:
     text = text.lower()
-    text = re.sub(r"[^a-z؀-ۿ\s]", " ", text)  # keep latin + arabic letters
+    text = re.sub(r"[^a-z\s]", " ", text)  # keep latin letters only
     return re.sub(r"\s+", " ", text).strip()
 
 

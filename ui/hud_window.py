@@ -168,8 +168,7 @@ class HudWindow(QWidget):
     def _on_nutrition_data(
         self,
         kcal: int, protein: int, carbs: int, fat: int,
-        logged_kcal: int, logged_protein: int, logged_carbs: int, logged_fat: int,
-    ):
+        logged_kcal: int, logged_protein: int, logged_carbs: int, logged_fat: int):
         self._hud.push_nutrition(
             kcal, protein, carbs, fat,
             logged_kcal, logged_protein, logged_carbs, logged_fat,
@@ -314,32 +313,25 @@ class HudWindow(QWidget):
         q = query.lower()
         has = lambda *ws: any(w in q for w in ws)
 
-        if has("screen", "code", "error", "bug", "screenshot", "analyze",
-               "شاشة", "شوف", "صورة", "analyze"):
+        if has("screen", "code", "error", "bug", "screenshot", "analyze"):
             return SCENE_VISION
 
-        if has("email", "mail", "gmail", "whatsapp", "inbox", "message",
-               "رسالة", "ايميل", "إيميل", "واتس", "بريد"):
+        if has("email", "mail", "gmail", "whatsapp", "inbox", "message"):
             return SCENE_INBOX
 
-        if has("remind", "calendar", "agenda", "task", "todo", "event", "schedule",
-               "موعد", "مهمة", "نبهني", "فكّر", "فكر"):
+        if has("remind", "calendar", "agenda", "task", "todo", "event", "schedule"):
             return SCENE_AGENDA
 
-        if has("journal", "memory", "remember", "know about", "you know",
-               "يوميات", "فاكر", "افتكر", "تعرف"):
+        if has("journal", "memory", "remember", "know about", "you know"):
             return SCENE_MEMORY
 
-        if has("brief", "morning", "summary", "weather", "prayer", "news",
-               "صباح", "ملخص", "أخبار", "اخبار", "جو"):
+        if has("brief", "morning", "summary", "weather", "prayer", "news"):
             return SCENE_BRIEFING
 
-        if has("eat", "food", "calorie", "macro", "protein", "meal", "diet", "water",
-               "اكل", "أكل", "سعرات", "بروتين", "وجبة", "مية", "ماء"):
+        if has("eat", "food", "calorie", "macro", "protein", "meal", "diet", "water"):
             return SCENE_FOOD
 
-        if has("workout", "gym", "train", "lift", "bench", "squat", "exercise", "reps",
-               "تمرين", "جيم", "تمرن", "حديد"):
+        if has("workout", "gym", "train", "lift", "bench", "squat", "exercise", "reps"):
             return SCENE_GYM
 
         return SCENE_VOICE

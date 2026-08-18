@@ -154,6 +154,23 @@ def skill_proposals() -> str:
             + "\nSay 'make it a skill' to save one, or dismiss it.")
 
 
+def accept_skill_proposal(proposal_id: str) -> str:
+    """Turn a mined proposal into a real skill and stop proposing it.
+
+    The counterpart to dismiss_skill_proposal: saying yes has to actually save
+    the skill, not just retire the proposal.
+    """
+    miner = _miner()
+    match = next((p for p in miner.pending() if p["id"] == proposal_id), None)
+    if match is None:
+        return f"No pending proposal with id {proposal_id}."
+    example = match["example"].strip()
+    name = example[:40].rstrip(" .,?!") or f"Routine {proposal_id}"
+    result = learn_skill(name, example)
+    miner.set_status(proposal_id, "accepted")
+    return result
+
+
 def dismiss_skill_proposal(proposal_id: str) -> str:
     if _miner().set_status(proposal_id, "dismissed"):
         return f"Proposal {proposal_id} dismissed. I will not suggest it again."

@@ -14,18 +14,19 @@ SCREENSHOT_TRIGGERS = (
     "what's on my screen", "what is on my screen",
     "look at my screen", "what do you see",
     "read this", "what's this", "what is this",
-    "شوف شاشتي", "إيه ده", "اقرا ده", "شوف ده",
 )
 
 # Conversation mode: after El Fager replies, keep listening this long for a
 # follow-up before ending the conversation. Context persists across turns.
 FOLLOWUP_WINDOW_SEC = 6.0
+# While something is staged the mic waits longer: you have to read what it
+# wrote before you can say yes to it.
+STAGED_WINDOW_SEC = 20.0
 MAX_TURNS_PER_CONVERSATION = 10
 
 # Phrases that end the conversation immediately (no follow-up window).
 END_PHRASES = (
     "thanks", "thank you", "that's all", "bye", "goodbye", "stop",
-    "خلاص", "شكرا", "مع السلامة", "باي",
 )
 
 
@@ -35,13 +36,13 @@ def _is_screenshot_trigger(text: str) -> bool:
 
 
 def _is_end_phrase(text: str) -> bool:
-    words = text.lower().strip().rstrip(".!،").split()
+    words = text.lower().strip().rstrip(".!").split()
     return len(words) <= 3 and any(p in text.lower() for p in END_PHRASES)
 
 
 # Sentence boundary for streaming TTS: an ender followed by whitespace (so
-# "3.5" never splits mid-number), or a newline. Includes the Arabic '؟'.
-_SENT_END_RE = re.compile(r"[.!?؟…]\s|\n")
+# "3.5" never splits mid-number), or a newline.
+_SENT_END_RE = re.compile(r"[.!?…]\s|\n")
 
 
 def _pop_sentences(state: dict) -> "list[str]":
@@ -114,9 +115,12 @@ class PipelineWorker(QThread):
                 for turn in range(MAX_TURNS_PER_CONVERSATION):
                     self.state_update.emit("listening", "", "")
                     audio = self.voice_in.record_audio(
-                        start_timeout_sec=FOLLOWUP_WINDOW_SEC if turn > 0 else None
+                        start_timeout_sec=self._listen_window(turn)
                     )
                     if audio is None:
+                        # A wake with nothing behind it is a false accept, and
+                        # that is exactly the number worth knowing.
+                        self._note_wake(heard=False)
                         if turn == 0:
                             return
                         break  # follow-up window closed — conversation over
@@ -125,6 +129,7 @@ class PipelineWorker(QThread):
                     t_stt = time.monotonic()
                     transcript = self.voice_in.transcribe(audio)
                     print(f"[El Fager] timing: STT {time.monotonic() - t_stt:.2f}s")
+                    self._note_wake(heard=bool(transcript))
                     if not transcript:
                         if turn == 0:
                             self.error.emit("Nothing heard — please try again")
@@ -144,13 +149,43 @@ class PipelineWorker(QThread):
         finally:
             self.done.emit()
 
+    def _listen_window(self, turn: int) -> "float | None":
+        """How long to wait for speech before giving up.
+
+        The first turn waits as long as it takes — you summoned it. Later
+        turns get the short follow-up window, EXCEPT while an action is armed:
+        confirming by voice is the design's own path ( / "send"), and it
+        cannot be the path if the mic has already closed by the time you look
+        at what it staged.
+        """
+        if turn == 0:
+            return None
+        try:
+            from core import staging
+            if staging.current() is not None:
+                return STAGED_WINDOW_SEC
+        except Exception:
+            pass
+        return FOLLOWUP_WINDOW_SEC
+
+    @staticmethod
+    def _note_wake(heard: bool) -> None:
+        try:
+            from core import wake_metrics
+            wake_metrics.note_speech(heard)
+        except Exception:
+            pass          # measurement never breaks a turn
+
     def _one_turn(self, transcript: str) -> None:
         """Process one utterance: think, remember, speak.
 
         The Claude response streams in; complete sentences are handed to
         voice_out.speak_stream as they arrive, so speech starts on the first
         sentence instead of after the full reply is buffered."""
+        from core import progress
+
         t_start = time.monotonic()
+        progress.begin_turn(transcript)   # last turn's steps leave the stage
         self.state_update.emit("processing", transcript, "")
         memory_context = self.memory.get_recent_context(transcript)
 
@@ -173,9 +208,18 @@ class PipelineWorker(QThread):
                     self.state_update.emit("speaking", transcript, "")
                 sent_q.put(s)
 
+        # Barge-in: listen while it talks, and cut the moment Mo talks over it.
+        from core import barge_in as _barge_in
+
+        monitor = _barge_in.BargeInMonitor() if _barge_in.enabled() else None
+        if monitor is not None:
+            monitor.start()
+
         speaker = threading.Thread(
             target=self.voice_out.speak_stream,
             args=(iter(sent_q.get, None),),
+            kwargs={"should_stop": None if monitor is None
+                    else monitor.tripped.is_set},
             daemon=True,
         )
         speaker.start()
@@ -203,6 +247,17 @@ class PipelineWorker(QThread):
         self.memory.store_conversation_summary(transcript, response)
         self.state_update.emit("speaking", transcript, response)
         speaker.join()
-        if not streamed.is_set():
+        interrupted = monitor is not None and monitor.tripped.is_set()
+        if not streamed.is_set() and not interrupted:
             # Nothing streamed (API error text, offline fallback) — speak it whole.
-            self.voice_out.speak(response)
+            self.voice_out.speak(
+                response,
+                should_stop=None if monitor is None else monitor.tripped.is_set,
+            )
+            interrupted = monitor is not None and monitor.tripped.is_set()
+        if monitor is not None:
+            monitor.stop()
+        if interrupted:
+            # The half-spoken answer collapses to a dim caption and the mic
+            # opens again — being talked over means Mo has the floor now.
+            self.state_update.emit("interrupted", transcript, response)
