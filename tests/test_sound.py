@@ -29,7 +29,24 @@ class TestVoices:
         assert brightness(sound.fm(440, 0.3, index=3.0)) > brightness(sound.note(440, 0.3))
 
     def test_the_noise_burst_sits_around_its_centre(self):
-        assert _dominant_hz(sound.noise(0.05, 0.5, 2000, 3)) == pytest.approx(2000, rel=0.6)
+        """Averaged over several bursts, and seeded.
+
+        A single burst is random, and the loudest FFT bin of one draw missed
+        the tolerance about 15% of the time — flaky enough to block roughly
+        one push in seven and teach everyone to skip the hook. Averaging the
+        magnitude spectrum measures the filter rather than one draw of noise;
+        the seed then makes it repeatable. Both are needed: the seed alone
+        would only prove that one lucky draw passes.
+        """
+        np.random.seed(1729)
+        spectra = []
+        for _ in range(16):
+            burst = sound.noise(0.05, 0.5, 2000, 3)
+            spectra.append(np.abs(np.fft.rfft(burst * np.hanning(len(burst)))))
+        mean_spectrum = np.mean(spectra, axis=0)
+        freqs = np.fft.rfftfreq(len(burst), 1 / sound.SR)
+        peak = float(freqs[int(np.argmax(mean_spectrum))])
+        assert peak == pytest.approx(2000, rel=0.6)
 
     def test_every_voice_starts_and_ends_quietly(self):
         for buf in (sound.note(440), sound.fm(440), sound.noise()):
