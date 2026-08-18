@@ -251,8 +251,10 @@ class VoiceOutput:
     def _synth_groq(self, text: str) -> "str | None":
         """Returns a temp WAV path on success, None on any failure (caller falls through)."""
         try:
-            from groq import Groq
-            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            from core import groq_client
+            client = groq_client.get()
+            if client is None:
+                return None            # caller falls through to Edge TTS
 
             response = client.audio.speech.create(
                 model=ORPHEUS_MODEL_EN,

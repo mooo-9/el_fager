@@ -381,8 +381,10 @@ class VoiceInput:
 
     def _transcribe_groq(self, audio: np.ndarray) -> str:
         try:
-            from groq import Groq
-            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            from core import groq_client
+            client = groq_client.get()
+            if client is None:
+                raise RuntimeError("no Groq key configured")
             wav = _numpy_to_wav_bytes(audio)
             result = client.audio.transcriptions.create(
                 model="whisper-large-v3-turbo",
