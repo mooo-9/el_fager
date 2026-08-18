@@ -258,8 +258,12 @@ class ProactiveEngine:
     def _check_upcoming_events(self) -> None:
         """Remind Mo of a calendar event starting in 5–20 minutes."""
         try:
-            from tools.calendar_tool import list_calendar_events
-            text  = list_calendar_events("today")
+            # The function is list_events; list_calendar_events is the brain's
+            # tool name for it, not an importable symbol. This raised
+            # ImportError into the swallow below on every cycle since the
+            # initial commit, so this check has never once run.
+            from tools.calendar_tool import list_events
+            text  = list_events("today")
             now   = datetime.now()
             today = date.today().isoformat()
             # Match time formats: "10:30 AM", "14:30", "10:30am"
@@ -268,7 +272,9 @@ class ProactiveEngine:
                 h    = int(m.group(1))
                 mins = int(m.group(2))
                 ampm = (m.group(3) or "").upper()
-                title = m.group(4).strip()
+                # _format_event appends a duration — "Standup (30 min)" —
+                # which does not belong in a spoken reminder.
+                title = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(4).strip())
                 if ampm == "PM" and h != 12:
                     h += 12
                 elif ampm == "AM" and h == 12:
@@ -280,8 +286,10 @@ class ProactiveEngine:
                     if not self._cooldown(key, 2):
                         self._deliver(f"Mo, '{title}' starts in {int(delta_min)} minutes.")
                         self._hud_notify(7, f"'{title}' in ", f"{int(delta_min)} min", "", "CALENDAR")
-        except Exception:
-            pass
+        except Exception as e:
+            # Reported, not swallowed: a silent except is what let a broken
+            # import hide here for two months.
+            print(f"[Proactive] event check error: {e}")
 
     def _check_deadlines(self) -> None:
         """Alert when a memorised deadline is today or tomorrow."""
