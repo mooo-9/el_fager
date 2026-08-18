@@ -402,9 +402,19 @@ def delete_event(search_term: str) -> str:
         else:
             readable = start.get("date", "unknown date")
 
+        from core import staging
+
         _pending_deletion["event_id"] = match["id"]
         _pending_deletion["title"] = title
         _pending_deletion["expires_at"] = datetime.now(CAIRO_TZ) + timedelta(seconds=60)
+        staging.stage(
+            medium="calendar",
+            target=title,
+            body=f"Delete “{title}” — {readable}",
+            expires_at=_pending_deletion["expires_at"],
+            confirm=confirm_delete_event,
+            cancel=_pending_deletion.clear,
+        )
 
         return f"Found: {title} on {readable}. Confirm deletion by saying 'yes delete it'."
 
@@ -417,11 +427,14 @@ def confirm_delete_event() -> str:
     if not CALENDAR_AVAILABLE:
         return "[Calendar not set up — place credentials.json in data/ folder. See README for instructions.]"
 
+    from core import staging
+
     if not _pending_deletion:
         return "No pending deletion to confirm"
 
     if datetime.now(CAIRO_TZ) > _pending_deletion.get("expires_at", datetime.min.replace(tzinfo=CAIRO_TZ)):
         _pending_deletion.clear()
+        staging.resolve("expired")
         return "Deletion request expired — say 'cancel my [event name]' again to retry"
 
     service = get_calendar_service()
@@ -433,7 +446,9 @@ def confirm_delete_event() -> str:
         title = _pending_deletion["title"]
         service.events().delete(calendarId="primary", eventId=event_id).execute()
         _pending_deletion.clear()
+        staging.resolve("sent", f"calendar → {title} · deleted")
         return f"🗑️ Deleted: {title}"
     except Exception as e:
         _pending_deletion.clear()
+        staging.resolve("failed")
         return f"[Calendar error: {e}]"

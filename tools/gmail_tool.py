@@ -249,6 +249,8 @@ def send_message(to: str, subject: str, body: str) -> str:
     if not GMAIL_AVAILABLE:
         return _NOT_SET_UP
 
+    from core import staging
+
     _pending_send.clear()
     _pending_send.update({
         "type": "new",
@@ -257,6 +259,15 @@ def send_message(to: str, subject: str, body: str) -> str:
         "body": body,
         "expires_at": datetime.now(CAIRO_TZ) + timedelta(minutes=5),
     })
+    staging.stage(
+        medium="gmail",
+        target=to,
+        body=body,
+        subject=subject,
+        expires_at=_pending_send["expires_at"],
+        confirm=confirm_send_message,
+        cancel=_pending_send.clear,
+    )
 
     preview = body[:200] + ("..." if len(body) > 200 else "")
     return (
@@ -273,11 +284,14 @@ def confirm_send_message() -> str:
     if not GMAIL_AVAILABLE:
         return _NOT_SET_UP
 
+    from core import staging
+
     if not _pending_send:
         return "No email staged — compose one first (e.g. 'send email to X about Y')."
 
     if datetime.now(CAIRO_TZ) > _pending_send.get("expires_at", datetime.min.replace(tzinfo=CAIRO_TZ)):
         _pending_send.clear()
+        staging.resolve("expired")
         return "Send request expired (5-minute limit) — say 'send email to ...' again."
 
     service = get_gmail_service()
@@ -301,10 +315,12 @@ def confirm_send_message() -> str:
 
         service.users().messages().send(userId="me", body=send_body).execute()
         _pending_send.clear()
+        staging.resolve("sent", f"gmail → {pending['to']} · sent")
         return f"Sent to {pending['to']} — Subject: {pending['subject']}"
 
     except Exception as e:
         _pending_send.clear()
+        staging.resolve("failed")
         return f"[Gmail send error: {e}]"
 
 
@@ -336,6 +352,8 @@ def reply_to_message(msg_id: str, body: str) -> str:
             else f"Re: {original_subject}"
         )
 
+        from core import staging
+
         _pending_send.clear()
         _pending_send.update({
             "type": "reply",
@@ -346,6 +364,15 @@ def reply_to_message(msg_id: str, body: str) -> str:
             "thread_id": thread_id,
             "expires_at": datetime.now(CAIRO_TZ) + timedelta(minutes=5),
         })
+        staging.stage(
+            medium="gmail",
+            target=original_from,
+            body=body,
+            subject=reply_subject,
+            expires_at=_pending_send["expires_at"],
+            confirm=confirm_reply_message,
+            cancel=_pending_send.clear,
+        )
 
         preview = body[:200] + ("..." if len(body) > 200 else "")
         return (
