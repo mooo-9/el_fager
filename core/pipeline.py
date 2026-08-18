@@ -5,6 +5,7 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from core import turn_profile
 from core.brain import Brain
 from core.memory import Memory
 from core.voice_in import VoiceInput
@@ -100,6 +101,7 @@ class PipelineWorker(QThread):
             if self.text_input:
                 transcript = self.text_input.strip()
                 if transcript:
+                    turn_profile.begin("typed turn")
                     self._one_turn(transcript)
                     self.brain.reset_conversation()
                 return
@@ -113,10 +115,13 @@ class PipelineWorker(QThread):
 
             try:
                 for turn in range(MAX_TURNS_PER_CONVERSATION):
+                    turn_profile.begin(f"voice turn {turn}")
                     self.state_update.emit("listening", "", "")
+                    turn_profile.start("record")
                     audio = self.voice_in.record_audio(
                         start_timeout_sec=self._listen_window(turn)
                     )
+                    turn_profile.end("record")
                     if audio is None:
                         # A wake with nothing behind it is a false accept, and
                         # that is exactly the number worth knowing.
@@ -126,8 +131,10 @@ class PipelineWorker(QThread):
                         break  # follow-up window closed — conversation over
 
                     self.state_update.emit("processing", "Transcribing...", "")
+                    turn_profile.start("stt")
                     t_stt = time.monotonic()
                     transcript = self.voice_in.transcribe(audio)
+                    turn_profile.end("stt")
                     print(f"[El Fager] timing: STT {time.monotonic() - t_stt:.2f}s")
                     self._note_wake(heard=bool(transcript))
                     if not transcript:
@@ -187,7 +194,11 @@ class PipelineWorker(QThread):
         t_start = time.monotonic()
         progress.begin_turn(transcript)   # last turn's steps leave the stage
         self.state_update.emit("processing", transcript, "")
+        # Chroma query plus a local embed, and it sits squarely on the turn
+        # path — it used to be hidden inside the time-to-first-token figure.
+        turn_profile.start("memory")
         memory_context = self.memory.get_recent_context(transcript)
+        turn_profile.end("memory")
 
         sent_q: "queue.Queue[str | None]" = queue.Queue()
         state = {"buf": ""}
@@ -198,6 +209,7 @@ class PipelineWorker(QThread):
         def on_text(delta: str) -> None:
             if not first_token[0]:
                 first_token[0] = time.monotonic()
+                turn_profile.mark("first_token")
                 print(f"[El Fager] timing: first Claude token "
                       f"+{first_token[0] - t_start:.2f}s")
             state["buf"] += delta
@@ -257,6 +269,8 @@ class PipelineWorker(QThread):
             interrupted = monitor is not None and monitor.tripped.is_set()
         if monitor is not None:
             monitor.stop()
+        turn_profile.mark("last_audio")
+        turn_profile.finish()
         if interrupted:
             # The half-spoken answer collapses to a dim caption and the mic
             # opens again — being talked over means Mo has the floor now.

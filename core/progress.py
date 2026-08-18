@@ -114,9 +114,20 @@ def step_started(tool: str) -> int:
 
 
 def step_finished(index: int, ok: bool = True) -> None:
+    step = None
     with _lock:
         if 0 <= index < len(_steps):
-            _steps[index].status = "done" if ok else "failed"
+            step = _steps[index]
+            step.status = "done" if ok else "failed"
+    if step is not None:
+        # started_at was stamped and never read. A turn that feels slow is
+        # usually one slow tool, and this is the only place that knows which.
+        try:
+            from core import turn_profile
+            elapsed = (datetime.now() - step.started_at).total_seconds() * 1000
+            turn_profile.tool(step.tool, elapsed)
+        except Exception:
+            pass
     _notify()
 
 

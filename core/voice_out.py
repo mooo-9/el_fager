@@ -223,6 +223,8 @@ class VoiceOutput:
                     _discard(path)
                     continue
                 if first:
+                    from core import turn_profile
+                    turn_profile.mark("first_audio")
                     print("[El Fager] timing: first TTS audio playing.")
                     first = False
                 interrupted = _play_file(path, should_stop)
