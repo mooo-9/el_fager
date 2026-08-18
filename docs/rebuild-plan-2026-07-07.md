@@ -70,6 +70,46 @@ Steps:
 3. Do NOT split the 6127-line `brain.py` yet — that's risky and not required for speed.
    Only note it as future cleanup.
 
+### Baseline — 2026-08-18
+
+Ten turns through the real pipeline (`EL_FAGER_PROFILE=1`), five short and
+five tool-heavy. Milliseconds from the start of the turn.
+
+| stage | short (median / p90) | tool-heavy (median / p90) |
+|---|---|---|
+| first_token | 1,978 / 2,999 | 4,056 / 5,771 |
+
+Tool cost, median per call:
+
+| tool | ms |
+|---|---|
+| list_emails | 2,774 |
+| list_calendar_events | 1,396 |
+| list_tasks | 1,202 |
+| get_weather | 641 |
+| get_news | 540 |
+| remember_fact | 5 |
+
+Cache over the same 24 API calls: 19 read, **4 wrote, 51,615 tokens written**.
+
+**The top two costs are not where they were assumed to be.**
+
+1. *A single tool call*, not the model. `list_emails` at 2.8 s and
+   `list_calendar_events` at 1.4 s dominate any turn that touches them —
+   on one measured turn the calendar lookup was 42% of the whole 8 s.
+2. *Cache writes.* 51,615 tokens re-cached across 24 calls, which is the
+   `tools` array changing inside the cached prefix (see Phase 1 step 2).
+
+The ChromaDB memory query, long suspected of costing time on the turn path,
+measures **0.0 ms**. It is not a target.
+
+**first_audio / last_audio are not recorded here.** The run exhausted Groq
+Orpheus's free tier mid-way — 3,600 tokens per day — and the remaining turns
+fell back to Edge TTS behind 429 retries, so those stages measured the rate
+limit rather than the synthesis. Worth knowing independently: on the free
+tier the neural voice lasts a few dozen sentences a day and then silently
+degrades.
+
 Done-criteria: measured, reproducible latency improvement on both text and voice turns,
 with before/after numbers. No regression in tool-calling correctness.
 
