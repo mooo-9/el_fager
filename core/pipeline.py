@@ -95,12 +95,48 @@ class PipelineWorker(QThread):
         self.voice_out = voice_out
         self.memory = memory
         self.text_input = text_input
+        self._cancelled = threading.Event()
+
+    # ── Cancellation ───────────────────────────────────────────────────────
+
+    def cancel(self) -> None:
+        """Wind the turn down at the next stage boundary.
+
+        QThread.quit() does nothing here: it asks a thread's event loop to
+        exit, and run() below is a plain blocking function with no event loop.
+        The overlay called quit() and then wait(2000), which froze the UI for
+        two seconds and left the worker running anyway — so closing and
+        reopening produced a window that never appeared while the orphaned
+        worker carried on holding the microphone.
+
+        Safe from any thread: it sets a flag, stops the recorder, and cuts
+        playback. Whatever stage is in flight finishes, then run() returns.
+        """
+        self._cancelled.set()
+        try:
+            self.voice_in.stop_recording()
+        except Exception:
+            pass
+        try:
+            self.voice_out.stop()
+        except Exception:
+            pass
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def _should_stop(self, monitor=None):
+        """Playback stops for a barge-in or for a cancel, whichever comes."""
+        if monitor is None:
+            return self._cancelled.is_set
+        return lambda: self._cancelled.is_set() or monitor.tripped.is_set()
 
     def run(self):
         try:
             if self.text_input:
                 transcript = self.text_input.strip()
-                if transcript:
+                if transcript and not self._cancelled.is_set():
                     turn_profile.begin("typed turn")
                     self._one_turn(transcript)
                     self.brain.reset_conversation()
@@ -115,6 +151,8 @@ class PipelineWorker(QThread):
 
             try:
                 for turn in range(MAX_TURNS_PER_CONVERSATION):
+                    if self._cancelled.is_set():
+                        break
                     turn_profile.begin(f"voice turn {turn}")
                     self.state_update.emit("listening", "", "")
                     turn_profile.start("record")
@@ -122,6 +160,8 @@ class PipelineWorker(QThread):
                         start_timeout_sec=self._listen_window(turn)
                     )
                     turn_profile.end("record")
+                    if self._cancelled.is_set():
+                        break
                     if audio is None:
                         # A wake with nothing behind it is a false accept, and
                         # that is exactly the number worth knowing.
@@ -136,6 +176,8 @@ class PipelineWorker(QThread):
                     transcript = self.voice_in.transcribe(audio)
                     turn_profile.end("stt")
                     print(f"[El Fager] timing: STT {time.monotonic() - t_stt:.2f}s")
+                    if self._cancelled.is_set():
+                        break          # do not spend a turn nobody is watching
                     self._note_wake(heard=bool(transcript))
                     if not transcript:
                         if turn == 0:
@@ -230,8 +272,7 @@ class PipelineWorker(QThread):
         speaker = threading.Thread(
             target=self.voice_out.speak_stream,
             args=(iter(sent_q.get, None),),
-            kwargs={"should_stop": None if monitor is None
-                    else monitor.tripped.is_set},
+            kwargs={"should_stop": self._should_stop(monitor)},
             daemon=True,
         )
         speaker.start()
@@ -264,7 +305,7 @@ class PipelineWorker(QThread):
             # Nothing streamed (API error text, offline fallback) — speak it whole.
             self.voice_out.speak(
                 response,
-                should_stop=None if monitor is None else monitor.tripped.is_set,
+                should_stop=self._should_stop(monitor),
             )
             interrupted = monitor is not None and monitor.tripped.is_set()
         if monitor is not None:

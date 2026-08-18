@@ -1176,7 +1176,12 @@ class OverlayWindow(QWidget):
             self._show_and_start()
 
     def wake_word_activate(self):
+        # Show first, decide about the mic after — same reason as
+        # _show_and_start: a running worker must never mean an invisible
+        # window.
         if self._worker and self._worker.isRunning():
+            if not self.isVisible():
+                self._show_anchored()
             return
         if self._mic_muted:
             return
@@ -1192,12 +1197,17 @@ class OverlayWindow(QWidget):
         self.activateWindow()
 
     def _show_and_start(self):
-        if self._worker and self._worker.isRunning():
-            return
+        # Showing is unconditional. This used to return early whenever a
+        # worker was still running, which is exactly what produced "it lags,
+        # then it won't open but audio still works": a hide left the old
+        # worker alive, and every reopen after that silently did nothing while
+        # the orphan kept the microphone.
         self._reset_ui()
         # Shown and listening in the same tick — the 140ms entrance animates
         # in parallel, so the mic is never gated on it.
         self._show_anchored()
+        if self._worker and self._worker.isRunning():
+            return          # a turn is already live; don't stack a second
         if not self._mic_muted:
             self._start_pipeline()
 
@@ -1240,10 +1250,15 @@ class OverlayWindow(QWidget):
         self._anim_timer.stop()          # organic loops pause when hidden
         self._status_poll_timer.stop()
         if self._worker and self._worker.isRunning():
-            self.voice_in.stop_recording()
-            self.voice_out.stop()
-            self._worker.quit()
-            self._worker.wait(2000)
+            # cancel(), not quit() + wait(2000). quit() asks a thread's event
+            # loop to exit and PipelineWorker.run() has none, so it did
+            # nothing — the wait then froze this thread, the GUI thread, for
+            # up to two seconds and the worker outlived the hide regardless.
+            self._worker.cancel()
+            # A short courtesy wait for the common case where it stops at
+            # once. It is not required to have finished: _show_and_start no
+            # longer refuses to open while one is winding down.
+            self._worker.wait(150)
         self.hide()
         self._current_state = "idle"
 
@@ -1285,14 +1300,18 @@ class OverlayWindow(QWidget):
 
     def analyze_screen(self):
         if self._worker and self._worker.isRunning():
-            return
+            if not self.isVisible():
+                self._show_anchored()
+            return          # a turn is already live; don't stack a second
         self._reset_ui()
         self._show_anchored()
         self._start_pipeline(text_input="what's on my screen")
 
     def query_memory(self):
         if self._worker and self._worker.isRunning():
-            return
+            if not self.isVisible():
+                self._show_anchored()
+            return          # a turn is already live; don't stack a second
         self._reset_ui()
         self._show_anchored()
         self._start_pipeline(text_input="what do you know about me?")
