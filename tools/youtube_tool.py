@@ -29,7 +29,7 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
     """
     Fetch the transcript of a YouTube video.
     url      — full YouTube URL or bare video ID
-    language — preferred language code (e.g. 'en', 'ar'); auto-detects if omitted
+    language — preferred transcript language code; defaults to English
     """
     try:
         from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
@@ -40,18 +40,22 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
     if not video_id:
         return f"Could not extract a YouTube video ID from: {url}"
 
+    # youtube-transcript-api 1.x replaced the classmethod API with an instance
+    # one: list_transcripts() became list(). The old call raised AttributeError,
+    # which the except below swallowed into a returned string — so this failed
+    # silently rather than loudly.
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_list = YouTubeTranscriptApi().list(video_id)
     except TranscriptsDisabled:
         return f"Transcripts are disabled for this video ({video_id})."
     except Exception as e:
         return f"[YouTube error: {e}]"
 
-    # Preference order: requested language, then English, then Arabic, then any
+    # Preference order: requested language, then English, then any
     candidates = []
     if language:
         candidates.append([language])
-    candidates += [["en"], ["ar"], ["a.en"], ["a.ar"]]
+    candidates += [["en"], ["a.en"]]
 
     transcript = None
     lang_label = "unknown"
@@ -77,11 +81,17 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
         return f"No transcript available for video {video_id}."
 
     try:
-        entries = transcript.fetch()
+        entries = list(transcript.fetch())
     except Exception as e:
         return f"[Could not fetch transcript: {e}]"
 
-    text = " ".join(e["text"].replace("\n", " ") for e in entries)
+    # 1.x yields FetchedTranscriptSnippet objects, not dicts. Accept either, so
+    # the tool survives the next version bump in whichever direction it goes.
+    def _text(entry) -> str:
+        raw = entry["text"] if isinstance(entry, dict) else getattr(entry, "text", "")
+        return raw.replace("\n", " ")
+
+    text = " ".join(_text(e) for e in entries)
 
     MAX_CHARS = 14_000
     truncated = ""
