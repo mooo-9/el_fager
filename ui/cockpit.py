@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core import progress, staging
+from core import progress, prose, staging
 from ui import theme, tokens
 from ui.overlay import _load_settings
 
@@ -595,18 +595,19 @@ class CockpitWindow(QWidget):
         col.addWidget(auto)
 
         # The reading panel: the last answer at length, for the turns whose
-        # answer is too long to live on the stage.
+        # answer is too long to live on the stage. Rendered as labelled
+        # sections rather than one block — the model reaches for "Academic:"
+        # style headings on a summary, and reading that structure is better
+        # than deleting it and leaving a wall of prose.
         reading = _Panel("TRANSCRIPT")
-        self._reading = QLabel("")
-        self._reading.setWordWrap(True)
-        self._reading.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._reading.setStyleSheet(
-            f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT};"
-            f" font-size: 12px; background: transparent;"
-        )
-        self._reading.setMinimumHeight(150)
-        reading.column.addWidget(self._reading, 1)
+        self._reading_box = QWidget()
+        self._reading_box.setStyleSheet("background: transparent;")
+        self._reading_layout = QVBoxLayout(self._reading_box)
+        self._reading_layout.setContentsMargins(0, 2, 0, 0)
+        self._reading_layout.setSpacing(0)
+        self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._reading_box.setMinimumHeight(150)
+        reading.column.addWidget(self._reading_box, 1)
 
         self._audio_bar = QWidget()
         self._audio_bar.setStyleSheet("background: transparent;")
@@ -640,6 +641,42 @@ class CockpitWindow(QWidget):
         self._close()
         self.knowledge_requested.emit()
 
+    def _set_transcript(self, answer: str) -> None:
+        """Lay the answer out as labelled sections.
+
+        Kicker over body, the same shape as every readout on this surface, so
+        a five-part summary scans instead of having to be read start to end.
+        Markdown never reaches a label: it is parsed here, not displayed.
+        """
+        while self._reading_layout.count():
+            item = self._reading_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)          # not deleteLater: the old rows stay
+                                           # painted over the new ones
+
+        for index, (label, body) in enumerate(prose.sections(answer)):
+            if label:
+                kicker = QLabel(label.upper())
+                kicker.setStyleSheet(
+                    f"{_mono(9, tokens.CK_TEXT_LOW, 1.8)}"
+                    f" padding: {14 if index else 2}px 0 3px 0;")
+                self._reading_layout.addWidget(kicker)
+            text = QLabel(body)
+            text.setWordWrap(True)
+            text.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            # Wrapped labels clip unless the layout is told to ask for their
+            # height — the trap this project has hit before.
+            policy = text.sizePolicy()
+            policy.setHeightForWidth(True)
+            text.setSizePolicy(policy)
+            text.setStyleSheet(
+                f"color: {tokens.CK_TEXT_MID if label else tokens.CK_TEXT_HI};"
+                f" font-family: {theme.FONT}; font-size: 12px;"
+                f" background: transparent; line-height: 150%;"
+                f" padding: {0 if label else (12 if index else 0)}px 0 0 0;")
+            self._reading_layout.addWidget(text)
+
     def _scrub(self, step: int):
         """Step the stage back through the session's exchanges.
 
@@ -666,7 +703,7 @@ class CockpitWindow(QWidget):
             self._scrub_value.setText(f"{pos} BACK")
         self._heard.setText(heard)
         self._answer.setText(answer)
-        self._reading.setText(answer if len(answer) > 180 else "")
+        self._set_transcript(answer if len(answer) > 180 else "")
 
     def _remember_exchange(self, heard: str, answer: str):
         """Keep the session's turns so the scrubber has something to move
@@ -1067,10 +1104,10 @@ class CockpitWindow(QWidget):
         elif state == "speaking" and response:
             self._live = (self._heard.text(), response)
             self._remember_exchange(self._heard.text(), response)
-            self._answer.setText(response)
+            self._answer.setText(prose.plain(response))
             # A long answer belongs in the rail, where it can be read; the
             # stage keeps the short ones, where they can be glanced at.
-            self._reading.setText(response if len(response) > 180 else "")
+            self._set_transcript(response if len(response) > 180 else "")
             self._show_data_moment()
         elif state == "interrupted":
             # The half-spoken answer collapses to a dim caption rather than

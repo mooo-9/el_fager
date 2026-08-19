@@ -162,7 +162,36 @@ def _acquire_instance_lock() -> None:
         sys.exit(0)
 
 
+def _enable_crash_trace() -> None:
+    """Leave a Python stack behind if the process dies on a fatal signal.
+
+    El Fager crashed after 23 hours with STATUS_HEAP_CORRUPTION and there was
+    nothing to look at afterwards — under pythonw there is no console, so the
+    stack went nowhere. faulthandler costs nothing while running and turns a
+    silent disappearance into a file.
+
+    It will not catch every native fault: heap corruption often fast-fails
+    past signal handlers, which is what the Windows LocalDumps registry key is
+    for. This is the half that does not need administrator rights.
+    """
+    try:
+        import faulthandler
+        from datetime import datetime
+        from pathlib import Path
+        crash_dir = Path("data/crashdumps")
+        crash_dir.mkdir(parents=True, exist_ok=True)
+        # Deliberately not closed: it has to outlive main() and be open at the
+        # moment the process dies.
+        handle = open(crash_dir / "faulthandler.log", "a", encoding="utf-8")
+        handle.write(f"\n--- started {datetime.now().isoformat(timespec='seconds')}\n")
+        handle.flush()
+        faulthandler.enable(file=handle, all_threads=True)
+    except Exception as e:
+        print(f"[El Fager] crash trace unavailable: {e}")
+
+
 def main():
+    _enable_crash_trace()
     _acquire_instance_lock()
 
     # Qt must own the main thread.

@@ -55,7 +55,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core import progress, sound, staging
+from core import progress, prose, sound, staging
 from ui import theme, tokens
 
 _SETTINGS_FILE = Path("data/settings.json")
@@ -1114,7 +1114,7 @@ class OverlayWindow(QWidget):
             if response:
                 self._answer = response
                 _align_left(self._answer_label)
-                self._answer_label.setText(response)
+                self._answer_label.setText(prose.plain(response))
             self._set_phase("answering")
 
         self._paint_state(state)
