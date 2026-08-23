@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+# Only master on push: a PR branch already gets covered by `pull_request`,
+# and matching "**" here would run every job twice.
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Pinned to the floor declared in pyproject.toml. Running the oldest
+          # supported version is what keeps that floor honest — newer syntax
+          # fails here rather than on someone's machine.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # tests/ui is excluded: those three files need PyQt6 + QtWebEngine, which
+      # needs a display. Everything else is pure logic and runs headless.
+      - run: pytest tests/ --ignore=tests/ui -q
