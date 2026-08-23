@@ -1,7 +1,7 @@
 # El Fager — Consolidation Plan
 
 **Date:** 2026-08-21
-**Status:** proposed
+**Status:** Phase 1 delivered (see below); Phases 2-6 proposed
 **Theme:** Stop adding tools. Make the 378 that exist trustworthy.
 
 ---
@@ -254,6 +254,15 @@ Good news for CI: only 3 test files import PyQt6 (all under `tests/ui/`). The ot
 
 ### 4.2 The build has no declared contract
 
+**Found while executing Phase 1 — not in the original audit:** four modules are
+imported by shipped code but absent from `requirements.txt` entirely —
+`playwright`, `yfinance`, `pyautogui`, `pdfplumber`. A fresh
+`pip install -r requirements.txt` therefore produced an El Fager whose browser
+agent, market analyst, screen/mouse control and PDF reading all failed at
+runtime. `tools/bond_tool.py:6` and `tools/mouse_tool.py:8` import theirs at
+module scope, so those modules would not even import. Now declared.
+
+
 - `pytest` is **not in `requirements.txt`** despite 530 tests.
 - No `pyproject.toml`, no `pytest.ini`, no declared Python floor.
 - `tools/macro_tool.py:837` uses a PEP 701 nested-quote f-string that requires
@@ -311,7 +320,7 @@ Each phase leaves the repo better even if the next never happens.
 
 | Phase | Work | Why first |
 |---|---|---|
-| 1 | 4.1 CI + fix 2 stale tests, 4.2 build contract, 4.4 dead weight | Nothing else is safe to change without a green gate |
+| 1 ✅ | 4.1 CI + fix 2 stale tests, 4.2 build contract | **Done** — suite green (480 passed, 20 skipped), GitHub Actions gate on 3.12. 4.4 dead weight still open. |
 | 2 | 0.2 logging, 0.1 atomic state, 0.3 paths | Stops silent data loss and makes every later bug diagnosable |
 | 3 | 1.1–1.4 security | Bounded, high-severity, mostly small diffs |
 | 4 | 2.1 prompt caching, 2.2 history cap | Biggest cost win for the least code |
