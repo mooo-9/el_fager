@@ -95,3 +95,13 @@ apscheduler>=3.10.0
 
 # Phase 10 — Autonomous Trading Engine
 alpaca-py>=0.8.2
+
+# Previously undeclared — imported by shipped code but missing from this file,
+# so a fresh `pip install -r requirements.txt` produced an El Fager whose
+# browser agent, market analyst, screen/mouse control and PDF reading all
+# failed at runtime. tools/bond_tool.py and tools/mouse_tool.py import theirs
+# at module scope, so those modules would not even import.
+playwright>=1.40.0   # core/agents/browser_agent.py, research_agent.py, tools/browser_tool.py
+yfinance>=0.2.40     # core/agents/market_analyst.py, strategy_engine.py, tools/stocks_tool.py, bond_tool.py
+pyautogui>=0.9.54    # core/agents/screen_agent.py, tools/mouse_tool.py, window_tool.py
+pdfplumber>=0.11.0   # core/agents/file_agent.py

@@ -1,4 +1,5 @@
 from core.agents.market_analyst import MarketAnalyst, AnalysisResult
+from tests._optional import requires
 
 
 class TestAnalysisResult:
@@ -66,6 +67,7 @@ class TestScoreTechnical:
         assert 35.0 <= score <= 70.0, f"Neutral RSI should land 35-70, got {score}"
 
 
+@requires("yfinance")
 class TestScoreFundamental:
     def test_low_pe_and_strong_growth_scores_above_60(self, monkeypatch):
         import yfinance as yf

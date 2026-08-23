@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from core.agents.file_agent import FileAgent
+from tests._optional import requires
 
 
 class TestResolvePath:
@@ -33,6 +34,7 @@ class TestResolvePath:
         assert result == test_file
 
 
+@requires("pdfplumber")
 class TestReadPdf:
     def test_returns_extracted_text(self, tmp_path):
         mock_page = MagicMock()
@@ -51,6 +53,7 @@ class TestReadPdf:
         assert result == ""
 
 
+@requires("docx")
 class TestReadDocx:
     def test_returns_paragraph_text(self, tmp_path):
         mock_para = MagicMock()

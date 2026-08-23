@@ -1,6 +1,7 @@
 # tests/agents/test_browser_agent.py
 from unittest.mock import MagicMock, patch
 from core.agents.browser_agent import BrowserAgent
+from tests._optional import requires
 
 
 def _done(message: str = "Task complete.") -> dict:
@@ -54,6 +55,7 @@ def test_execute_wait():
     mock_sleep.assert_called_once_with(2)
 
 
+@requires("playwright")
 def test_run_done_immediately():
     agent = BrowserAgent()
     done = _done("Found the answer.")
@@ -77,6 +79,7 @@ def test_run_done_immediately():
     mock_browser.close.assert_called_once()
 
 
+@requires("playwright")
 def test_run_requests_login_when_no_vault_creds():
     agent = BrowserAgent()
     need_login = {"status": "need_login", "message": "google", "action": {"type": "none"}}
@@ -100,6 +103,7 @@ def test_run_requests_login_when_no_vault_creds():
     assert "login required" in result.lower() or "vault set" in result.lower()
 
 
+@requires("playwright")
 def test_run_continues_when_vault_creds_found():
     agent = BrowserAgent()
     need_login = {"status": "need_login", "message": "google", "action": {"type": "none"}}
