@@ -180,3 +180,39 @@ class TestStartDashboard:
                                     timeout=5) as r:
             assert r.status == 200
         srv.shutdown()
+
+
+class TestRosterSection:
+    def test_snapshot_lists_every_agent(self):
+        from core.dashboard import build_snapshot
+        roster = build_snapshot()["roster"]
+        callsigns = {a["callsign"] for a in roster["agents"]}
+        assert {"Argus", "Nomad", "Midas", "Sage", "Scribe", "Vitals"} == callsigns
+
+    def test_pass_rates_come_from_the_ledger(self):
+        from core.agents import ledger
+        from core.dashboard import build_snapshot
+        ledger.record("Sage", "research brokers", "pass")
+        ledger.record("Sage", "research rates", "fail", reason="declined")
+        agents = {a["callsign"]: a for a in build_snapshot()["roster"]["agents"]}
+        assert agents["Sage"]["runs"] == 2
+        assert agents["Sage"]["pass_rate"] == 50
+        assert agents["Argus"]["runs"] == 0
+
+    def test_work_in_flight_is_visible(self):
+        from core.agents import ledger
+        from core.dashboard import build_snapshot
+        token = ledger.start_run("Nomad", "book a table", "voice")
+        try:
+            agents = {a["callsign"]: a for a in build_snapshot()["roster"]["agents"]}
+            assert agents["Nomad"]["working_on"] == "book a table"
+        finally:
+            ledger.finish_run(token)
+
+    def test_a_corrupt_ledger_degrades_instead_of_breaking_the_page(self, monkeypatch):
+        from core.dashboard import build_snapshot
+        monkeypatch.setattr(
+            "core.agents.ledger.roster_status",
+            lambda days=1: (_ for _ in ()).throw(ValueError("corrupt")),
+        )
+        assert build_snapshot()["roster"] == {"agents": [], "recent": []}

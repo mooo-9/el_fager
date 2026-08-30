@@ -446,14 +446,31 @@ class ProactiveEngine:
             due = mgr.get_due()
             if not due:
                 return
+            from core.agents.supervisor import assign
             for task in due[:2]:
                 mgr.mark_running(task["id"])
                 try:
-                    result = self._brain_fn(task["description"])
-                    short = (result or "Done.")[:200]
-                    mgr.complete(task["id"], short)
-                    announcement = f"Background task done: {task['description'][:50]}. {short[:100]}"
-                    self._deliver(announcement, remote=True)
+                    # Mo is not watching, so the result is inspected before it
+                    # counts as done -- a task that reported failure used to be
+                    # marked complete.
+                    report = assign("", task["description"], verify=True,
+                                    source=f"task:{task['id']}",
+                                    executor=self._brain_fn)
+                    if report.ok:
+                        short = (report.result or "Done.")[:200]
+                        mgr.complete(task["id"], short)
+                        self._deliver(
+                            f"Background task done: {task['description'][:50]}. "
+                            f"{short[:100]}",
+                            remote=True,
+                        )
+                    else:
+                        mgr.fail(task["id"], report.reason or "did not complete")
+                        self._deliver(
+                            f"Mo, the background task '{task['description'][:50]}' "
+                            f"did not get done. {report.reason[:120]}",
+                            remote=True,
+                        )
                 except Exception as e:
                     mgr.fail(task["id"], str(e))
         except Exception as e:
@@ -462,10 +479,13 @@ class ProactiveEngine:
     _MAX_STEPS_PER_CYCLE = 3
 
     def _check_missions(self) -> None:
-        """Execute the current group's pending steps (up to 3 per cycle) via
-        brain.chat(). Same-group steps are independent; groups run in order.
-        Completion and blockage are announced; step results become context
-        for later groups (MissionManager.step_context)."""
+        """Execute the current group's pending steps (up to 3 per cycle)
+        through the supervisor: a step naming an agent goes to that agent, the
+        rest run via brain.chat(). Warden inspects every result, so a step only
+        advances when the work actually passed. Same-group steps are
+        independent; groups run in order. Completion and blockage are announced;
+        step results become context for later groups
+        (MissionManager.step_context)."""
         if self._brain_fn is None:
             return
         try:
@@ -476,28 +496,58 @@ class ProactiveEngine:
                 return
             active = mgr.get_active()
             context = mgr.step_context()
+            from core.agents.supervisor import assign
             for step in steps:
-                prompt = (
-                    f"{context}\n\n"
-                    f"You are executing step {step['n']} of this mission. "
-                    f"Do it now using your tools and report the outcome concisely:\n"
-                    f"{step['description']}"
-                )
-                try:
-                    result = self._brain_fn(prompt)
-                    mgr.complete_step(active["id"], step["n"], result or "Done.")
-                except Exception as e:
-                    mgr.fail_step(active["id"], step["n"], str(e))
-                    refreshed = mgr.last_finished()
-                    if refreshed and refreshed["id"] == active["id"] \
-                            and refreshed["status"] == "blocked":
-                        self._deliver(
-                            f"Mo, mission '{active['goal']}' is stuck at step "
-                            f"{step['n']} ({step['description'][:60]}). "
-                            f"I tried twice. Tell me how to proceed.",
-                            remote=True,
-                        )
-                    return
+                agent = step.get("agent")
+                if agent:
+                    # An assigned step goes to that agent verbatim; the agent
+                    # has no conversation history, so it carries its own context.
+                    report = assign(
+                        agent,
+                        f"{context}\n\nYour task: {step['description']}",
+                        acceptance=step.get("acceptance"),
+                        source=f"mission:{active['id']}",
+                        # MissionManager owns the retry: a failed step is
+                        # requeued for the next cycle, then blocks.
+                        max_attempts=1,
+                    )
+                else:
+                    prompt = (
+                        f"{context}\n\n"
+                        f"You are executing step {step['n']} of this mission. "
+                        f"Do it now using your tools and report the outcome concisely:\n"
+                        f"{step['description']}"
+                    )
+                    report = assign("", prompt,
+                                    acceptance=step.get("acceptance"),
+                                    source=f"mission:{active['id']}",
+                                    executor=self._brain_fn,
+                                    max_attempts=1)
+
+                if report.ok:
+                    mgr.complete_step(active["id"], step["n"],
+                                      report.result or "Done.")
+                    continue
+
+                # Warden rejected it, or the agent failed outright. The step is
+                # NOT done -- fail_step retries it next cycle, then blocks.
+                mgr.fail_step(active["id"], step["n"], report.reason)
+                refreshed = mgr.last_finished()
+                if refreshed and refreshed["id"] == active["id"] \
+                        and refreshed["status"] == "blocked":
+                    why = (report.reason or "").strip()[:120]
+                    if why:
+                        why = why[0].upper() + why[1:]
+                        why = why if why.endswith(".") else why + "."
+                        why += " "
+                    self._deliver(
+                        f"Mo, mission '{active['goal']}' is stuck at step "
+                        f"{step['n']} ({step['description'][:60]}). "
+                        f"{report.callsign} tried twice. {why}"
+                        f"Tell me how to proceed.",
+                        remote=True,
+                    )
+                return
             if mgr.get_active() is None:
                 finished = mgr.last_finished()
                 if finished and finished["status"] == "done":

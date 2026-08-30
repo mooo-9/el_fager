@@ -146,3 +146,26 @@ def classify_intent(message: str) -> str:
             if re.search(pattern, msg):
                 return label
     return "instant"
+
+
+def parse_callsign(message: str) -> tuple[str, str] | None:
+    """Detect Mo addressing one agent by name: 'Sage, research X'.
+
+    Returns (tool_name, task) or None. Both 'Sage, do X' and 'Sage do X' match --
+    Whisper drops commas often enough that requiring one would miss most spoken
+    invocations.
+    """
+    import re
+    from core.agents.registry import ROSTER
+
+    if not message:
+        return None
+    text = message.strip().lstrip("-*").strip()
+    for spec in ROSTER.values():
+        pattern = rf"^{re.escape(spec.callsign)}\b[\s,:]+(.+)$"
+        match = re.match(pattern, text, re.IGNORECASE)
+        if match:
+            task = match.group(1).strip()
+            if len(task) >= 3:
+                return spec.tool_name, task
+    return None

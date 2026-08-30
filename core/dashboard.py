@@ -2,8 +2,8 @@
 Dashboard — read-only LAN status surface for El Fager.
 
 Serves a single dark status page (auto-refresh) plus /api/status JSON on
-http://<laptop-ip>:8765 so Mo can watch missions, costs, tasks, skills, and
-trading from his phone on the same network.
+http://<laptop-ip>:8765 so Mo can watch missions, agents, costs, tasks, skills,
+and trading from his phone on the same network.
 
 Deliberately READ-ONLY and stdlib-only: GET requests, no commands, no
 secrets in the snapshot. Commands stay voice/desktop-side.
@@ -53,6 +53,31 @@ def build_snapshot() -> dict:
         }
     except Exception:
         snap["mission"] = {"summary": "unavailable", "active": False, "steps": []}
+
+    try:
+        from core.agents import ledger, registry
+        stats = ledger.roster_status(days=1)
+        working = {r["callsign"]: r["task"] for r in ledger.active_runs()}
+        snap["roster"] = {
+            "agents": [
+                {
+                    "callsign": spec.callsign,
+                    "role": spec.role,
+                    "runs": stats.get(spec.callsign, {}).get("runs", 0),
+                    "pass_rate": stats.get(spec.callsign, {}).get("pass_rate", 0),
+                    "last_verdict": stats.get(spec.callsign, {}).get("last_verdict"),
+                    "working_on": working.get(spec.callsign),
+                }
+                for spec in registry.ROSTER.values()
+            ],
+            "recent": [
+                {"ts": e["ts"][11:16], "callsign": e["callsign"],
+                 "verdict": e["verdict"], "task": e["task"][:70]}
+                for e in ledger.recent(n=10, days=1)
+            ],
+        }
+    except Exception:
+        snap["roster"] = {"agents": [], "recent": []}
 
     try:
         from core.telemetry import summarize
@@ -179,6 +204,17 @@ async function load(){
   for(const st of s.mission.steps){
     h+='<div class="row"><span class="'+st.status+'">['+st.status+']</span> '
       +st.n+'. '+st.description+'</div>';}
+  h+='</div>';
+  h+='<div class="card"><h2>Agents</h2>';
+  for(const a of (s.roster.agents||[])){
+    const busy=a.working_on?'<span class="pending">[working]</span> ':'';
+    const rate=a.runs?(' '+a.pass_rate+'% passed of '+a.runs):' idle today';
+    h+='<div class="row">'+busy+'<b>'+a.callsign+'</b>'+rate
+      +'<div class="dim">'+(a.working_on||a.role)+'</div></div>';}
+  for(const e of (s.roster.recent||[])){
+    h+='<div class="row dim"><span class="'
+      +(e.verdict==='pass'?'done':'failed')+'">['+e.verdict+']</span> '
+      +e.ts+' '+e.callsign+' - '+e.task+'</div>';}
   h+='</div>';
   h+='<div class="card"><h2>Skills</h2><div class="row">'+s.skills.count
     +' learned, '+s.skills.scheduled+' scheduled</div><div class="row dim">'
