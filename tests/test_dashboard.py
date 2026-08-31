@@ -185,9 +185,10 @@ class TestStartDashboard:
 class TestRosterSection:
     def test_snapshot_lists_every_agent(self):
         from core.dashboard import build_snapshot
+        from core.agents.registry import ROSTER
         roster = build_snapshot()["roster"]
         callsigns = {a["callsign"] for a in roster["agents"]}
-        assert {"Argus", "Nomad", "Midas", "Sage", "Scribe", "Vitals"} == callsigns
+        assert callsigns == {spec.callsign for spec in ROSTER.values()}
 
     def test_pass_rates_come_from_the_ledger(self):
         from core.agents import ledger

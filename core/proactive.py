@@ -478,6 +478,82 @@ class ProactiveEngine:
 
     _MAX_STEPS_PER_CYCLE = 3
 
+    @staticmethod
+    def _is_parallelisable(steps: list[dict]) -> bool:
+        """True when every step in the group names a DISTINCT registry agent.
+
+        Those agents build their own API client and share no state, so they are
+        safe to run at once. A group containing an unassigned step is not: those
+        run through brain.chat, which mutates conversation history and the
+        live-trading state machine. Two steps naming the same agent are also
+        left sequential -- an agent may hold a per-run resource (a browser, the
+        mouse), and nothing guarantees two of it can run side by side.
+        """
+        if len(steps) < 2:
+            return False
+        agents = [s.get("agent") for s in steps]
+        if not all(agents):
+            return False
+        return len(set(agents)) == len(agents)
+
+    def _run_group_in_parallel(self, mgr, active: dict, context: str,
+                               steps: list[dict]) -> None:
+        """Execute an all-agent group at once, then apply bookkeeping in step
+        order on this thread -- MissionManager rewrites the whole file on every
+        write, so concurrent bookkeeping would lose updates."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        from core.agents.supervisor import assign
+
+        def run(step: dict):
+            return assign(
+                step["agent"],
+                f"{context}\n\nYour task: {step['description']}",
+                acceptance=step.get("acceptance"),
+                source=f"mission:{active['id']}",
+                max_attempts=1,
+            )
+
+        with ThreadPoolExecutor(max_workers=len(steps)) as pool:
+            reports = list(pool.map(run, steps))
+
+        for step, report in zip(steps, reports):
+            if report.ok:
+                mgr.complete_step(active["id"], step["n"], report.result or "Done.")
+                continue
+            mgr.fail_step(active["id"], step["n"], report.reason)
+            refreshed = mgr.last_finished()
+            if refreshed and refreshed["id"] == active["id"] \
+                    and refreshed["status"] == "blocked":
+                self._announce_blocked(active, step, report)
+            return
+
+        if mgr.get_active() is None:
+            self._announce_complete(mgr)
+
+    def _announce_blocked(self, active: dict, step: dict, report) -> None:
+        why = (report.reason or "").strip()[:120]
+        if why:
+            why = why[0].upper() + why[1:]
+            why = why if why.endswith(".") else why + "."
+            why += " "
+        self._deliver(
+            f"Mo, mission '{active['goal']}' is stuck at step "
+            f"{step['n']} ({step['description'][:60]}). "
+            f"{report.callsign} tried twice. {why}"
+            f"Tell me how to proceed.",
+            remote=True,
+        )
+
+    def _announce_complete(self, mgr) -> None:
+        finished = mgr.last_finished()
+        if finished and finished["status"] == "done":
+            last_result = (finished["steps"][-1].get("result") or "")[:150]
+            self._deliver(
+                f"Mission complete: {finished['goal']}. {last_result}",
+                remote=True,
+            )
+
     def _check_missions(self) -> None:
         """Execute the current group's pending steps (up to 3 per cycle)
         through the supervisor: a step naming an agent goes to that agent, the
@@ -486,17 +562,24 @@ class ProactiveEngine:
         independent; groups run in order. Completion and blockage are announced;
         step results become context for later groups
         (MissionManager.step_context)."""
-        if self._brain_fn is None:
-            return
         try:
             from core.missions import MissionManager
             mgr = MissionManager()
             steps = mgr.next_steps()[: self._MAX_STEPS_PER_CYCLE]
             if not steps:
                 return
+            # Only unassigned steps need the brain; a mission whose steps are
+            # all assigned to agents runs without one.
+            if self._brain_fn is None and not all(s.get("agent") for s in steps):
+                return
             active = mgr.get_active()
             context = mgr.step_context()
             from core.agents.supervisor import assign
+
+            if self._is_parallelisable(steps):
+                self._run_group_in_parallel(mgr, active, context, steps)
+                return
+
             for step in steps:
                 agent = step.get("agent")
                 if agent:
@@ -535,27 +618,10 @@ class ProactiveEngine:
                 refreshed = mgr.last_finished()
                 if refreshed and refreshed["id"] == active["id"] \
                         and refreshed["status"] == "blocked":
-                    why = (report.reason or "").strip()[:120]
-                    if why:
-                        why = why[0].upper() + why[1:]
-                        why = why if why.endswith(".") else why + "."
-                        why += " "
-                    self._deliver(
-                        f"Mo, mission '{active['goal']}' is stuck at step "
-                        f"{step['n']} ({step['description'][:60]}). "
-                        f"{report.callsign} tried twice. {why}"
-                        f"Tell me how to proceed.",
-                        remote=True,
-                    )
+                    self._announce_blocked(active, step, report)
                 return
             if mgr.get_active() is None:
-                finished = mgr.last_finished()
-                if finished and finished["status"] == "done":
-                    last_result = (finished["steps"][-1].get("result") or "")[:150]
-                    self._deliver(
-                        f"Mission complete: {finished['goal']}. {last_result}",
-                        remote=True,
-                    )
+                self._announce_complete(mgr)
         except Exception as e:
             print(f"[Proactive] mission check error: {e}")
 

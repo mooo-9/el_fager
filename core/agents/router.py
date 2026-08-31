@@ -148,12 +148,21 @@ def classify_intent(message: str) -> str:
     return "instant"
 
 
+# Words that may precede a callsign when Mo addresses an agent out loud.
+_VOCATIVE_LEAD = r"(?:hey|ok|okay|yo|hi|el\s+fager|elfager)[\s,]+"
+
+
 def parse_callsign(message: str) -> tuple[str, str] | None:
     """Detect Mo addressing one agent by name: 'Sage, research X'.
 
-    Returns (tool_name, task) or None. Both 'Sage, do X' and 'Sage do X' match --
-    Whisper drops commas often enough that requiring one would miss most spoken
-    invocations.
+    Requires an explicit address -- a comma or colon after the callsign, or a
+    vocative lead-in ('hey Sage research X'). A bare 'Sage tea recipe' or
+    'forge a signature' is NOT an invocation: several callsigns are ordinary
+    English words, and silently routing past the brain on one of them is worse
+    than missing an invocation. A miss costs nothing -- the message falls
+    through to the tool loop, which can still pick the same agent.
+
+    Returns (tool_name, task) or None.
     """
     import re
     from core.agents.registry import ROSTER
@@ -162,10 +171,15 @@ def parse_callsign(message: str) -> tuple[str, str] | None:
         return None
     text = message.strip().lstrip("-*").strip()
     for spec in ROSTER.values():
-        pattern = rf"^{re.escape(spec.callsign)}\b[\s,:]+(.+)$"
-        match = re.match(pattern, text, re.IGNORECASE)
-        if match:
-            task = match.group(1).strip()
-            if len(task) >= 3:
-                return spec.tool_name, task
+        name = re.escape(spec.callsign)
+        patterns = (
+            rf"^{name}\s*[,:]\s*(.+)$",            # "Sage, research X"
+            rf"^{_VOCATIVE_LEAD}{name}\b[\s,:]+(.+)$",  # "hey Sage research X"
+        )
+        for pattern in patterns:
+            match = re.match(pattern, text, re.IGNORECASE)
+            if match:
+                task = match.group(1).strip()
+                if len(task) >= 3:
+                    return spec.tool_name, task
     return None

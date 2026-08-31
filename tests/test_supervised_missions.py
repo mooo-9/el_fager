@@ -113,3 +113,75 @@ class TestSupervisedExecution:
         mgr.create("g", ["only step"])
         self._run(engine, mgr, monkeypatch, "the step is finished", ("pass", ""))
         assert "Mission complete" in engine._deliver.call_args.args[0]
+
+
+class TestParallelGroups:
+    """A group where every step names a different agent runs at once. Anything
+    else stays sequential -- brain.chat is not thread-safe."""
+
+    def test_group_of_distinct_agents_runs_concurrently(self, engine, mgr, monkeypatch):
+        import threading
+        mgr.create("g", ["research brokers", "check the inbox"],
+                   groups=[1, 1], agents=["Sage", "Herald"], acceptance=[None, None])
+        monkeypatch.setattr("core.missions.MissionManager", lambda: mgr)
+
+        in_flight, peak = set(), []
+        lock = threading.Lock()
+
+        def slow_run(task):
+            with lock:
+                in_flight.add(threading.current_thread().name)
+                peak.append(len(in_flight))
+            import time
+            time.sleep(0.05)
+            with lock:
+                in_flight.discard(threading.current_thread().name)
+            return "a real result from the agent"
+
+        agent = MagicMock()
+        agent.run.side_effect = slow_run
+        with patch("core.agents.registry.load", return_value=agent), \
+             patch("core.agents.verifier.verify", return_value=("pass", "")):
+            engine._check_missions()
+
+        assert max(peak) == 2, "both agents should have been in flight together"
+        assert mgr.last_finished()["status"] == "done"
+
+    def test_a_group_with_an_unassigned_step_stays_sequential(self, engine, mgr, monkeypatch):
+        mgr.create("g", ["research brokers", "write it up"],
+                   groups=[1, 1], agents=["Sage", None], acceptance=[None, None])
+        monkeypatch.setattr("core.missions.MissionManager", lambda: mgr)
+        engine._brain_fn = MagicMock(return_value="written up properly")
+        agent = MagicMock()
+        agent.run.return_value = "a real result from the agent"
+        with patch("core.agents.registry.load", return_value=agent), \
+             patch("core.agents.verifier.verify", return_value=("pass", "")), \
+             patch.object(engine, "_run_group_in_parallel") as parallel:
+            engine._check_missions()
+        parallel.assert_not_called()
+        engine._brain_fn.assert_called_once()
+
+    def test_two_steps_for_the_same_agent_stay_sequential(self, engine, mgr, monkeypatch):
+        mgr.create("g", ["research A", "research B"],
+                   groups=[1, 1], agents=["Sage", "Sage"], acceptance=[None, None])
+        monkeypatch.setattr("core.missions.MissionManager", lambda: mgr)
+        agent = MagicMock()
+        agent.run.return_value = "a real result from the agent"
+        with patch("core.agents.registry.load", return_value=agent), \
+             patch("core.agents.verifier.verify", return_value=("pass", "")), \
+             patch.object(engine, "_run_group_in_parallel") as parallel:
+            engine._check_missions()
+        parallel.assert_not_called()
+
+    def test_a_failure_in_a_parallel_group_still_requeues_that_step(self, engine, mgr, monkeypatch):
+        mgr.create("g", ["research brokers", "check the inbox"],
+                   groups=[1, 1], agents=["Sage", "Herald"], acceptance=[None, None])
+        monkeypatch.setattr("core.missions.MissionManager", lambda: mgr)
+        agent = MagicMock()
+        agent.run.return_value = "I could not do that."
+        with patch("core.agents.registry.load", return_value=agent), \
+             patch("core.agents.verifier.verify", return_value=("fail", "declined")):
+            engine._check_missions()
+        statuses = [s["status"] for s in mgr.get_active()["steps"]]
+        assert statuses == ["pending", "pending"]
+        assert mgr.get_active()["steps"][0]["attempts"] == 1

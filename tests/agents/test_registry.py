@@ -1,5 +1,5 @@
 from core.agents.base_agent import BaseAgent
-from core.agents.registry import ROSTER, format_roster, resolve, tool_names, tool_schemas
+from core.agents.registry import ROSTER, format_roster, load, resolve, tool_names, tool_schemas
 
 
 def test_every_spec_points_at_a_real_base_agent_subclass():
@@ -19,11 +19,23 @@ def test_schemas_match_the_six_tool_definitions_in_brain():
         assert by_name[schema["name"]] == schema
 
 
-def test_tool_names_are_the_six_agent_tools():
+def test_tool_names_cover_the_whole_roster():
     assert tool_names() == {
         "screen_agent", "browser_agent", "stocks_agent",
         "research_agent", "file_agent", "health_agent",
+        "comms_agent", "scheduler_agent", "finance_agent", "dev_agent",
     }
+
+
+def test_gated_agents_declare_tools_they_actually_have():
+    """A confirm_before naming a tool the agent does not own would be a gate
+    that protects nothing."""
+    for spec in ROSTER.values():
+        if not spec.confirm_before:
+            continue
+        agent = load(spec.tool_name, allow_side_effects=True)
+        _, dispatch = agent._toolset()
+        assert set(spec.confirm_before) <= set(dispatch), spec.callsign
 
 
 def test_callsigns_are_unique_and_resolve_case_insensitively():

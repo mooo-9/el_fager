@@ -80,23 +80,43 @@ class TestReport:
 class TestParseCallsign:
     @pytest.mark.parametrize("message,expected_task", [
         ("Sage, research Egyptian brokers", "research Egyptian brokers"),
-        ("sage research Egyptian brokers", "research Egyptian brokers"),
+        ("sage, research Egyptian brokers", "research Egyptian brokers"),
         ("Scribe: summarize this contract", "summarize this contract"),
-        ("VITALS log my lunch", "log my lunch"),
+        ("VITALS, log my lunch", "log my lunch"),
+        ("hey Sage research Egyptian brokers", "research Egyptian brokers"),
+        ("ok Forge, show me the diff", "show me the diff"),
+        ("el fager Herald check my inbox", "check my inbox"),
     ])
     def test_addressing_an_agent_by_name(self, message, expected_task):
         result = parse_callsign(message)
         assert result is not None
         assert result[1] == expected_task
 
+    @pytest.mark.parametrize("message", [
+        "sage tea recipe and benefits",
+        "forge a signature for the contract",
+        "vitals check on the patient",
+        "herald of spring",
+    ])
+    def test_a_callsign_used_as_an_ordinary_word_is_not_an_invocation(self, message):
+        """Several callsigns are English words. Bypassing the brain on one of
+        them is worse than missing an invocation -- a miss just falls through
+        to the tool loop, which can still pick the same agent."""
+        assert parse_callsign(message) is None
+
     def test_maps_to_the_right_tool(self):
         assert parse_callsign("Sage, research x")[0] == "research_agent"
         assert parse_callsign("Argus, click submit")[0] == "screen_agent"
+        assert parse_callsign("Herald, check my inbox")[0] == "comms_agent"
+        assert parse_callsign("Chronos, what is on tomorrow")[0] == "scheduler_agent"
+        assert parse_callsign("Abacus, how much did I spend")[0] == "finance_agent"
+        assert parse_callsign("Forge, show me the diff")[0] == "dev_agent"
 
     @pytest.mark.parametrize("message", [
         "what is the weather in Cairo",
-        "Sage",          # a name with no task
-        "Sage ok",       # too short to be a task
+        "Sage",           # a name with no task
+        "Sage, ok",       # too short to be a task
+        "Sage research brokers",  # no address separator -- falls to the brain
         "tell Sage to research x",  # not addressed at the start
         "",
     ])

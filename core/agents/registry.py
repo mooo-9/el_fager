@@ -24,6 +24,26 @@ _TASK_SCHEMA_HINTS = {
 }
 
 
+def _comms_send_tools() -> tuple[str, ...]:
+    from core.agents.comms_agent import SEND_TOOLS
+    return SEND_TOOLS
+
+
+def _scheduler_destructive_tools() -> tuple[str, ...]:
+    from core.agents.scheduler_agent import DESTRUCTIVE_TOOLS
+    return DESTRUCTIVE_TOOLS
+
+
+def _finance_destructive_tools() -> tuple[str, ...]:
+    from core.agents.finance_agent import DESTRUCTIVE_TOOLS
+    return DESTRUCTIVE_TOOLS
+
+
+def _dev_destructive_tools() -> tuple[str, ...]:
+    from core.agents.dev_agent import DESTRUCTIVE_TOOLS
+    return DESTRUCTIVE_TOOLS
+
+
 @dataclass(frozen=True)
 class AgentSpec:
     callsign: str          # the name Mo says: "Sage"
@@ -34,6 +54,9 @@ class AgentSpec:
     tool_description: str  # verbatim schema description
     task_hint: str         # schema description of the "task" property
     timeout_s: int = 180
+    # Tool names this agent may only use when Mo asked for the work himself.
+    # The gate is enforced by REMOVING them from the agent's dispatch map, not
+    # by asking the model nicely -- see load() and core/agents/tool_loop.py.
     confirm_before: tuple[str, ...] = field(default_factory=tuple)
 
     def schema(self) -> dict:
@@ -143,6 +166,68 @@ ROSTER: dict[str, AgentSpec] = {
             ),
             task_hint=_TASK_SCHEMA_HINTS["health_agent"],
         ),
+        AgentSpec(
+            callsign="Herald",
+            tool_name="comms_agent",
+            role="Inbox and messaging -- triages email, drafts replies, sends WhatsApp and Telegram.",
+            module="core.agents.comms_agent",
+            cls="CommsAgent",
+            tool_description=(
+                "Inbox and messaging agent -- triages Gmail, drafts and sends replies, and reaches "
+                "contacts on WhatsApp and Telegram. Use for: 'check my email', 'what's in my inbox', "
+                "'reply to X', 'draft an email to X', 'message X on WhatsApp', 'any Telegram "
+                "messages'. Sending is two-step and confirmed; when working unattended this agent "
+                "drafts and reports instead of sending."
+            ),
+            task_hint="The user's email or messaging request, verbatim or lightly cleaned up.",
+            confirm_before=_comms_send_tools(),
+        ),
+        AgentSpec(
+            callsign="Chronos",
+            tool_name="scheduler_agent",
+            role="Calendar, reminders, recurring schedules, and focus blocks.",
+            module="core.agents.scheduler_agent",
+            cls="SchedulerAgent",
+            tool_description=(
+                "Time and scheduling agent -- reads and edits the calendar, sets reminders, manages "
+                "recurring schedules, and runs focus blocks. Use for: 'what's on tomorrow', 'book me "
+                "an hour for X', 'move my 3pm', 'remind me in 20 minutes', 'what do I have recurring', "
+                "'block distractions for 2 hours'. Do NOT use for a bare 'what time is it'."
+            ),
+            task_hint="The user's calendar, reminder, or scheduling request.",
+            confirm_before=_scheduler_destructive_tools(),
+        ),
+        AgentSpec(
+            callsign="Abacus",
+            tool_name="finance_agent",
+            role="Personal money -- expenses, income, invoices, and budgets.",
+            module="core.agents.finance_agent",
+            cls="FinanceAgent",
+            tool_description=(
+                "Personal bookkeeping agent -- logs expenses and income, manages invoices and "
+                "budgets. Use for: 'I spent 200 on lunch', 'how much did I spend this week', 'what do "
+                "clients owe me', 'invoice X for Y', 'set a food budget', 'am I over budget'. This is "
+                "personal money only -- stocks and trading go to Midas (stocks_agent)."
+            ),
+            task_hint="The user's expense, income, invoice, or budget request.",
+            confirm_before=_finance_destructive_tools(),
+        ),
+        AgentSpec(
+            callsign="Forge",
+            tool_name="dev_agent",
+            role="Git, GitHub, code inspection, and developer utilities.",
+            module="core.agents.dev_agent",
+            cls="DevAgent",
+            tool_description=(
+                "Engineering agent -- reads repositories, inspects diffs and history, checks GitHub "
+                "issues and pull requests, and runs developer utilities. Use for: 'what changed in my "
+                "repo', 'show me the diff', 'commit this', 'any open PRs on X', 'check this Python for "
+                "syntax errors', 'hash this string'. When working unattended it cannot execute code or "
+                "write history -- it reports what it would do."
+            ),
+            task_hint="The user's git, GitHub, or code request.",
+            confirm_before=_dev_destructive_tools(),
+        ),
     ]
 }
 
@@ -173,12 +258,21 @@ def resolve(name: str) -> AgentSpec | None:
     return None
 
 
-def load(name: str):
-    """Instantiate an agent by tool name or callsign. Imports on demand."""
+def load(name: str, allow_side_effects: bool = True):
+    """Instantiate an agent by tool name or callsign. Imports on demand.
+
+    allow_side_effects=False strips the tools named in the spec's
+    confirm_before, so an agent working from a mission or the dashboard can
+    draft and report but not send, delete, or push on Mo's behalf. Agents
+    without confirm_before take no such argument and are built plainly.
+    """
     spec = resolve(name)
     if spec is None:
         raise KeyError(f"No agent named '{name}'.")
-    return getattr(import_module(spec.module), spec.cls)()
+    cls = getattr(import_module(spec.module), spec.cls)
+    if spec.confirm_before:
+        return cls(allow_side_effects=allow_side_effects)
+    return cls()
 
 
 def format_roster() -> str:

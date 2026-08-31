@@ -21,6 +21,11 @@ from core.agents import ledger, registry
 
 _MAX_ATTEMPTS = 2  # 1 try + 1 retry, matching core/missions.py
 
+# Sources where Mo is present and asked for the work himself. Anything else --
+# a mission step, a queued task, a command typed on the phone dashboard -- runs
+# an agent without its side-effecting tools (see AgentSpec.confirm_before).
+_INTERACTIVE_SOURCES = frozenset({"voice", "callsign", "delegate"})
+
 _RETRY_SUFFIX = (
     "\n\nYour previous attempt was rejected: {reason}\n"
     "Correct it this time and actually complete the task."
@@ -112,7 +117,10 @@ def assign(agent: str, task: str, *, acceptance: str | None = None,
             if executor is not None:
                 result = executor(attempt_task)
             else:
-                agent_obj = registry.load(spec.tool_name)
+                agent_obj = registry.load(
+                    spec.tool_name,
+                    allow_side_effects=source in _INTERACTIVE_SOURCES,
+                )
                 result = _run_with_timeout(
                     lambda: agent_obj.run(attempt_task), timeout_s
                 )
