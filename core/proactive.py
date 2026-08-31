@@ -261,8 +261,8 @@ class ProactiveEngine:
     def _check_upcoming_events(self) -> None:
         """Remind Mo of a calendar event starting in 5–20 minutes."""
         try:
-            from tools.calendar_tool import list_calendar_events
-            text  = list_calendar_events("today")
+            from tools.calendar_tool import list_events
+            text  = list_events("today")
             now   = datetime.now()
             today = date.today().isoformat()
             # Match time formats: "10:30 AM", "14:30", "10:30am"

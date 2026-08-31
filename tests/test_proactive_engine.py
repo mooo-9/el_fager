@@ -397,3 +397,31 @@ class TestHudNotify:
     def test_hud_fn_exception_swallowed(self, engine):
         engine.set_hud_notify(MagicMock(side_effect=RuntimeError("js bridge gone")))
         engine._hud_notify(5, "a", "b", "c", "TAG")  # must not raise
+
+
+class TestUpcomingEventReminders:
+    """This check imported a function that does not exist, so every run raised
+    ImportError into a bare `except: pass` -- calendar reminders never fired."""
+
+    def test_the_calendar_function_it_imports_exists(self):
+        from tools import calendar_tool
+        assert hasattr(calendar_tool, "list_events")
+
+    def test_an_event_soon_is_announced(self, engine, monkeypatch):
+        from datetime import datetime, timedelta
+        soon = datetime.now() + timedelta(minutes=12)
+        listing = f"Events for today:\n- {soon.strftime('%I:%M %p').lstrip('0')} - Dentist"
+        monkeypatch.setattr("tools.calendar_tool.list_events",
+                            lambda *a, **k: listing)
+        engine._check_upcoming_events()
+        assert engine._deliver.called
+        assert "Dentist" in engine._deliver.call_args.args[0]
+
+    def test_a_distant_event_is_not_announced(self, engine, monkeypatch):
+        from datetime import datetime, timedelta
+        later = datetime.now() + timedelta(hours=5)
+        listing = f"Events for today:\n- {later.strftime('%I:%M %p').lstrip('0')} - Dentist"
+        monkeypatch.setattr("tools.calendar_tool.list_events",
+                            lambda *a, **k: listing)
+        engine._check_upcoming_events()
+        engine._deliver.assert_not_called()
