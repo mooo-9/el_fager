@@ -13,6 +13,9 @@ and they cost differently:
 Needs a real ANTHROPIC_API_KEY -- the cases are deliberately the ones the
 heuristic cannot settle. Roughly 17 Haiku calls, well under a cent.
 
+Run it from the repo root (the key is read from .env there, as main.py does):
+
+    cd "C:\claude proj\el_fager"
     python scripts/eval_warden.py            # all cases
     python scripts/eval_warden.py --offline  # heuristic-only cases, no API
 """
@@ -22,9 +25,18 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 
-_CASES = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "warden_cases.json"
+# The key lives in .env, same as main.py -- reading only os.environ would make
+# this refuse to run on a laptop where El Fager itself works fine.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_ROOT / ".env")
+except ImportError:
+    pass
+
+_CASES = _ROOT / "tests" / "fixtures" / "warden_cases.json"
 
 
 def main() -> int:
@@ -39,8 +51,9 @@ def main() -> int:
     if args.offline:
         cases = [c for c in cases if c["heuristic"]]
     elif not os.environ.get("ANTHROPIC_API_KEY"):
-        print("ANTHROPIC_API_KEY is not set. Run with --offline for the "
-              "heuristic-only cases, or set the key for the full run.")
+        print(f"No ANTHROPIC_API_KEY found in the environment or {_ROOT / '.env'}.\n"
+              f"Run with --offline for the heuristic-only cases, or set the key "
+              f"for the full run.")
         return 2
 
     false_rejects, false_accepts, unclear, correct = [], [], [], 0
