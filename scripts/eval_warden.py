@@ -1,4 +1,4 @@
-"""
+r"""
 Measure Warden's accuracy against a labelled set of realistic agent outputs.
 
 Warden decides whether an agent actually did the work. Two error modes matter,
