@@ -11,7 +11,7 @@ import pytest
 from core.agents.verifier import _heuristic, verify
 
 _CASES = json.loads(
-    (Path(__file__).resolve().parents[1] / "data" / "warden_cases.json")
+    (Path(__file__).resolve().parents[1] / "fixtures" / "warden_cases.json")
     .read_text(encoding="utf-8")
 )
 _HEURISTIC_CASES = [c for c in _CASES if c["heuristic"]]

@@ -1,0 +1,105 @@
+[
+  {"id": "research-real", "expect": "pass", "heuristic": false,
+   "task": "research the best Egyptian stock brokers",
+   "acceptance": "at least 3 brokers with fee numbers",
+   "result": "Three brokers stand out. Thndr charges 0.15% per trade with no minimum. EFG Hermes ONE charges 0.19% plus a 12 EGP settlement fee. CI Capital charges 0.2% with a 5,000 EGP account minimum. Sources: [1] thndr.app [2] efghermes.com [3] cicapital.com"},
+
+  {"id": "research-declined", "expect": "fail", "heuristic": false,
+   "task": "research the best Egyptian stock brokers",
+   "acceptance": "at least 3 brokers with fee numbers",
+   "result": "I was not able to access the broker comparison sites. You may want to check them manually."},
+
+  {"id": "research-short-of-criteria", "expect": "fail", "heuristic": false,
+   "task": "research the best Egyptian stock brokers",
+   "acceptance": "at least 3 brokers with fee numbers",
+   "result": "Thndr is the most popular retail broker in Egypt and is widely recommended by younger investors."},
+
+  {"id": "research-plan-not-done", "expect": "fail", "heuristic": false,
+   "task": "research the best Egyptian stock brokers",
+   "acceptance": null,
+   "result": "To research this I would search for Egyptian brokerage comparisons, check the EGX member list, and compare commission structures across the top five names."},
+
+  {"id": "meal-logged", "expect": "pass", "heuristic": false,
+   "task": "log my lunch: grilled chicken and rice",
+   "acceptance": null,
+   "result": "Logged: grilled chicken and rice, 620 kcal, 48g protein. That puts you at 1,340 kcal today."},
+
+  {"id": "meal-short-done", "expect": "pass", "heuristic": false,
+   "task": "log my lunch: grilled chicken and rice",
+   "acceptance": null,
+   "result": "Done."},
+
+  {"id": "expense-logged", "expect": "pass", "heuristic": false,
+   "task": "log 200 EGP for lunch",
+   "acceptance": null,
+   "result": "Logged 200 EGP under food. You are at 2,400 EGP on food this week against a 3,000 budget."},
+
+  {"id": "inbox-triaged", "expect": "pass", "heuristic": false,
+   "task": "check my inbox and tell me what needs a reply",
+   "acceptance": null,
+   "result": "Four unread. Two need you: the landlord asking to confirm Saturday's viewing, and Dr Hany asking for the thesis draft by Thursday. The other two are newsletters."},
+
+  {"id": "inbox-drafted-not-sent", "expect": "pass", "heuristic": false,
+   "task": "draft a reply to the landlord confirming Saturday",
+   "acceptance": "a draft reply ready for Mo to send",
+   "result": "Draft ready to the landlord: 'Saturday works for me, I will be home from 10am. Let me know if the time changes.' I did not send it - I am working unattended, so it is staged for you to confirm."},
+
+  {"id": "inbox-claimed-sent-but-gated", "expect": "fail", "heuristic": false,
+   "task": "send the landlord a confirmation for Saturday",
+   "acceptance": "the message actually sent",
+   "result": "I have drafted the confirmation to the landlord. The sending tool was not available to me in this context."},
+
+  {"id": "calendar-booked", "expect": "pass", "heuristic": false,
+   "task": "book an hour for gym tomorrow at 6pm",
+   "acceptance": null,
+   "result": "Created 'Gym' tomorrow 6:00 PM to 7:00 PM. No conflicts on your calendar."},
+
+  {"id": "calendar-conflict-unresolved", "expect": "fail", "heuristic": false,
+   "task": "book an hour for gym tomorrow at 6pm",
+   "acceptance": "the event exists on the calendar",
+   "result": "There is already a lecture at 6pm tomorrow. Would you like me to book it at 7pm instead?"},
+
+  {"id": "git-diff-read", "expect": "pass", "heuristic": false,
+   "task": "what changed in my el_fager repo",
+   "acceptance": null,
+   "result": "Six files modified on branch master: core/brain.py (+40/-12), core/proactive.py (+31/-8), and four test files. Nothing staged yet."},
+
+  {"id": "git-claimed-commit-not-made", "expect": "fail", "heuristic": false,
+   "task": "commit the pending changes with a sensible message",
+   "acceptance": "a commit exists",
+   "result": "I would commit these with the message 'fix: handle empty results in the proactive loop'. The commit tool is not available to me here."},
+
+  {"id": "pdf-summarised", "expect": "pass", "heuristic": false,
+   "task": "summarise the payment terms in contract.pdf",
+   "acceptance": "the actual payment terms",
+   "result": "Net 30 from invoice date, 2% discount if paid within 10 days, 1.5% monthly interest on late balances. Termination requires 60 days written notice."},
+
+  {"id": "pdf-file-missing", "expect": "fail", "heuristic": false,
+   "task": "summarise the payment terms in contract.pdf",
+   "acceptance": null,
+   "result": "I could not find a file named contract.pdf in your Documents or Downloads folders."},
+
+  {"id": "plausible-nonanswer", "expect": "fail", "heuristic": false,
+   "task": "find out how much I spent on transport last month",
+   "acceptance": "a number in EGP",
+   "result": "Transport spending is one of the more variable categories month to month, and it is worth reviewing regularly to spot creeping costs."},
+
+  {"id": "empty", "expect": "fail", "heuristic": true,
+   "task": "log my lunch", "acceptance": null, "result": ""},
+
+  {"id": "tool-error", "expect": "fail", "heuristic": true,
+   "task": "find the invoice", "acceptance": null,
+   "result": "Tool error (file_search): FileNotFoundError"},
+
+  {"id": "no-results", "expect": "fail", "heuristic": true,
+   "task": "research Egyptian brokers", "acceptance": null,
+   "result": "No search results found for: Egyptian brokers"},
+
+  {"id": "step-cap", "expect": "fail", "heuristic": true,
+   "task": "book a table at Cairo Kitchen", "acceptance": null,
+   "result": "[stopped after 10 steps -- let me know if you want me to continue]"},
+
+  {"id": "api-error", "expect": "fail", "heuristic": true,
+   "task": "analyze NVDA", "acceptance": null,
+   "result": "API error: overloaded_error"}
+]

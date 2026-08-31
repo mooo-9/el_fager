@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-_CASES = Path(__file__).resolve().parent.parent / "tests" / "data" / "warden_cases.json"
+_CASES = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "warden_cases.json"
 
 
 def main() -> int:
