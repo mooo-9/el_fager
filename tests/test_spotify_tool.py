@@ -41,54 +41,63 @@ def sp(monkeypatch):
     return client
 
 
-class TestPlayMusic:
-    def test_plays_through_api_when_a_device_is_live(self, sp, launched):
-        sp.devices.return_value = {"devices": [
-            {"id": "dev1", "name": "Mo's Laptop", "is_active": True}]}
+NO_DEVICE = Exception("404 NO_ACTIVE_DEVICE")
 
+
+class TestPlayMusic:
+    def test_hot_path_is_search_then_play_with_no_device_lookup(self, sp, launched):
+        """Spotify already active: two API calls, and devices() is never touched."""
         assert st.play_music("enta eih") == "Playing: Enta Eih by Nancy Ajram"
-        sp.start_playback.assert_called_once_with(device_id="dev1",
+        sp.start_playback.assert_called_once_with(device_id=None,
                                                   uris=["spotify:track:abc"])
+        sp.devices.assert_not_called()
         assert launched == []
 
-    def test_opens_the_app_on_the_track_when_no_device(self, sp, launched):
+    def test_wakes_an_idle_device_when_nothing_is_active(self, sp, launched):
+        sp.start_playback.side_effect = [NO_DEVICE, None]
+        sp.devices.return_value = {"devices": [
+            {"id": "dev1", "name": "Mo's Laptop", "is_active": False}]}
+
+        assert st.play_music("enta eih") == "Playing: Enta Eih by Nancy Ajram"
+        assert sp.start_playback.call_args.kwargs["device_id"] == "dev1"
+        assert launched == []
+
+    def test_opens_the_app_on_the_track_when_there_is_no_device_at_all(self, sp, launched):
+        sp.start_playback.side_effect = NO_DEVICE
         sp.devices.return_value = {"devices": []}
 
         assert st.play_music("enta eih") == "Playing: Enta Eih by Nancy Ajram"
-        sp.start_playback.assert_not_called()
         assert launched == ["spotify:track:abc"]
 
     def test_falls_back_to_the_app_when_playback_is_refused(self, sp, launched):
-        """Free accounts get a 403 from the playback endpoint — the app still plays."""
+        """A device exists but refuses playback — the app URI still plays it."""
+        sp.start_playback.side_effect = Exception("403 Forbidden")
         sp.devices.return_value = {"devices": [
             {"id": "dev1", "name": "Mo's Laptop", "is_active": True}]}
-        sp.start_playback.side_effect = Exception("403 Premium required")
 
         assert st.play_music("enta eih") == "Playing: Enta Eih by Nancy Ajram"
         assert launched == ["spotify:track:abc"]
 
     def test_mood_query_resolves_to_a_playlist(self, sp, launched):
-        sp.devices.return_value = {"devices": []}
         sp.search.return_value = _results(playlists=[
             {"uri": "spotify:playlist:xyz", "name": "Deep Focus"}])
 
         assert st.play_music("play something focus") == "Playing: focus vibes — Deep Focus"
-        assert launched == ["spotify:playlist:xyz"]
+        sp.start_playback.assert_called_once_with(device_id=None,
+                                                  context_uri="spotify:playlist:xyz")
 
     def test_skips_null_playlist_items(self, sp, launched):
         """Spotify's search returns null entries in the playlist list."""
-        sp.devices.return_value = {"devices": []}
         sp.search.return_value = _results(playlists=[
             None, {"uri": "spotify:playlist:xyz", "name": "Tarab"}])
 
         assert st.play_music("tarab") == "Playing: playlist Tarab"
-        assert launched == ["spotify:playlist:xyz"]
 
     def test_nothing_found(self, sp, launched):
-        sp.devices.return_value = {"devices": []}
         sp.search.return_value = _results()
 
         assert st.play_music("asdfqwer") == "Nothing found for 'asdfqwer'"
+        sp.start_playback.assert_not_called()
         assert launched == []
 
     def test_without_credentials_opens_the_search_page(self, monkeypatch, launched):
@@ -99,6 +108,7 @@ class TestPlayMusic:
         assert "searched for 'enta eih'" in out
 
     def test_reports_when_the_app_cannot_be_opened(self, sp, monkeypatch):
+        sp.start_playback.side_effect = NO_DEVICE
         sp.devices.return_value = {"devices": []}
         monkeypatch.setattr(st, "_launch_spotify_app", lambda uri="spotify:": False)
 

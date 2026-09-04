@@ -178,6 +178,13 @@ def _search_uri(sp, query: str, playlist_only: bool = False) -> tuple[str, str] 
 
     return None
 
+def _start(sp, uri: str, device_id: str | None) -> None:
+    """Play a URI. device_id=None targets whatever device is currently active."""
+    if uri.startswith("spotify:track:"):
+        sp.start_playback(device_id=device_id, uris=[uri])
+    else:
+        sp.start_playback(device_id=device_id, context_uri=uri)
+
 def _get_device(sp) -> str | None:
     """
     Return best available device_id.
@@ -218,10 +225,9 @@ def play_music(query: str) -> str:
     """
     Search Spotify for the query and start playing the best match.
 
-    Playback goes through the Web API when Spotify is already running and the
-    account can drive it. Otherwise the resolved URI is handed to the desktop
-    app, which opens and plays it — so "play <song>" works on Free accounts and
-    when Spotify isn't open yet.
+    Hot path is two API calls — search, then play on the active device. The
+    device lookup only happens if that fails, and if there is no device at all
+    the URI goes to the desktop app, which opens and plays it.
     """
     sp = get_spotify() if SPOTIFY_AVAILABLE else None
     if sp is None:
@@ -243,16 +249,22 @@ def play_music(query: str) -> str:
     if mood_name:
         label = f"{mood_name} vibes — {label}"
 
+    # Spotify already playing somewhere: this is the whole hot path. Omitting
+    # device_id targets the active device, so no sp.devices() round trip.
+    try:
+        _start(sp, uri, None)
+        return f"Playing: {label}"
+    except Exception:
+        pass
+
+    # Nothing active — wake an idle device if there is one.
     dev = _active_device(sp)
     if dev:
         try:
-            if uri.startswith("spotify:track:"):
-                sp.start_playback(device_id=dev, uris=[uri])
-            else:
-                sp.start_playback(device_id=dev, context_uri=uri)
+            _start(sp, uri, dev)
             return f"Playing: {label}"
         except Exception:
-            pass  # Free account or the device refused — fall through to the app.
+            pass
 
     if _launch_spotify_app(uri):
         return f"Playing: {label}"
