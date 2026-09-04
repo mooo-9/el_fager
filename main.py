@@ -85,25 +85,34 @@ def _make_tray_image() -> Image.Image:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Windows startup registration
+# Windows startup cleanup
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _register_startup():
-    """Add El Fager to Windows HKCU startup registry so it runs on login."""
+def _remove_legacy_startup_entry():
+    """Delete the old HKCU Run entry.
+
+    Autostart is owned solely by the "El Fager Watchdog" scheduled task
+    (setup_watchdog.ps1). Earlier builds also wrote an HKCU Run value on every
+    launch, so both fired at logon and raced for the single-instance mutex.
+    Nothing but this removes that leftover value.
+    """
     try:
-        exe = sys.executable
-        script = str(Path(__file__).resolve())
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             0,
             winreg.KEY_SET_VALUE,
         )
-        winreg.SetValueEx(key, "ElFager", 0, winreg.REG_SZ, f'"{exe}" "{script}"')
-        winreg.CloseKey(key)
+        try:
+            winreg.DeleteValue(key, "ElFager")
+            print("[El Fager] Removed legacy HKCU Run autostart entry.")
+        except FileNotFoundError:
+            pass
+        finally:
+            winreg.CloseKey(key)
     except Exception as e:
-        print(f"[El Fager] Startup registration failed (non-fatal): {e}")
+        print(f"[El Fager] Startup entry cleanup failed (non-fatal): {e}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -131,7 +140,9 @@ def _acquire_instance_lock() -> None:
             ).show()
         except Exception:
             pass
-        sys.exit(0)
+        # Exit 3, not 0: tells watchdog.py this is a mutex collision rather
+        # than Mo quitting, so it keeps polling instead of stopping.
+        sys.exit(3)
 
 
 def main():
@@ -276,7 +287,8 @@ def main():
     print("[El Fager] System tray active.")
 
     # ── Windows startup entry ──────────────────────────────────────────────
-    _register_startup()
+    # Autostart lives in the watchdog scheduled task only; drop the old one.
+    _remove_legacy_startup_entry()
 
     # ── Reminder checker ──────────────────────────────────────────────────
     from tools.reminder_tool import check_reminders
