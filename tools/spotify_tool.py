@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import time
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -117,10 +118,14 @@ def _best_device_id(devices: list) -> str | None:
     active = [d for d in pool if d["is_active"]]
     return (active or pool)[0]["id"]
 
-def _launch_spotify_app() -> bool:
-    """Open the Spotify desktop app via Windows shell protocol."""
+def _launch_spotify_app(uri: str = "spotify:") -> bool:
+    """
+    Open the Spotify desktop app via Windows shell protocol.
+    Handing it a track/album/playlist URI opens the app AND starts playing it —
+    that works on Free accounts, unlike the Web API playback endpoints.
+    """
     try:
-        os.startfile("spotify:")
+        os.startfile(uri)
         return True
     except Exception:
         pass
@@ -129,9 +134,49 @@ def _launch_spotify_app() -> bool:
         os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WindowsApps", "Spotify.exe"),
     ]:
         if os.path.exists(exe):
-            subprocess.Popen([exe])
+            subprocess.Popen([exe, uri])
             return True
     return False
+
+def _open_search_in_app(query: str) -> str:
+    """No API credentials — open the app on the search results and let Mo pick."""
+    if _launch_spotify_app("spotify:search:" + quote(query)):
+        return f"Opened Spotify and searched for '{query}' — hit play on the one you want."
+    return _NOT_SET_UP
+
+def _active_device(sp) -> str | None:
+    """Device id if Spotify is already running somewhere. No launching, no polling."""
+    try:
+        return _best_device_id(sp.devices().get("devices", []))
+    except Exception:
+        return None
+
+def _search_uri(sp, query: str, playlist_only: bool = False) -> tuple[str, str] | None:
+    """Resolve a query to (spotify uri, spoken label). Track first, then playlist, then album."""
+    if playlist_only:
+        results = sp.search(q=query, type="playlist", limit=5)
+        for pl in results.get("playlists", {}).get("items", []):
+            if pl:
+                return pl["uri"], pl["name"]
+        return None
+
+    results = sp.search(q=query, type="track,playlist,album", limit=3)
+
+    tracks = results.get("tracks", {}).get("items", [])
+    if tracks:
+        return tracks[0]["uri"], _fmt_track(tracks[0])
+
+    for pl in results.get("playlists", {}).get("items", []):
+        if pl:
+            return pl["uri"], f"playlist {pl['name']}"
+
+    albums = results.get("albums", {}).get("items", [])
+    if albums:
+        al = albums[0]
+        artists = ", ".join(a["name"] for a in al.get("artists", []))
+        return al["uri"], f"album {al['name']} by {artists}"
+
+    return None
 
 def _get_device(sp) -> str | None:
     """
@@ -170,48 +215,48 @@ def _get_device(sp) -> str | None:
 # ── Public Spotify functions ──────────────────────────────────────────────────
 
 def play_music(query: str) -> str:
-    if not SPOTIFY_AVAILABLE:
-        return _NOT_SET_UP
-    sp = get_spotify()
+    """
+    Search Spotify for the query and start playing the best match.
+
+    Playback goes through the Web API when Spotify is already running and the
+    account can drive it. Otherwise the resolved URI is handed to the desktop
+    app, which opens and plays it — so "play <song>" works on Free accounts and
+    when Spotify isn't open yet.
+    """
+    sp = get_spotify() if SPOTIFY_AVAILABLE else None
     if sp is None:
-        return "[Spotify auth failed — check credentials in .env]"
+        # No credentials (or auth failed): open the app on the search results.
+        return _open_search_in_app(query)
+
+    mood_name, mood_search = _detect_mood(query)
     try:
-        dev = _get_device(sp)
-        if dev is None:
-            return "Open Spotify on your PC first, then ask me to play."
-
-        mood_name, mood_search = _detect_mood(query)
-        if mood_search:
-            results = sp.search(q=mood_search, type="playlist", limit=5)
-            playlists = [p for p in results.get("playlists", {}).get("items", []) if p]
-            if playlists:
-                pl = playlists[0]
-                sp.start_playback(device_id=dev, context_uri=pl["uri"])
-                return f"Playing {mood_name} vibes — {pl['name']}"
-            return f"[No playlist found for '{mood_name}' mood]"
-
-        results = sp.search(q=query, type="track,playlist,album", limit=3)
-
-        tracks = results.get("tracks", {}).get("items", [])
-        if tracks:
-            sp.start_playback(device_id=dev, uris=[tracks[0]["uri"]])
-            return f"Playing: {_fmt_track(tracks[0])}"
-
-        playlists = results.get("playlists", {}).get("items", [])
-        if playlists:
-            pl = playlists[0]
-            sp.start_playback(device_id=dev, context_uri=pl["uri"])
-            return f"Playing playlist: {pl['name']}"
-
-        albums = results.get("albums", {}).get("items", [])
-        if albums:
-            al = albums[0]
-            sp.start_playback(device_id=dev, context_uri=al["uri"])
-            return f"Playing album: {al['name']} by {', '.join(a['name'] for a in al.get('artists', []))}"
-
-        return f"Nothing found for '{query}'"
+        found = _search_uri(sp, mood_search or query, playlist_only=bool(mood_search))
     except Exception as e:
         return _spotify_error(e)
+
+    if found is None:
+        if mood_name:
+            return f"[No playlist found for '{mood_name}' mood]"
+        return f"Nothing found for '{query}'"
+
+    uri, label = found
+    if mood_name:
+        label = f"{mood_name} vibes — {label}"
+
+    dev = _active_device(sp)
+    if dev:
+        try:
+            if uri.startswith("spotify:track:"):
+                sp.start_playback(device_id=dev, uris=[uri])
+            else:
+                sp.start_playback(device_id=dev, context_uri=uri)
+            return f"Playing: {label}"
+        except Exception:
+            pass  # Free account or the device refused — fall through to the app.
+
+    if _launch_spotify_app(uri):
+        return f"Playing: {label}"
+    return "[Couldn't open Spotify — is the desktop app installed?]"
 
 
 def pause_music() -> str:

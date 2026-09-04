@@ -320,7 +320,7 @@ Spotify music: play_music, pause_music, next_track, what_playing, set_volume, sp
 When Mo says "play [song/artist/mood]" — call play_music(query). Moods like "chill", "focus", "hype" work as queries.
 When Mo says "pause" / "stop music" — pause_music. "next" / "skip" — next_track. "what's playing?" — what_playing.
 Volume: "volume up/down/set to X" → set_volume(level 0-100). "spotify status" → spotify_status.
-If Spotify not open or token error, tell Mo to open Spotify on his laptop first.
+play_music opens the Spotify desktop app itself if it isn't running, so never tell Mo to open Spotify first — just call it.
 YouTube transcript: get_youtube_transcript. When Mo pastes a YouTube link or says "summarize this video" — call get_youtube_transcript. Then summarize the returned transcript in 3-5 sentences.
 Pomodoro: start_pomodoro, stop_pomodoro, list_pomodoros. When Mo says "start pomodoro", "focus session", "25 minutes" → start_pomodoro. "stop pomodoro" → stop_pomodoro. "show my sessions" → list_pomodoros.
 Flashcards: save_flashcards. When Mo says "make flashcards from this" or "turn these into cards" — call save_flashcards with a list of {front, back} dicts. Output is an Anki-importable CSV.
