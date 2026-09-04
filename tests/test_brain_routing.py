@@ -157,3 +157,31 @@ def test_chat_can_chain_agent_tool_then_instant_tool():
          patch("tools.web_tool.web_search", return_value="Fix: run as administrator."):
         result = brain.chat("check my screen error then search the web for a fix")
     assert result == "Found a fix and searched the web for it."
+
+
+def test_media_tool_result_answers_without_a_second_api_call():
+    """"Play X" should not pay a round trip just to have the result rephrased."""
+    brain = _make_brain()
+    create = MagicMock(return_value=_tool_use_response("play_music", {"query": "enta eih"}))
+    with patch.object(brain.client.messages, "create", create), \
+         patch("tools.spotify_tool.play_music", return_value="Playing: Enta Eih by Nancy Ajram"):
+        result = brain.chat("play enta eih")
+    assert result == "Playing: Enta Eih by Nancy Ajram"
+    assert create.call_count == 1
+
+
+def test_diagnostic_tool_still_goes_back_to_the_model():
+    """spotify_status returns a multi-line dump, so it is left out of the
+    short-circuit and still gets summarised by the model."""
+    brain = _make_brain()
+    responses = [
+        _tool_use_response("spotify_status", {}),
+        _end_turn_response("You're on Premium, laptop is active."),
+    ]
+    create = MagicMock(side_effect=responses)
+    with patch.object(brain.client.messages, "create", create), \
+         patch("tools.spotify_tool.spotify_status",
+               return_value="Account: Mo (premium)\nDevice: Laptop [ACTIVE]"):
+        result = brain.chat("spotify status")
+    assert result == "You're on Premium, laptop is active."
+    assert create.call_count == 2

@@ -4693,6 +4693,13 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "run_skill", "list_skills", "learn_skill",
 })
 
+# Tools whose return string is already a natural spoken answer. Answering with
+# it directly saves the second API round trip — worth it on media commands,
+# where the wait is the whole point. Note the strings are English-only.
+_SPEAK_RESULT_TOOLS: frozenset[str] = frozenset({
+    "play_music", "pause_music", "next_track", "what_playing", "set_volume",
+})
+
 _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "files": frozenset({
         "file_search", "open_file", "read_file_content", "open_app", "run_command",
@@ -6613,15 +6620,27 @@ class Brain:
                     )
 
                     tool_results = []
+                    batch = []
                     for block in response.content:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
+                            batch.append(block.name)
                             result_str = self._dispatch_tool(block.name, block.input)
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
                                 "content": result_str,
                             })
+
+                    # One media call and nothing else — its result already reads
+                    # as the answer, so speak it instead of paying a second
+                    # round trip just to have it rephrased.
+                    if len(batch) == 1 and batch[0] in _SPEAK_RESULT_TOOLS:
+                        text = tool_results[0]["content"]
+                        self.conversation_history.append({"role": "assistant", "content": text})
+                        if self._logger:
+                            self._logger.log("assistant", text, tools_used)
+                        return text
 
                     messages.append({"role": "user", "content": tool_results})
 
