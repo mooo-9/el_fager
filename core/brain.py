@@ -320,7 +320,7 @@ Spotify music: play_music, pause_music, next_track, what_playing, set_volume, sp
 When Mo says "play [song/artist/mood]" — call play_music(query). Moods like "chill", "focus", "hype" work as queries.
 When Mo says "pause" / "stop music" — pause_music. "next" / "skip" — next_track. "what's playing?" — what_playing.
 Volume: "volume up/down/set to X" → set_volume(level 0-100). "spotify status" → spotify_status.
-If Spotify not open or token error, tell Mo to open Spotify on his laptop first.
+play_music opens the Spotify desktop app itself if it isn't running, so never tell Mo to open Spotify first — just call it.
 YouTube transcript: get_youtube_transcript. When Mo pastes a YouTube link or says "summarize this video" — call get_youtube_transcript. Then summarize the returned transcript in 3-5 sentences.
 Pomodoro: start_pomodoro, stop_pomodoro, list_pomodoros. When Mo says "start pomodoro", "focus session", "25 minutes" → start_pomodoro. "stop pomodoro" → stop_pomodoro. "show my sessions" → list_pomodoros.
 Flashcards: save_flashcards. When Mo says "make flashcards from this" or "turn these into cards" — call save_flashcards with a list of {front, back} dicts. Output is an Anki-importable CSV.
@@ -4693,6 +4693,13 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "run_skill", "list_skills", "learn_skill",
 })
 
+# Tools whose return string is already a natural spoken answer. Answering with
+# it directly saves the second API round trip — worth it on media commands,
+# where the wait is the whole point. Note the strings are English-only.
+_SPEAK_RESULT_TOOLS: frozenset[str] = frozenset({
+    "play_music", "pause_music", "next_track", "what_playing", "set_volume",
+})
+
 _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "files": frozenset({
         "file_search", "open_file", "read_file_content", "open_app", "run_command",
@@ -6613,15 +6620,27 @@ class Brain:
                     )
 
                     tool_results = []
+                    batch = []
                     for block in response.content:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
+                            batch.append(block.name)
                             result_str = self._dispatch_tool(block.name, block.input)
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
                                 "content": result_str,
                             })
+
+                    # One media call and nothing else — its result already reads
+                    # as the answer, so speak it instead of paying a second
+                    # round trip just to have it rephrased.
+                    if len(batch) == 1 and batch[0] in _SPEAK_RESULT_TOOLS:
+                        text = tool_results[0]["content"]
+                        self.conversation_history.append({"role": "assistant", "content": text})
+                        if self._logger:
+                            self._logger.log("assistant", text, tools_used)
+                        return text
 
                     messages.append({"role": "user", "content": tool_results})
 
