@@ -7,10 +7,11 @@ Run at logon via Windows Task Scheduler (see README section or:
 
 Behaviour:
   - Launches `pythonw main.py` with stderr captured to data/logs/.
-  - Polls the process; on exit, logs the crash and restarts it.
-  - If the app exits cleanly within the first seconds (single-instance
-    mutex says another El Fager is already running), the watchdog just
-    keeps polling without spawning duplicates.
+  - Polls the process; on a crash, logs it and restarts.
+  - Exit 0 means Mo quit from the tray menu: the watchdog stops too, so
+    Quit actually quits. It comes back at the next logon.
+  - Exit 3 means the single-instance mutex is held by another El Fager;
+    the watchdog keeps polling without spawning duplicates.
   - After 3 crashes within 10 minutes it stops restarting and shows a
     Windows toast so Mo knows something is structurally broken.
 
@@ -27,9 +28,16 @@ _ROOT = Path(__file__).resolve().parent
 _LOG_DIR = _ROOT / "data" / "logs"
 
 POLL_SECONDS = 5
-CLEAN_EXIT_GRACE = 15       # exit 0 within this many seconds = "already running"
+ALREADY_RUNNING_EXIT = 3    # main.py's exit code when the mutex is already held
 MAX_CRASHES = 3
 CRASH_WINDOW_SECONDS = 600  # 10 minutes
+
+
+def classify_exit(code: int) -> str:
+    """Why El Fager stopped: 'already_running', 'quit', or 'crash'."""
+    if code == ALREADY_RUNNING_EXIT:
+        return "already_running"
+    return "quit" if code == 0 else "crash"
 
 
 class RestartTracker:
@@ -120,19 +128,23 @@ def main() -> None:
         if stderr_path.exists() and stderr_path.stat().st_size == 0:
             stderr_path.unlink()  # no stderr output -> no point keeping the file
 
-        if code == 0 and uptime < CLEAN_EXIT_GRACE:
+        reason = classify_exit(code)
+
+        if reason == "already_running":
             # Single-instance mutex: another El Fager is already running.
             # Poll passively until it disappears, then take over.
             _log("El Fager already running elsewhere; watching passively.")
             time.sleep(60)
             continue
 
-        if code == 0:
-            _log(f"El Fager exited cleanly after {uptime:.0f}s. Restarting.")
-        else:
-            _log(f"El Fager CRASHED (exit {code}) after {uptime:.0f}s. "
-                 f"Stderr: {stderr_path.name}")
-            tracker.record_crash()
+        if reason == "quit":
+            # Mo chose Quit from the tray menu - do not resurrect it.
+            _log(f"El Fager quit by user after {uptime:.0f}s. Watchdog stopping.")
+            return
+
+        _log(f"El Fager CRASHED (exit {code}) after {uptime:.0f}s. "
+             f"Stderr: {stderr_path.name}")
+        tracker.record_crash()
 
         if tracker.should_give_up():
             msg = (f"El Fager crashed {MAX_CRASHES} times in 10 minutes. "

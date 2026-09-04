@@ -230,21 +230,22 @@ class HudWindow(QWidget):
             self._open_hud()
 
     def _open_hud(self):
-        if self._worker and self._worker.isRunning():
-            return
         self.setWindowOpacity(0.0)
         self.show()
         self._fade(1.0)
         self._hud.goto_scene(SCENE_VOICE)
-        if not self._mic_muted:
+        # A worker from a previous open may still be unwinding - show the HUD
+        # anyway, just don't stack a second pipeline on top of it.
+        if not self._mic_muted and not (self._worker and self._worker.isRunning()):
             self._start_pipeline()
 
     def _close_hud(self):
         if self._worker and self._worker.isRunning():
+            # PipelineWorker overrides run(), so quit() has no event loop to
+            # exit and wait() would freeze the Qt main thread for its full
+            # timeout. Signal the worker and let it unwind in the background.
             self.voice_in.stop_recording()
             self.voice_out.stop()
-            self._worker.quit()
-            self._worker.wait(2000)
         self._fade(0.0, then_hide=True)
         self._current_state = "idle"
 
