@@ -34,7 +34,9 @@ for fpath in tool_files:
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n=== 2. BRAIN.PY TOOLS vs DISPATCH ===")
 try:
-    from core.brain import TOOLS, _dispatch_tool, _TOOL_GROUP_NAMES, _GROUP_TRIGGERS, _CORE_NAMES
+    # _dispatch_tool is a Brain method, not a module function - this section
+    # reads the dispatch chain out of the source below, so don't import it.
+    from core.brain import TOOLS, _TOOL_GROUP_NAMES, _GROUP_TRIGGERS, _CORE_NAMES
 
     brain_names = {t["name"] for t in TOOLS}
     print(f"  Total tools in TOOLS list: {len(brain_names)}")
@@ -43,7 +45,8 @@ try:
     with open("core/brain.py", encoding="utf-8") as f:
         brain_src = f.read()
 
-    dispatched = set(re.findall(r'elif name == "([^"]+)"', brain_src))
+    # The first branch is `if name ==`, the rest `elif name ==` - match both.
+    dispatched = set(re.findall(r'\b(?:el)?if name == "([^"]+)"', brain_src))
     print(f"  Dispatch elif blocks: {len(dispatched)}")
 
     in_tools_not_dispatched = brain_names - dispatched

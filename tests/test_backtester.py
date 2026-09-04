@@ -14,6 +14,18 @@ def _bar(open_: float, high: float, low: float, close: float) -> dict:
     return {"open": open_, "high": high, "low": low, "close": close}
 
 
+def _pin_sl_tp(monkeypatch, sl_pct: float = 5.0, tp_pct: float = 12.0) -> None:
+    """Pin the exit levels these tests are written around.
+
+    Live percentages come from data/trading_config.json, which Mo can change by
+    voice - without this the expected pnl depends on whatever is on disk.
+    """
+    monkeypatch.setattr(bt, "get_stop_loss_price",
+                        lambda entry: round(entry * (1 - sl_pct / 100), 2))
+    monkeypatch.setattr(bt, "get_take_profit_price",
+                        lambda entry: round(entry * (1 + tp_pct / 100), 2))
+
+
 # --- _max_drawdown ---
 
 def test_max_drawdown_basic():
@@ -63,6 +75,7 @@ def test_simulate_tp_hit(monkeypatch):
     monkeypatch.setattr(bt, "rsi", lambda *a, **k: 50.0)
     monkeypatch.setattr(bt, "macd", lambda *a, **k: type("M", (), {"histogram": 0.0})())
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
+    _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
     bars[110] = _bar(114.0, 116.0, 113.0, 115.0)  # high=116 >= tp=112 (12%)
@@ -83,6 +96,7 @@ def test_simulate_sl_hit(monkeypatch):
     monkeypatch.setattr(bt, "rsi", lambda *a, **k: 50.0)
     monkeypatch.setattr(bt, "macd", lambda *a, **k: type("M", (), {"histogram": 0.0})())
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
+    _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
     bars[110] = _bar(93.0, 93.5, 91.0, 92.0)  # low=91 <= sl=95 (5%)
