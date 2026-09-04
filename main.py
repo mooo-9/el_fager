@@ -204,6 +204,7 @@ def main():
         )
         if reply == QMessageBox.StandardButton.Yes:
             memory.clear_all()
+            brain.reset_conversation()   # the in-session history, not just ChromaDB
             QMessageBox.information(None, "El Fager", "Memory cleared.")
 
     signaler.memory_clear_triggered.connect(_on_memory_clear)
@@ -316,7 +317,11 @@ def main():
 
     # ── Proactive engine (condition-based, autonomous checks) ─────────────────
     from core.proactive import ProactiveEngine
-    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat)
+    # Its own Brain: autonomous background tasks run on a separate conversation
+    # history so they never interleave with what Mo is saying to the HUD.
+    proactive = ProactiveEngine(
+        speak_fn=voice_out.speak, memory=memory, brain_fn=Brain(profile, memory).chat
+    )
     # Wire proactive notifications to the HUD banner (thread-safe via Qt signal)
     proactive.set_hud_notify(hud.notify_hud)
     proactive.start()

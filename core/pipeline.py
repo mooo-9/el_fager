@@ -90,7 +90,10 @@ class PipelineWorker(QThread):
             else:
                 response = self.brain.chat(transcript, memory_context)
 
-            self.brain.reset_conversation()
+            # History is NOT reset here - follow-ups ("and tomorrow?", "do that
+            # again") need the previous turns. It holds only the user and
+            # assistant text, not tool results, and lives until quit or a
+            # tray -> Clear all memory.
             self.memory.store_conversation_summary(transcript, response)
 
             self.state_update.emit("speaking", transcript, response)
