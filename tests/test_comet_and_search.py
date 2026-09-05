@@ -54,15 +54,27 @@ class TestCometResolution:
 class TestOpenUrl:
     def test_launches_comet_with_the_url(self):
         with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", False), \
              patch.object(comet, "subprocess") as sub:
             assert comet.open_url("https://example.com") is True
         sub.Popen.assert_called_once_with([r"C:\Comet.exe", "https://example.com"])
 
     def test_launches_comet_bare_when_no_url(self):
         with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", False), \
              patch.object(comet, "subprocess") as sub:
             comet.open_url()
         sub.Popen.assert_called_once_with([r"C:\Comet.exe"])
+
+    def test_everyday_launch_is_attachable(self):
+        """open_url is what usually starts Comet, so it carries the debugging
+        port — otherwise automation would rarely find an attachable browser."""
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "_DEBUG_PORT", "9222"), \
+             patch.object(comet, "subprocess") as sub:
+            comet.open_url("https://example.com")
+        assert "--remote-debugging-port=9222" in sub.Popen.call_args.args[0]
 
     def test_falls_back_to_default_browser(self):
         with patch.object(comet, "comet_path", return_value=None), \
@@ -79,23 +91,115 @@ class TestOpenUrl:
         wb.open.assert_called_once()
 
 
-class TestAutomationKeepsBundledChromium:
-    """Playwright pins its own browser build and launch() uses a throwaway
-    profile, so pointing it at Comet would add version risk without giving Mo
-    his logged-in session. Comet is for pages he looks at."""
+class TestLaunchArgs:
+    def test_debug_port_is_passed_so_automation_can_attach(self):
+        with patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "_DEBUG_PORT", "9222"):
+            assert comet._launch_args(r"C:\Comet.exe", "https://x.com") == [
+                r"C:\Comet.exe", "--remote-debugging-port=9222", "https://x.com"]
 
-    def test_comet_tool_exposes_no_playwright_launcher(self):
-        assert not hasattr(comet, "launch_chromium")
+    def test_no_debug_port_when_disabled(self):
+        with patch.object(comet, "_REMOTE_DEBUG", False):
+            assert comet._launch_args(r"C:\Comet.exe") == [r"C:\Comet.exe"]
 
-    @pytest.mark.parametrize("module", [
-        "tools/browser_tool.py",
-        "core/agents/browser_agent.py",
-        "core/agents/research_agent.py",
-    ])
-    def test_automation_does_not_route_through_comet(self, module):
+
+class TestAutomationContext:
+    """Automation attaches to Mo's running Comet so his logins carry. When it
+    can't, it must still work — logged out, on a throwaway profile."""
+
+    def _playwright(self, contexts=("his-context",)):
+        pw = MagicMock()
+        browser = MagicMock()
+        browser.contexts = list(contexts)
+        pw.chromium.connect_over_cdp.return_value = browser
+        return pw, browser
+
+    def test_attaches_to_running_comet_and_reuses_his_context(self):
+        pw, browser = self._playwright()
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=True):
+            b, ctx, owned = comet.automation_context(pw)
+        assert (b, ctx) == (browser, "his-context")
+        assert owned is False, "his browser must not be ours to close"
+        pw.chromium.launch.assert_not_called()
+
+    def test_starts_comet_when_not_yet_attachable(self):
+        pw, browser = self._playwright()
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=False), \
+             patch.object(comet, "_start_debuggable_comet", return_value=True) as start:
+            _, _, owned = comet.automation_context(pw)
+        start.assert_called_once()
+        assert owned is False
+
+    def test_falls_back_when_comet_is_not_attachable(self):
+        pw, _ = self._playwright()
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=False), \
+             patch.object(comet, "_start_debuggable_comet", return_value=False):
+            _, _, owned = comet.automation_context(pw)
+        pw.chromium.launch.assert_called_once_with(headless=False)
+        assert owned is True
+
+    def test_falls_back_when_the_attach_itself_fails(self):
+        pw, _ = self._playwright()
+        pw.chromium.connect_over_cdp.side_effect = RuntimeError("refused")
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=True):
+            _, _, owned = comet.automation_context(pw)
+        pw.chromium.launch.assert_called_once()
+        assert owned is True
+
+    def test_headless_never_attaches(self):
+        """research_agent reads public pages in bulk — it needs no login and
+        must not open tabs in Mo's face."""
+        pw, _ = self._playwright()
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=True):
+            _, _, owned = comet.automation_context(pw, headless=True)
+        pw.chromium.connect_over_cdp.assert_not_called()
+        pw.chromium.launch.assert_called_once_with(headless=True)
+        assert owned is True
+
+    def test_remote_debug_disabled_uses_a_fresh_profile(self):
+        pw, _ = self._playwright()
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_REMOTE_DEBUG", False):
+            _, _, owned = comet.automation_context(pw)
+        pw.chromium.connect_over_cdp.assert_not_called()
+        assert owned is True
+
+
+class TestTeardownNeverClosesHisBrowser:
+    def test_attached_session_closes_only_our_tab(self):
+        import tools.browser_tool as bt
+        page, context, browser = MagicMock(), MagicMock(), MagicMock()
+        with patch.multiple(bt, _page=page, _context=context, _browser=browser,
+                            _playwright=MagicMock(), _owned=False):
+            bt._reset_browser_state()
+        page.close.assert_called_once()
+        context.close.assert_not_called()
+        browser.close.assert_not_called()
+
+    def test_owned_session_is_torn_down_fully(self):
+        import tools.browser_tool as bt
+        page, context, browser = MagicMock(), MagicMock(), MagicMock()
+        with patch.multiple(bt, _page=page, _context=context, _browser=browser,
+                            _playwright=MagicMock(), _owned=True):
+            bt._reset_browser_state()
+        page.close.assert_called_once()
+        context.close.assert_called_once()
+        browser.close.assert_called_once()
+
+    def test_research_agent_stays_headless_and_unattached(self):
         from pathlib import Path
-        source = Path(module).read_text(encoding="utf-8")
-        assert "chromium.launch(" in source
+        source = Path("core/agents/research_agent.py").read_text(encoding="utf-8")
+        assert "chromium.launch(headless=True)" in source
         assert "comet" not in source.lower()
 
 

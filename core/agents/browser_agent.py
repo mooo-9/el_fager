@@ -50,9 +50,23 @@ class BrowserAgent(BaseAgent):
         history: list[str] = []
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
-            page = browser.new_page()
+            from tools.comet_tool import automation_context
+            # Attached to Mo's own Comet, `owned` is False: close only our tab,
+            # never his browser.
+            browser, context, owned = automation_context(p, headless=False)
+            page = context.new_page()
             page.set_viewport_size({"width": 1280, "height": 800})
+
+            def close_up():
+                try:
+                    page.close()
+                except Exception:
+                    pass
+                if owned:
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
 
             if start_url:
                 page.goto(start_url, wait_until="domcontentloaded")
@@ -68,14 +82,14 @@ class BrowserAgent(BaseAgent):
                 history.append(result.get("message", ""))
 
                 if result["status"] == "done":
-                    browser.close()
+                    close_up()
                     return result.get("message", "Task complete.")
 
                 if result["status"] == "need_login":
                     service = result.get("message", "unknown").lower().split()[0]
                     creds = vault.get(service)
                     if not creds:
-                        browser.close()
+                        close_up()
                         return (
                             f"Login required for {service} -- "
                             f"add credentials first: vault set {service}"
@@ -91,7 +105,7 @@ class BrowserAgent(BaseAgent):
                 self._execute(page, result.get("action", {}))
                 time.sleep(self.STEP_DELAY)
 
-            browser.close()
+            close_up()
             return "Browser task completed (reached max steps)."
 
     def _capture(self, page) -> str:
