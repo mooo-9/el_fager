@@ -316,6 +316,12 @@ def main():
     _trading_speak_cb(voice_out.speak)
     _start_trading()   # auto-start paper trading on every launch
 
+    # ── Spotify warm-up ───────────────────────────────────────────────────────
+    # Refresh the token and find a device in the background so the first
+    # "play X" doesn't pay for it. No-op until Spotify has been authorised once.
+    from tools.spotify_tool import warm_up as _spotify_warm_up
+    _spotify_warm_up()
+
     # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
     from core.dashboard import start_dashboard
     start_dashboard()

@@ -6552,6 +6552,28 @@ class Brain:
             return "Live trading activation cancelled."
         return None
 
+    def _try_play_music(self, message: str) -> str | None:
+        """Handle a plain 'play <song>' without going to the model.
+
+        Returns None for anything that isn't unambiguously a play command, so
+        vaguer requests still get the tool loop's judgment.
+        """
+        try:
+            from tools.spotify_tool import match_play_command, play_music
+        except Exception:
+            return None
+        matched = match_play_command(message)
+        if matched is None:
+            return None
+        query, arabic = matched
+        result = play_music(query, arabic=arabic)
+        # Bracketed results are the tool's error convention (not set up, no
+        # Premium, no device) and nothing started playing. Let the tool loop
+        # phrase those — they'd otherwise be read out as-is.
+        if result.startswith("["):
+            return None
+        return result
+
     def _create_message(self, _telemetry_source: str, **kwargs):
         """All brain API calls route through here: times the call and records
         usage/cost telemetry. Telemetry never raises; API errors propagate."""
@@ -6581,6 +6603,16 @@ class Brain:
             if self._logger:
                 self._logger.log("assistant", _agent_result, [])
             return _agent_result
+
+        # "play X" goes straight to Spotify — the two API round trips the tool
+        # loop would spend (decide to call play_music, then phrase the reply)
+        # add seconds to a request whose answer is already known.
+        _play_result = self._try_play_music(user_message)
+        if _play_result is not None:
+            self.conversation_history.append({"role": "assistant", "content": _play_result})
+            if self._logger:
+                self._logger.log("assistant", _play_result, ["play_music"])
+            return _play_result
 
         dynamic = ""
         if self.memory is not None:
