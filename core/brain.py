@@ -5042,6 +5042,22 @@ def _write_live_config(config_path: str) -> str:
 _MAX_TOOL_ITERATIONS = 15
 
 
+def _build_system(dynamic: str) -> list[dict]:
+    """System prompt as two blocks: the frozen ~10k-token SYSTEM_PROMPT carrying
+    a cache breakpoint (tools render before system, so the marker caches both),
+    then the per-turn facts/deadlines/memory context after it, which change too
+    often to cache. Every tool-loop iteration after the first reads the prefix
+    from cache instead of re-processing it."""
+    blocks: list[dict] = [{
+        "type": "text",
+        "text": SYSTEM_PROMPT,
+        "cache_control": {"type": "ephemeral"},
+    }]
+    if dynamic:
+        blocks.append({"type": "text", "text": dynamic})
+    return blocks
+
+
 class Brain:
     def __init__(self, profile: dict, memory=None):
         self.client = anthropic.Anthropic()
@@ -6566,19 +6582,24 @@ class Brain:
                 self._logger.log("assistant", _agent_result, [])
             return _agent_result
 
-        system = SYSTEM_PROMPT
+        dynamic = ""
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:
-                system += f"\n\n{facts}"
+                dynamic += f"\n\n{facts}"
             deadlines = self.memory.get_upcoming_deadlines()
             if deadlines:
-                system += f"\n\n{deadlines}"
+                dynamic += f"\n\n{deadlines}"
         if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = _build_system(dynamic)
 
         self.conversation_history.append({"role": "user", "content": user_message})
         messages = list(self.conversation_history)
+
+        # Selected once: recomputing per iteration wastes work and would change
+        # the cached prefix mid-loop.
+        tools = _select_tools(user_message)
 
         tools_used: list[str] = []
         last_text = ""
@@ -6590,7 +6611,7 @@ class Brain:
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_message),
+                    tools=tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6686,16 +6707,17 @@ class Brain:
                 memory_context,
             )
 
-        system = SYSTEM_PROMPT
+        dynamic = ""
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:
-                system += f"\n\n{facts}"
+                dynamic += f"\n\n{facts}"
             deadlines = self.memory.get_upcoming_deadlines()
             if deadlines:
-                system += f"\n\n{deadlines}"
+                dynamic += f"\n\n{deadlines}"
         if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = _build_system(dynamic)
 
         content = [
             {
@@ -6717,16 +6739,17 @@ class Brain:
         if self._logger:
             self._logger.log("user", f"[screenshot] {user_input}")
 
+        tools = _select_tools(user_input)
         tools_used: list[str] = []
 
         try:
-            while True:
+            for _iteration in range(_MAX_TOOL_ITERATIONS):
                 response = self._create_message(
                     "screenshot",
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_input),
+                    tools=tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6758,6 +6781,11 @@ class Brain:
 
                 else:
                     return "[Response cut off — please try again]"
+
+            return (
+                f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- "
+                "let me know if you want me to continue]"
+            )
 
         except anthropic.BadRequestError as e:
             msg = str(e)

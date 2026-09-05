@@ -275,7 +275,9 @@ class HudWebView(QWebEngineView):
 
     ready = pyqtSignal()  # emitted once the bridge is installed
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, defer_load: bool = False):
+        """defer_load=True builds the view without loading hud.html — the page
+        (and its renderer process) only starts on the first ensure_loaded()."""
         super().__init__(parent)
 
         # Enable disk cache on the default profile so React/DC assets are
@@ -292,9 +294,18 @@ class HudWebView(QWebEngineView):
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
 
         self._bridge_ready = False
+        self._loaded = False
         self._pending_js: list[str] = []
 
         self.loadFinished.connect(self._on_load_finished)
+        if not defer_load:
+            self.ensure_loaded()
+
+    def ensure_loaded(self):
+        """Load hud.html on first call; a no-op afterwards."""
+        if self._loaded:
+            return
+        self._loaded = True
         self._load_hud()
 
     def _load_hud(self):

@@ -4,13 +4,13 @@ import pytest
 class _FakeHudWebView:
     """Stand-in for HudWebView — a real QWebEngineView crashes under pytest."""
 
-    def __new__(cls, parent=None):
+    def __new__(cls, parent=None, defer_load=False):
         from PyQt6.QtWidgets import QWidget
         from unittest.mock import MagicMock
         widget = QWidget(parent)
         for method in ("enter_standby", "push_telemetry", "goto_scene",
                        "set_state", "push_voice_result", "push_market_data",
-                       "push_proactive"):
+                       "push_proactive", "ensure_loaded"):
             setattr(widget, method, MagicMock())
         return widget
 
@@ -80,4 +80,31 @@ class TestOverlayModes:
     def test_stacked_widget_has_four_pages(self, qapp):
         w = _make_overlay(qapp)
         assert w._stack.count() == 4
+        w.close()
+
+
+class TestOverlayHudWebDeferred:
+    """hud.html is ~850 KB and spawns its own renderer process — the compact
+    overlay must not load a second copy just by being constructed."""
+
+    def test_hud_page_not_loaded_on_construction(self, qapp):
+        w = _make_overlay(qapp)
+        w._hud_web.ensure_loaded.assert_not_called()
+        w.close()
+
+    def test_hud_page_loads_when_entering_jarvis_mode(self, qapp):
+        w = _make_overlay(qapp)
+        w.switch_to_jarvis_hud()
+        w._hud_web.ensure_loaded.assert_called()
+        w.close()
+
+
+class TestOverlayIdleTimers:
+    def test_status_bar_poll_skips_while_hidden(self, qapp):
+        w = _make_overlay(qapp)
+        assert not w.isVisible()
+        w._status_bar.setVisible(True)
+        w._update_status_bar()
+        # Untouched — the poll returned before reading any state file.
+        assert w._status_bar.isVisibleTo(w)
         w.close()
