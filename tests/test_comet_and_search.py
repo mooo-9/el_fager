@@ -79,26 +79,24 @@ class TestOpenUrl:
         wb.open.assert_called_once()
 
 
-class TestPlaywrightLaunch:
-    def test_drives_comet_when_installed(self):
-        pw = MagicMock()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"):
-            comet.launch_chromium(pw, headless=True)
-        pw.chromium.launch.assert_called_once_with(
-            headless=True, executable_path=r"C:\Comet.exe")
+class TestAutomationKeepsBundledChromium:
+    """Playwright pins its own browser build and launch() uses a throwaway
+    profile, so pointing it at Comet would add version risk without giving Mo
+    his logged-in session. Comet is for pages he looks at."""
 
-    def test_falls_back_to_bundled_chromium(self):
-        pw = MagicMock()
-        with patch.object(comet, "comet_path", return_value=None):
-            comet.launch_chromium(pw, headless=False)
-        pw.chromium.launch.assert_called_once_with(headless=False)
+    def test_comet_tool_exposes_no_playwright_launcher(self):
+        assert not hasattr(comet, "launch_chromium")
 
-    def test_falls_back_when_comet_cannot_be_driven(self):
-        pw = MagicMock()
-        pw.chromium.launch.side_effect = [RuntimeError("incompatible"), "browser"]
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"):
-            assert comet.launch_chromium(pw) == "browser"
-        assert pw.chromium.launch.call_count == 2
+    @pytest.mark.parametrize("module", [
+        "tools/browser_tool.py",
+        "core/agents/browser_agent.py",
+        "core/agents/research_agent.py",
+    ])
+    def test_automation_does_not_route_through_comet(self, module):
+        from pathlib import Path
+        source = Path(module).read_text(encoding="utf-8")
+        assert "chromium.launch(" in source
+        assert "comet" not in source.lower()
 
 
 _SEARCH_HTML = (

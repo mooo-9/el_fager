@@ -11,6 +11,12 @@ Enterprise/machine-wide installs land under Program Files. Set COMET_PATH in
 
 If Comet isn't installed, open_url() falls back to the system default browser
 and says so rather than failing silently.
+
+This covers pages Mo looks at. Playwright automation (browser_tool,
+browser_agent, research_agent) deliberately keeps Playwright's own bundled
+Chromium: Playwright pins its browser build, and its launch() opens a throwaway
+profile anyway — so driving Comet would carry the version-mismatch risk and the
+weight of an agentic browser without giving Mo his logged-in session.
 """
 
 import os
@@ -115,17 +121,3 @@ def open_comet(url: str = "") -> str:
     used_comet = open_url(target)
     where = "Comet" if used_comet else "your default browser (Comet not found)"
     return f"Opened {target or 'the browser'} in {where}."
-
-
-def launch_chromium(playwright, headless: bool = False):
-    """Playwright browser for automation — Comet when it's installed, otherwise
-    Playwright's bundled Chromium so automation never hard-fails on a machine
-    without Comet."""
-    exe = comet_path()
-    if exe:
-        try:
-            return playwright.chromium.launch(headless=headless, executable_path=exe)
-        except Exception as e:
-            print(f"[El Fager] Playwright couldn't drive Comet ({e}) — "
-                  "using bundled Chromium.")
-    return playwright.chromium.launch(headless=headless)

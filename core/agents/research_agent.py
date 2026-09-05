@@ -72,8 +72,7 @@ class ResearchAgent(BaseAgent):
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
-                from tools.comet_tool import launch_chromium
-                browser = launch_chromium(p, headless=True)
+                browser = p.chromium.launch(headless=True)
                 try:
                     page = browser.new_page()
                     page.goto(url, timeout=8000, wait_until="domcontentloaded")
