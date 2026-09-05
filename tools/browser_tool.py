@@ -50,8 +50,9 @@ def _ensure_browser(headless: bool = False):
 
     if _page is None:
         from playwright.sync_api import sync_playwright
+        from tools.comet_tool import launch_chromium
         _playwright = sync_playwright().start()
-        _browser = _playwright.chromium.launch(headless=headless)
+        _browser = launch_chromium(_playwright, headless=headless)
         _context = _browser.new_context()
         _page = _context.new_page()
         _owner_thread = current_thread

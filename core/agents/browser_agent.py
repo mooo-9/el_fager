@@ -50,7 +50,8 @@ class BrowserAgent(BaseAgent):
         history: list[str] = []
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            from tools.comet_tool import launch_chromium
+            browser = launch_chromium(p, headless=False)
             page = browser.new_page()
             page.set_viewport_size({"width": 1280, "height": 800})
 
