@@ -49,6 +49,41 @@ def check(name: str, fn, warn_only: bool = False):
     return ok
 
 
+# ── Process ───────────────────────────────────────────────────────────────────
+
+def el_fager_running() -> "bool | None":
+    """Is El Fager up? Read through the single-instance mutex main.py creates,
+    so this agrees with what main.py itself sees. None off Windows.
+
+    Name must match _acquire_instance_lock() in main.py.
+    """
+    if os.name != "nt":
+        return None
+    import ctypes
+    SYNCHRONIZE = 0x00100000
+    handle = ctypes.windll.kernel32.OpenMutexW(
+        SYNCHRONIZE, False, "ElFagerSingleInstance")
+    if handle:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    return False
+
+
+def check_process():
+    section("Process")
+
+    def running():
+        state = el_fager_running()
+        if state is None:
+            return True, "not detectable on this platform"
+        if state:
+            return True, "El Fager is running"
+        return False, ("El Fager is NOT running — start it with: python main.py "
+                       "(nothing below reflects a live assistant)")
+
+    check("El Fager running", running, warn_only=True)
+
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 def check_config():
@@ -101,10 +136,11 @@ def check_browser():
     def attachable():
         if comet_tool.cdp_alive():
             return True, "a debuggable Comet is running — automation gets your logins"
-        return False, ("no debuggable Comet running. If El Fager isn't running, that's "
-                       "expected — it starts one at launch. If it IS running and you "
-                       "opened Comet yourself first, close Comet and let El Fager "
-                       "reopen it; Windows can't add the port to a live browser")
+        if el_fager_running() is False:
+            return False, "start El Fager — it opens an attachable Comet at launch"
+        return False, ("Comet is open without a debugging port, so automation would run "
+                       "logged out. Windows can't add the port to a live browser: quit "
+                       "Comet AND El Fager, then start El Fager first")
 
     check("Comet installed", installed, warn_only=True)
     check("Remote debugging enabled", debugging, warn_only=True)
@@ -228,6 +264,7 @@ def main() -> int:
         print("python-dotenv not installed — reading the ambient environment only")
 
     print("El Fager self-check")
+    check_process()
     check_config()
     check_browser()
     check_wiring()
