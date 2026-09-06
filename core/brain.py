@@ -104,6 +104,9 @@ Expenses: log_expense, get_expense_summary, list_recent_expenses. When Mo says "
 Translation: translate_text. When Mo explicitly asks to translate to a specific language, use translate_text. For short in-conversation translations you can translate yourself; use the tool for longer text or when Mo wants a clean dedicated translation output.
 Wikipedia: wikipedia_lookup. For factual questions about people, places, concepts, or history — call wikipedia_lookup first before web_search. It's faster and returns clean summaries.
 Prayer times: get_prayer_times. When Mo asks about prayer times, what time is Maghrib, Fajr, etc. — call get_prayer_times. Auto-uses today's date.
+Browser: El Fager uses Comet (Perplexity's browser) for everything it opens — never Chrome or Edge.
+open_comet(url) opens the browser. open_web_search(task) opens a search in Comet when Mo wants to read it himself; web_search(query) is when he wants YOU to read the web and answer him. Default to web_search for questions, open_web_search when he says "open", "show me", "search the web for", or "google".
+YouTube: youtube_search(query) finds a video by name and plays it in Comet — use it for "play X on youtube", "find the video X". youtube_latest(channel) opens a channel's newest video — use it for "latest video from X". get_youtube_transcript(url) is for summarising a video Mo already has a link to.
 Clipboard history: get_clipboard_history. When Mo asks "what did I copy?" or "what was that link I copied?" — call get_clipboard_history.
 System controls: set_system_volume (0-100), get_system_volume, mute_system, set_brightness (0-100), get_battery_status. When Mo says "volume up/down/set to X", "mute", "brightness", "battery" — use these tools.
 Process manager: get_process_info, kill_process. When Mo asks about RAM usage, CPU, what's running, or wants to kill an app — use these tools.
@@ -1270,6 +1273,67 @@ TOOLS: list[dict[str, Any]] = [
                 "name": {"type": "string", "description": "Template name to delete"}
             },
             "required": ["name"]
+        }
+    },
+    {
+        "name": "youtube_search",
+        "description": (
+            "Search YouTube for a video by name and open the top result in Comet. "
+            "Use when Mo says 'play X on youtube', 'find the video X', "
+            "'search youtube for X', or names a song/clip he wants to watch."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to search YouTube for"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "youtube_latest",
+        "description": (
+            "Open the newest video from a YouTube channel in Comet. Use when Mo "
+            "asks for the latest/newest video from a channel, or 'what did X post'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string",
+                    "description": "Channel handle (@name), display name, URL, or UC... channel ID",
+                }
+            },
+            "required": ["channel"]
+        }
+    },
+    {
+        "name": "open_web_search",
+        "description": (
+            "Open a web search for a task in Comet so Mo can read the results "
+            "himself. Use when he says 'search the web/internet for X', 'look X "
+            "up', or 'google X' — i.e. he wants the browser, not a spoken answer. "
+            "Use web_search instead when he wants YOU to read the web and answer."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "What to search for"}
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "open_comet",
+        "description": (
+            "Open the Comet browser, optionally at a URL. Use for 'open the "
+            "browser', 'open comet', or 'open <site>'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Optional URL to open"}
+            }
         }
     },
     {
@@ -4679,7 +4743,9 @@ _SLIM_TOOLS = _slim_tools(TOOLS)
 # ── Dynamic tool injection ────────────────────────────────────────────────────
 # Only the tool names that are always included regardless of query topic.
 _CORE_NAMES: frozenset[str] = frozenset({
-    "web_search", "fetch_page", "translate_text", "wikipedia_lookup",
+    "web_search", "fetch_page", "open_web_search", "open_comet",
+    "youtube_search", "youtube_latest",
+    "translate_text", "wikipedia_lookup",
     "convert_currency", "get_exchange_rates", "resolve_doi",
     "get_weather", "get_weather_forecast", "get_hourly_weather",
     "get_news", "get_all_headlines", "search_news", "read_news_article",
@@ -5040,6 +5106,22 @@ def _write_live_config(config_path: str) -> str:
 
 
 _MAX_TOOL_ITERATIONS = 15
+
+
+def _build_system(dynamic: str) -> list[dict]:
+    """System prompt as two blocks: the frozen ~10k-token SYSTEM_PROMPT carrying
+    a cache breakpoint (tools render before system, so the marker caches both),
+    then the per-turn facts/deadlines/memory context after it, which change too
+    often to cache. Every tool-loop iteration after the first reads the prefix
+    from cache instead of re-processing it."""
+    blocks: list[dict] = [{
+        "type": "text",
+        "text": SYSTEM_PROMPT,
+        "cache_control": {"type": "ephemeral"},
+    }]
+    if dynamic:
+        blocks.append({"type": "text", "text": dynamic})
+    return blocks
 
 
 class Brain:
@@ -5738,6 +5820,18 @@ class Brain:
                 from tools.analytics_tool import profit_loss_report
                 return profit_loss_report(tool_input.get("period", "month"))
             # ── Spotify ───────────────────────────────────────────────────────────
+            elif name == "youtube_search":
+                from tools.youtube_tool import youtube_search
+                return youtube_search(tool_input["query"])
+            elif name == "youtube_latest":
+                from tools.youtube_tool import youtube_latest
+                return youtube_latest(tool_input["channel"])
+            elif name == "open_web_search":
+                from tools.web_tool import open_web_search
+                return open_web_search(tool_input["task"])
+            elif name == "open_comet":
+                from tools.comet_tool import open_comet
+                return open_comet(tool_input.get("url", ""))
             elif name == "play_music":
                 from tools.spotify_tool import play_music
                 return play_music(tool_input["query"])
@@ -6536,6 +6630,28 @@ class Brain:
             return "Live trading activation cancelled."
         return None
 
+    def _try_play_music(self, message: str) -> str | None:
+        """Handle a plain 'play <song>' without going to the model.
+
+        Returns None for anything that isn't unambiguously a play command, so
+        vaguer requests still get the tool loop's judgment.
+        """
+        try:
+            from tools.spotify_tool import match_play_command, play_music
+        except Exception:
+            return None
+        matched = match_play_command(message)
+        if matched is None:
+            return None
+        query, arabic = matched
+        result = play_music(query, arabic=arabic)
+        # Bracketed results are the tool's error convention (not set up, no
+        # Premium, no device) and nothing started playing. Let the tool loop
+        # phrase those — they'd otherwise be read out as-is.
+        if result.startswith("["):
+            return None
+        return result
+
     def _create_message(self, _telemetry_source: str, **kwargs):
         """All brain API calls route through here: times the call and records
         usage/cost telemetry. Telemetry never raises; API errors propagate."""
@@ -6566,19 +6682,34 @@ class Brain:
                 self._logger.log("assistant", _agent_result, [])
             return _agent_result
 
-        system = SYSTEM_PROMPT
+        # "play X" goes straight to Spotify — the two API round trips the tool
+        # loop would spend (decide to call play_music, then phrase the reply)
+        # add seconds to a request whose answer is already known.
+        _play_result = self._try_play_music(user_message)
+        if _play_result is not None:
+            self.conversation_history.append({"role": "assistant", "content": _play_result})
+            if self._logger:
+                self._logger.log("assistant", _play_result, ["play_music"])
+            return _play_result
+
+        dynamic = ""
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:
-                system += f"\n\n{facts}"
+                dynamic += f"\n\n{facts}"
             deadlines = self.memory.get_upcoming_deadlines()
             if deadlines:
-                system += f"\n\n{deadlines}"
+                dynamic += f"\n\n{deadlines}"
         if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = _build_system(dynamic)
 
         self.conversation_history.append({"role": "user", "content": user_message})
         messages = list(self.conversation_history)
+
+        # Selected once: recomputing per iteration wastes work and would change
+        # the cached prefix mid-loop.
+        tools = _select_tools(user_message)
 
         tools_used: list[str] = []
         last_text = ""
@@ -6590,7 +6721,7 @@ class Brain:
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_message),
+                    tools=tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6686,16 +6817,17 @@ class Brain:
                 memory_context,
             )
 
-        system = SYSTEM_PROMPT
+        dynamic = ""
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:
-                system += f"\n\n{facts}"
+                dynamic += f"\n\n{facts}"
             deadlines = self.memory.get_upcoming_deadlines()
             if deadlines:
-                system += f"\n\n{deadlines}"
+                dynamic += f"\n\n{deadlines}"
         if memory_context:
-            system += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        system = _build_system(dynamic)
 
         content = [
             {
@@ -6717,16 +6849,17 @@ class Brain:
         if self._logger:
             self._logger.log("user", f"[screenshot] {user_input}")
 
+        tools = _select_tools(user_input)
         tools_used: list[str] = []
 
         try:
-            while True:
+            for _iteration in range(_MAX_TOOL_ITERATIONS):
                 response = self._create_message(
                     "screenshot",
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=_select_tools(user_input),
+                    tools=tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6758,6 +6891,11 @@ class Brain:
 
                 else:
                     return "[Response cut off — please try again]"
+
+            return (
+                f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- "
+                "let me know if you want me to continue]"
+            )
 
         except anthropic.BadRequestError as e:
             msg = str(e)

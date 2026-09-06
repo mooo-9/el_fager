@@ -205,8 +205,12 @@ class MessageBubble(QWidget):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class SettingsDialog(QDialog):
+    # Worker thread → main thread; Qt queues the delivery.
+    _ollama_checked = pyqtSignal(bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._ollama_checked.connect(self._show_ollama_status)
         self.setWindowTitle("El Fager Settings")
         self.setMinimumWidth(360)
         self.setStyleSheet("""
@@ -286,22 +290,19 @@ class SettingsDialog(QDialog):
             from core.local_llm import is_ollama_running
             import threading
             def _check():
-                running = is_ollama_running()
-                # Use QTimer.singleShot to update label from the main thread
-                from PyQt6.QtCore import QTimer
-                if running:
-                    QTimer.singleShot(0, lambda: (
-                        self._ollama_status.setText("Online ✓"),
-                        self._ollama_status.setStyleSheet("color: #50c878; font-size: 11px;"),
-                    ))
-                else:
-                    QTimer.singleShot(0, lambda: (
-                        self._ollama_status.setText("Offline — install from ollama.ai"),
-                        self._ollama_status.setStyleSheet("color: #ff6060; font-size: 11px;"),
-                    ))
+                self._ollama_checked.emit(is_ollama_running())
             threading.Thread(target=_check, daemon=True).start()
         except Exception:
             pass
+
+    @pyqtSlot(bool)
+    def _show_ollama_status(self, running: bool):
+        if running:
+            self._ollama_status.setText("Online ✓")
+            self._ollama_status.setStyleSheet("color: #50c878; font-size: 11px;")
+        else:
+            self._ollama_status.setText("Offline — install from ollama.ai")
+            self._ollama_status.setStyleSheet("color: #ff6060; font-size: 11px;")
 
     def _save_and_accept(self):
         self._settings.update({
@@ -418,7 +419,9 @@ class OverlayWindow(QWidget):
         self._stack.addWidget(self._trading)
 
         # Page 3: full-screen JARVIS HUD
-        self._hud_web = HudWebView(self._stack)
+        # Deferred: hud.html (and its renderer process) only loads when the
+        # user actually switches to mode 3 — HudWindow owns the always-on HUD.
+        self._hud_web = HudWebView(self._stack, defer_load=True)
         self._stack.addWidget(self._hud_web)
 
         self._stack.setCurrentIndex(0)
@@ -650,6 +653,7 @@ class OverlayWindow(QWidget):
             screen = QApplication.primaryScreen().availableGeometry()
             self.resize(screen.width(), screen.height())
             self.move(screen.x(), screen.y())
+            self._hud_web.ensure_loaded()
             self._hud_web.enter_standby()
 
     def switch_to_jarvis_hud(self) -> None:
@@ -660,6 +664,7 @@ class OverlayWindow(QWidget):
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(screen.width(), screen.height())
         self.move(screen.x(), screen.y())
+        self._hud_web.ensure_loaded()
         self._hud_web.enter_standby()
 
     @property
@@ -671,7 +676,7 @@ class OverlayWindow(QWidget):
             self._trading.refresh()
 
     def _push_telemetry(self):
-        if self._mode != 3:
+        if self._mode != 3 or not self.isVisible():
             return
         try:
             cpu = int(psutil.cpu_percent())
@@ -759,6 +764,8 @@ class OverlayWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _update_status_bar(self):
+        if not self.isVisible():
+            return
         indicators = []
 
         # Pomodoro

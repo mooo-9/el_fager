@@ -82,3 +82,23 @@ class TestHudCanvasDataStrip:
         w.set_data_strip(["A", "B", "C", "D", "E", "F", "G"])
         assert len(w._data_items) == 5
         w.close()
+
+
+class TestHudCanvasAnimationTimer:
+    """The 25 fps tick used to run from construction onwards, including while
+    the canvas sat hidden behind another page of the stack."""
+
+    def test_timer_idle_until_shown(self, qapp):
+        from ui.hud_canvas import HudCanvas
+        w = HudCanvas()
+        assert not w._timer.isActive()
+        w.close()
+
+    def test_timer_runs_while_visible_and_stops_when_hidden(self, qapp):
+        from ui.hud_canvas import HudCanvas
+        w = HudCanvas()
+        w.show()
+        assert w._timer.isActive()
+        w.hide()
+        assert not w._timer.isActive()
+        w.close()

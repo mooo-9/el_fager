@@ -50,6 +50,8 @@ class ProactiveEngine:
         self._thread: threading.Thread | None = None
         self._state: dict = self._load_state()
         self._hud_fn: Callable | None = None  # set by main.py via set_hud_notify()
+        self._timings: dict | None = None     # prayer timings, cached per day
+        self._timings_day: str = ""
 
     def set_hud_notify(self, fn: Callable) -> None:
         """Register a thread-safe callback for pushing proactive banners to the HUD."""
@@ -224,21 +226,32 @@ class ProactiveEngine:
         except Exception:
             pass
 
+    def _fetch_prayer_timings(self, today: str) -> dict | None:
+        """Today's prayer timings, fetched once a day — they don't change
+        between the 60-second check cycles."""
+        if self._timings_day == today:
+            return self._timings
+        import httpx
+        resp = httpx.get(
+            "https://api.aladhan.com/v1/timingsByCity",
+            params={"city": "Cairo", "country": "Egypt", "method": 5},
+            timeout=6,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            return None
+        self._timings = resp.json()["data"]["timings"]
+        self._timings_day = today
+        return self._timings
+
     def _check_prayer_times(self) -> None:
         """Speak a reminder ~10 minutes before each prayer."""
         try:
-            import httpx
-            resp = httpx.get(
-                "https://api.aladhan.com/v1/timingsByCity",
-                params={"city": "Cairo", "country": "Egypt", "method": 5},
-                timeout=6,
-                follow_redirects=True,
-            )
-            if resp.status_code != 200:
-                return
-            timings = resp.json()["data"]["timings"]
             now    = datetime.now()
             today  = date.today().isoformat()
+            timings = self._fetch_prayer_timings(today)
+            if not timings:
+                return
             for name in ("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"):
                 t_str = timings.get(name, "").split(" ")[0]
                 if not t_str:

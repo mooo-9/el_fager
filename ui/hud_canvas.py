@@ -32,10 +32,21 @@ class HudCanvas(QWidget):
         # Waveform phase offset for animation
         self._wave_phase = 0.0
 
+        # Started in showEvent — a hidden page in the stack repaints nothing,
+        # so the 25 fps tick would just burn CPU.
         self._timer = QTimer(self)
         self._timer.setInterval(40)   # 25 fps
         self._timer.timeout.connect(self._tick)
+
+    # -- Visibility ----------------------------------------------------------
+
+    def showEvent(self, event):
+        super().showEvent(event)
         self._timer.start()
+
+    def hideEvent(self, event):
+        self._timer.stop()
+        super().hideEvent(event)
 
     # -- Public API ----------------------------------------------------------
 
