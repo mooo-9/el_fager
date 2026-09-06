@@ -322,6 +322,13 @@ def main():
     from tools.spotify_tool import warm_up as _spotify_warm_up
     _spotify_warm_up()
 
+    # ── Comet ─────────────────────────────────────────────────────────────────
+    # Start Comet minimised with its debugging port before Mo opens it himself —
+    # a Comet he starts has no port, and Chromium can't add one to a live
+    # process, which would leave browser automation logged out all session.
+    from tools.comet_tool import autostart as _comet_autostart
+    _comet_autostart()
+
     # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
     from core.dashboard import start_dashboard
     start_dashboard()

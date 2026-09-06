@@ -93,15 +93,22 @@ def check_browser():
             return False, "COMET_REMOTE_DEBUG=0 — automation will run logged out"
         return True, f"port {comet_tool._DEBUG_PORT} requested at launch"
 
+    def autostart():
+        if not comet_tool._AUTOSTART:
+            return False, "COMET_AUTOSTART=0 — automation only gets your logins if El Fager opens Comet before you do"
+        return True, "El Fager starts Comet minimised at launch, so it stays attachable"
+
     def attachable():
         if comet_tool.cdp_alive():
             return True, "a debuggable Comet is running — automation gets your logins"
-        return False, ("no debuggable Comet running right now. El Fager starts one "
-                       "when it needs to; if Comet is already open without the port, "
-                       "automation falls back to a logged-out profile")
+        return False, ("no debuggable Comet running. If El Fager isn't running, that's "
+                       "expected — it starts one at launch. If it IS running and you "
+                       "opened Comet yourself first, close Comet and let El Fager "
+                       "reopen it; Windows can't add the port to a live browser")
 
     check("Comet installed", installed, warn_only=True)
     check("Remote debugging enabled", debugging, warn_only=True)
+    check("Comet autostart", autostart, warn_only=True)
     check("Comet attachable now", attachable, warn_only=True)
 
 

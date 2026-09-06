@@ -38,6 +38,7 @@ _APP_SUBPATH = Path("Perplexity") / "Comet" / "Application" / _EXE
 _DEBUG_PORT = os.getenv("COMET_DEBUG_PORT", "9222").strip() or "9222"
 _CDP_URL = f"http://127.0.0.1:{_DEBUG_PORT}"
 _REMOTE_DEBUG = os.getenv("COMET_REMOTE_DEBUG", "1").strip().lower() not in ("0", "false", "no")
+_AUTOSTART = os.getenv("COMET_AUTOSTART", "1").strip().lower() not in ("0", "false", "no")
 
 # Resolved once — the install location doesn't move mid-session.
 _cached_path: "str | None" = None
@@ -108,6 +109,45 @@ def reset_cache() -> None:
 
 def is_available() -> bool:
     return comet_path() is not None
+
+
+def autostart() -> bool:
+    """Start Comet minimised, with its debugging port, at El Fager startup.
+
+    A Comet Mo opens himself has no debugging port, and Chromium cannot add one
+    to a live process — so automation would run logged out for the rest of the
+    session. Getting in first fixes that for good: once a debuggable instance
+    exists, Comet launched later (by Mo, by open_url) hands off to it and stays
+    attachable.
+
+    Minimised and unfocused, so it doesn't take over the screen at login. Set
+    COMET_AUTOSTART=0 to skip it — automation then only gets Mo's logins when
+    El Fager happens to open Comet before he does.
+    """
+    if not _AUTOSTART or not _REMOTE_DEBUG:
+        return False
+    exe = comet_path()
+    if not exe:
+        return False
+    if cdp_alive():
+        return True  # already attachable
+    try:
+        subprocess.Popen(_launch_args(exe), startupinfo=_minimised())
+    except Exception as e:
+        print(f"[El Fager] Comet autostart failed: {e}")
+        return False
+    return True
+
+
+def _minimised():
+    """Windows startupinfo that opens the window minimised, without stealing
+    focus. None elsewhere — subprocess.STARTUPINFO is Windows-only."""
+    if os.name != "nt":
+        return None
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 7  # SW_SHOWMINNOACTIVE
+    return si
 
 
 def _launch_args(exe: str, url: str = "") -> "list[str]":

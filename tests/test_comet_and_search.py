@@ -103,6 +103,55 @@ class TestLaunchArgs:
             assert comet._launch_args(r"C:\Comet.exe") == [r"C:\Comet.exe"]
 
 
+class TestAutostart:
+    """A Comet Mo opens himself has no debugging port and Chromium can't add one
+    to a live process, so El Fager has to get in first."""
+
+    def test_starts_comet_minimised_with_the_port(self):
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_AUTOSTART", True), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "_DEBUG_PORT", "9222"), \
+             patch.object(comet, "cdp_alive", return_value=False), \
+             patch.object(comet, "subprocess") as sub:
+            assert comet.autostart() is True
+        args = sub.Popen.call_args.args[0]
+        assert "--remote-debugging-port=9222" in args
+        assert "startupinfo" in sub.Popen.call_args.kwargs
+
+    def test_does_not_relaunch_an_attachable_comet(self):
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_AUTOSTART", True), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=True), \
+             patch.object(comet, "subprocess") as sub:
+            assert comet.autostart() is True
+        sub.Popen.assert_not_called()
+
+    def test_skipped_when_disabled(self):
+        with patch.object(comet, "_AUTOSTART", False), \
+             patch.object(comet, "subprocess") as sub:
+            assert comet.autostart() is False
+        sub.Popen.assert_not_called()
+
+    def test_skipped_when_comet_is_not_installed(self):
+        with patch.object(comet, "_AUTOSTART", True), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "comet_path", return_value=None), \
+             patch.object(comet, "subprocess") as sub:
+            assert comet.autostart() is False
+        sub.Popen.assert_not_called()
+
+    def test_launch_failure_is_not_fatal(self):
+        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
+             patch.object(comet, "_AUTOSTART", True), \
+             patch.object(comet, "_REMOTE_DEBUG", True), \
+             patch.object(comet, "cdp_alive", return_value=False), \
+             patch.object(comet, "subprocess") as sub:
+            sub.Popen.side_effect = OSError("denied")
+            assert comet.autostart() is False
+
+
 class TestAutomationContext:
     """Automation attaches to Mo's running Comet so his logins carry. When it
     can't, it must still work — logged out, on a throwaway profile."""
