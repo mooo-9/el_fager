@@ -16,7 +16,11 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Everything is resolved against the project, not the shell's working
+# directory, so this reports the same thing wherever it is run from.
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
 
 OK, WARN, FAIL = "OK  ", "WARN", "FAIL"
 _results: list[tuple[str, str, str]] = []
