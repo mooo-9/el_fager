@@ -90,9 +90,17 @@ def _probe():
     try:
         with urllib.request.urlopen("http://127.0.0.1:8765/", timeout=3) as r:
             body = r.read(400).decode("utf-8", "replace")
-        FINDINGS.append(f"dashboard GET / -> HTTP {r.status}, NO AUTH, {len(body)}+ bytes")
+        FINDINGS.append(f"dashboard GET / -> HTTP {r.status}, {len(body)}+ bytes")
     except Exception as e:
         FINDINGS.append(f"dashboard GET / -> {type(e).__name__}: {e}")
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8765/api/status", timeout=3) as r:
+            FINDINGS.append(f"dashboard GET /api/status unauthenticated -> HTTP {r.status}")
+    except Exception as e:
+        code = getattr(e, "code", None)
+        FINDINGS.append(f"dashboard GET /api/status unauthenticated -> "
+                        f"{'HTTP ' + str(code) if code else type(e).__name__}")
+
     cb = kb._hotkeys.get("ctrl+space")
     if cb:
         try:

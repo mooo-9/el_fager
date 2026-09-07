@@ -33,6 +33,9 @@ Real data wired
 from __future__ import annotations
 
 import psutil
+
+_SHUTDOWN_GRACE_MS = 3000   # a fetcher parked in a network call
+_TERMINATE_GRACE_MS = 1000
 from PyQt6.QtCore import QPropertyAnimation, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
@@ -69,6 +72,12 @@ class HudWindow(QWidget):
         self._setup_window()
         self._build_ui()
         self._setup_timers()
+        # Nothing else ever interrupts the two background fetchers, so without
+        # this Qt destroys them mid-run at teardown and the process aborts —
+        # which watchdog.classify_exit() reads as a crash and restarts.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self.shutdown)
 
         # Wire the thread-safe proactive channel
         self._proactive_signal.connect(self._apply_proactive)
@@ -96,6 +105,24 @@ class HudWindow(QWidget):
         self._hud = HudWebView(self)
         self._hud.ready.connect(self._on_hud_ready)
         layout.addWidget(self._hud)
+
+    def shutdown(self) -> None:
+        """Stop the background fetchers so the process can exit with code 0.
+
+        Both loops poll isInterruptionRequested() once a second, so the usual
+        case returns almost at once; the grace period covers a thread parked in
+        a network fetch. Terminating after that is safe — both are read-only
+        fetchers — and beats the abort that destroying a running QThread causes.
+        """
+        for thread in (getattr(self, "_market_updater", None),
+                       getattr(self, "_scene_hub", None)):
+            if thread is None or not thread.isRunning():
+                continue
+            thread.requestInterruption()
+            if thread.wait(_SHUTDOWN_GRACE_MS):
+                continue
+            thread.terminate()
+            thread.wait(_TERMINATE_GRACE_MS)
 
     def _setup_timers(self):
         # 2-second telemetry push

@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import json
 import urllib.request
+import urllib.error
 from http.server import ThreadingHTTPServer
 import threading
 
@@ -17,6 +18,30 @@ import core.dashboard as db
 def isolated(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # all data/ reads resolve into tmp
     yield tmp_path
+
+
+_TOKEN = "test-token-not-a-real-secret"
+
+
+@pytest.fixture
+def token(isolated):
+    """Give the isolated tmp dir a dashboard token, and hand it back."""
+    (isolated / "data").mkdir(exist_ok=True)
+    (isolated / "data" / "settings.json").write_text(
+        json.dumps({"dashboard_token": _TOKEN}), encoding="utf-8")
+    return _TOKEN
+
+
+def _get(url: str, tok: str | None = None):
+    """GET url, optionally bearing tok. Returns (status, body)."""
+    req = urllib.request.Request(url)
+    if tok is not None:
+        req.add_header("Authorization", f"Bearer {tok}")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
 
 
 class TestSnapshot:
@@ -53,15 +78,30 @@ class TestServer:
         yield f"http://127.0.0.1:{srv.server_address[1]}"
         srv.shutdown()
 
-    def test_api_status_serves_json(self, server):
-        with urllib.request.urlopen(f"{server}/api/status", timeout=5) as r:
-            assert r.status == 200
-            data = json.loads(r.read().decode("utf-8"))
+    def test_api_status_serves_json(self, server, token):
+        status, body = _get(f"{server}/api/status", token)
+        assert status == 200
+        data = json.loads(body)
         assert "cost" in data and "mission" in data
 
-    def test_root_serves_html(self, server):
-        with urllib.request.urlopen(f"{server}/", timeout=5) as r:
-            body = r.read().decode("utf-8")
+    def test_api_status_requires_a_token(self, server, token):
+        """The snapshot carries trades, API spend and task descriptions."""
+        status, _ = _get(f"{server}/api/status")
+        assert status == 401
+
+    def test_api_status_rejects_a_wrong_token(self, server, token):
+        status, _ = _get(f"{server}/api/status", "not-the-token")
+        assert status == 401
+
+    def test_api_status_denied_when_no_token_is_configured(self, server):
+        """Fails closed: an unconfigured dashboard serves nothing."""
+        status, _ = _get(f"{server}/api/status")
+        assert status == 401
+
+    def test_root_serves_html_without_a_token(self, server):
+        """The shell page carries no data — it must load to prompt for one."""
+        status, body = _get(f"{server}/")
+        assert status == 200
         assert "EL FAGER" in body
 
     def test_unknown_path_404(self, server):
@@ -176,9 +216,12 @@ class TestStartDashboard:
         srv = db.start_dashboard()
         assert srv is not None
         port = srv.server_address[1]
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status",
-                                    timeout=5) as r:
-            assert r.status == 200
+        generated = json.loads(
+            (isolated / "data" / "settings.json").read_text(encoding="utf-8")
+        )["dashboard_token"]
+        assert generated, "start_dashboard must generate a token"
+        status, _ = _get(f"http://127.0.0.1:{port}/api/status", generated)
+        assert status == 200
         srv.shutdown()
 
 

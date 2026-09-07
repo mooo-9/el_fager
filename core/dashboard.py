@@ -12,6 +12,7 @@ Settings (data/settings.json): dashboard_enabled (default true),
 dashboard_port (default 8765), dashboard_host (default 0.0.0.0).
 """
 import json
+import secrets
 import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -166,6 +167,7 @@ _PAGE = """<!DOCTYPE html>
  </div><div class="row dim" id="cmdmsg"></div></div>
 <div id="content"></div>
 <script>
+let _timer=null;
 function token(){
  let t=localStorage.getItem('elf_token');
  if(!t){t=prompt('Dashboard token (from data/settings.json on the laptop):');
@@ -192,7 +194,13 @@ document.getElementById('cmd').addEventListener('keydown',
   e=>{if(e.key==='Enter')sendCmd();});
 async function load(){
  try{
-  const r=await fetch('/api/status');const s=await r.json();
+  const r=await fetch('/api/status',
+    {headers:{'Authorization':'Bearer '+token()}});
+  if(r.status===401){localStorage.removeItem('elf_token');
+    if(_timer)clearInterval(_timer);
+    document.getElementById('ts').textContent=
+      'bad token - reload the page to re-enter';return;}
+  const s=await r.json();
   document.getElementById('ts').textContent=
     'snapshot '+s.generated_at+' | up since '+s.started_at;
   let h='';
@@ -237,7 +245,7 @@ async function load(){
   document.getElementById('content').innerHTML=h;
  }catch(e){document.getElementById('ts').textContent='offline: '+e;}
 }
-load();setInterval(load,30000);
+load();_timer=setInterval(load,30000);
 </script></body></html>"""
 
 
@@ -257,8 +265,26 @@ def queue_command(text: str) -> dict:
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def _authorized(self) -> bool:
+        """Bearer token check. Fails closed: no configured token, no access."""
+        expected = _expected_token()
+        if not expected:
+            return False
+        supplied = self.headers.get("Authorization", "")
+        return secrets.compare_digest(supplied, f"Bearer {expected}")
+
+    def _unauthorized(self) -> None:
+        self._send(401, "application/json",
+                   b'{"error": "missing or invalid token"}')
+
     def do_GET(self):
         if self.path == "/api/status":
+            # Trades, API spend and task descriptions — token required. The
+            # shell page below carries no data, so it stays open for the
+            # browser to load and prompt for the token.
+            if not self._authorized():
+                self._unauthorized()
+                return
             body = json.dumps(build_snapshot()).encode("utf-8")
             self._send(200, "application/json", body)
         elif self.path in ("/", "/index.html"):
@@ -270,11 +296,8 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path != "/api/command":
             self._send(404, "text/plain", b"not found")
             return
-        expected = _expected_token()
-        supplied = self.headers.get("Authorization", "")
-        if not expected or supplied != f"Bearer {expected}":
-            self._send(401, "application/json",
-                       b'{"error": "missing or invalid token"}')
+        if not self._authorized():
+            self._unauthorized()
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -310,7 +333,6 @@ def _ensure_token(settings: dict) -> dict:
     """Generate dashboard_token on first run so the command channel works
     out of the box. The token stays in data/settings.json (gitignored)."""
     if not settings.get("dashboard_token"):
-        import secrets
         settings["dashboard_token"] = secrets.token_urlsafe(24)
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -95,3 +95,52 @@ class TestReopenWhileWorkerRuns:
         w._open_hud()
         w._start_pipeline.assert_not_called()
         w.close()
+
+
+class TestShutdownStopsFetchers:
+    """Quitting must leave no QThread running.
+
+    MarketUpdater and HudSceneHub loop until isInterruptionRequested() is true.
+    Before this, nothing ever set it: Qt destroyed them mid-run, the process
+    aborted, and watchdog.classify_exit() read the non-zero code as a crash and
+    restarted El Fager — so Quit did not quit.
+    """
+
+    @staticmethod
+    def _win(market_waits=True, hub_waits=True):
+        """A HudWindow with fake fetchers and no Qt construction."""
+        from unittest.mock import MagicMock
+        from ui.hud_window import HudWindow
+        win = HudWindow.__new__(HudWindow)
+        for name, waits in (("_market_updater", market_waits),
+                            ("_scene_hub", hub_waits)):
+            t = MagicMock()
+            t.isRunning.return_value = True
+            t.wait.return_value = waits
+            setattr(win, name, t)
+        return win
+
+    def test_both_fetchers_are_interrupted(self):
+        win = self._win()
+        win.shutdown()
+        win._market_updater.requestInterruption.assert_called_once()
+        win._scene_hub.requestInterruption.assert_called_once()
+
+    def test_a_thread_that_stops_in_time_is_not_terminated(self):
+        win = self._win()
+        win.shutdown()
+        win._market_updater.terminate.assert_not_called()
+        win._scene_hub.terminate.assert_not_called()
+
+    def test_a_thread_parked_in_a_fetch_is_terminated(self):
+        """Better than the abort that destroying a running QThread causes."""
+        win = self._win(market_waits=False)
+        win.shutdown()
+        win._market_updater.terminate.assert_called_once()
+        win._scene_hub.terminate.assert_not_called()
+
+    def test_a_thread_already_stopped_is_left_alone(self):
+        win = self._win()
+        win._scene_hub.isRunning.return_value = False
+        win.shutdown()
+        win._scene_hub.requestInterruption.assert_not_called()
