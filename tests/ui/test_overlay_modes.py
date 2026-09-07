@@ -108,3 +108,39 @@ class TestOverlayIdleTimers:
         # Untouched — the poll returned before reading any state file.
         assert w._status_bar.isVisibleTo(w)
         w.close()
+
+
+class TestHudDataStrip:
+    def test_refresh_hud_strip_no_status_file_is_safe(self, qapp, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        w = _make_overlay(qapp)
+        w._refresh_hud_strip()   # must not raise
+        assert w._hud._data_items == []
+        w.close()
+
+    def test_refresh_hud_strip_populates_from_status_file(self, qapp, tmp_path, monkeypatch):
+        import json
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "trading_status.json").write_text(json.dumps({
+            "portfolio_value": 10500.0,
+            "positions": [{"symbol": "AAPL", "unrealized_plpc": 2.1}],
+        }))
+        w = _make_overlay(qapp)
+        w._refresh_hud_strip()
+        assert any("AAPL" in item for item in w._hud._data_items)
+        assert any("NAV" in item for item in w._hud._data_items)
+        w.close()
+
+    def test_cycle_mode_to_hud_refreshes_strip(self, qapp, tmp_path, monkeypatch):
+        import json
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "trading_status.json").write_text(json.dumps({
+            "portfolio_value": 999.0,
+            "positions": [],
+        }))
+        w = _make_overlay(qapp)
+        w.cycle_mode()   # voice -> hud
+        assert any("NAV" in item for item in w._hud._data_items)
+        w.close()

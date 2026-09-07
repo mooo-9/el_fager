@@ -648,6 +648,8 @@ class OverlayWindow(QWidget):
         self._mode_btn.setText(labels[self._mode])
         if self._mode == 2:
             self._trading.refresh()
+        elif self._mode == 1:
+            self._refresh_hud_strip()
         elif self._mode == 3:
             # Switch to full-screen JARVIS HUD
             screen = QApplication.primaryScreen().availableGeometry()
@@ -674,6 +676,26 @@ class OverlayWindow(QWidget):
     def _refresh_trading_if_active(self):
         if self._mode == 2:
             self._trading.refresh()
+        elif self._mode == 1:
+            self._refresh_hud_strip()
+
+    def _refresh_hud_strip(self) -> None:
+        """Bottom data strip on the HUD — watchlist P&L + portfolio NAV."""
+        try:
+            status = json.loads(
+                Path("data/trading_status.json").read_text(encoding="utf-8"))
+        except Exception:
+            self._hud.set_data_strip([])
+            return
+
+        items = [
+            f"{p.get('symbol', '?')} {p.get('unrealized_plpc', 0.0):+.1f}%"
+            for p in status.get("positions", [])[:4]
+        ]
+        portfolio_value = status.get("portfolio_value")
+        if portfolio_value is not None:
+            items.append(f"NAV ${portfolio_value:,.0f}")
+        self._hud.set_data_strip(items)
 
     def _push_telemetry(self):
         if self._mode != 3 or not self.isVisible():
@@ -1014,6 +1036,7 @@ class OverlayWindow(QWidget):
             text_input=text_input,
         )
         self._worker.state_update.connect(self.on_state_update)
+        self._worker.amplitude_update.connect(self._hud.set_amplitude)
         self._worker.done.connect(self.on_pipeline_done)
         self._worker.error.connect(self.on_error)
 

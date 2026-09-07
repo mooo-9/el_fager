@@ -95,6 +95,53 @@ class TestTradingPanelRefresh:
         w.close()
 
 
+class TestTradingPanelStatusSnapshot:
+    def test_refresh_no_status_file_shows_no_positions(self, qapp, tmp_path, monkeypatch):
+        from ui.trading_panel import TradingPanel
+        monkeypatch.setattr("ui.trading_panel._TRADES_PATH", tmp_path / "no_trades.json")
+        monkeypatch.setattr("ui.trading_panel._STATUS_PATH", tmp_path / "no_status.json")
+        w = TradingPanel()
+        w.refresh()
+        assert w._signal_table.rowCount() == 0
+        assert w._positions_label.text() == "No open positions"
+        w.close()
+
+    def test_refresh_populates_signals_and_positions_from_status_file(self, qapp, tmp_path, monkeypatch):
+        from ui.trading_panel import TradingPanel
+        status_file = tmp_path / "status.json"
+        status_file.write_text(json.dumps({
+            "portfolio_value": 10500.0,
+            "cash": 200.0,
+            "positions": [
+                {"symbol": "AAPL", "qty": 1.5, "avg_entry_price": 150.0,
+                 "unrealized_pl": 12.3, "unrealized_plpc": 2.1},
+            ],
+            "signals": [
+                {"symbol": "NVDA", "direction": "BUY", "conviction": 80.0, "status": "EXECUTED"},
+            ],
+        }))
+        monkeypatch.setattr("ui.trading_panel._TRADES_PATH", tmp_path / "no_trades.json")
+        monkeypatch.setattr("ui.trading_panel._STATUS_PATH", status_file)
+        w = TradingPanel()
+        w.refresh()
+        assert w._signal_table.rowCount() == 1
+        assert w._signal_table.item(0, 0).text() == "NVDA"
+        assert "AAPL" in w._positions_label.text()
+        assert "12.30" in w._positions_label.text()
+        w.close()
+
+    def test_refresh_with_malformed_status_file_does_not_raise(self, qapp, tmp_path, monkeypatch):
+        from ui.trading_panel import TradingPanel
+        status_file = tmp_path / "status.json"
+        status_file.write_text("not valid json{{{{")
+        monkeypatch.setattr("ui.trading_panel._TRADES_PATH", tmp_path / "no_trades.json")
+        monkeypatch.setattr("ui.trading_panel._STATUS_PATH", status_file)
+        w = TradingPanel()
+        w.refresh()   # must not raise
+        assert w._positions_label.text() == "No open positions"
+        w.close()
+
+
 class TestTradingPanelCallback:
     def test_set_callback_start(self, qapp):
         from ui.trading_panel import TradingPanel
