@@ -14,6 +14,7 @@ All return strings are cp1252-safe (spoken by TTS).
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from core import atomic
 
 _SKILLS_PATH = Path("data/skills.json")
 _SEEDS_PATH = None  # None -> SkillStore default (core/skills/seeds.json)
@@ -237,7 +238,7 @@ def sync_skills_to_claude() -> str:
         d = _CLAUDE_SKILLS_DIR / slug
         d.mkdir(exist_ok=True)
         triggers = ", ".join(s.get("trigger_phrases", [])) or "the skill name"
-        (d / "SKILL.md").write_text(
+        atomic.write(d / "SKILL.md",
             "---\n"
             f"name: {slug}\n"
             f"description: El Fager skill '{s['name']}' -- use when Mo says {triggers}.\n"

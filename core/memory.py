@@ -5,6 +5,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 
 _FACTS_FILE = Path(__file__).parent.parent / "data" / "facts.json"
@@ -117,7 +118,7 @@ class Memory:
     def _save_facts(self, data: dict) -> None:
         try:
             _FACTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _FACTS_FILE.write_text(
+            atomic.write(_FACTS_FILE,
                 json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception as e:

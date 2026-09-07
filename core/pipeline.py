@@ -78,6 +78,7 @@ class PipelineWorker(QThread):
     """
 
     state_update = pyqtSignal(str, str, str)
+    amplitude_update = pyqtSignal(float)   # live mic level, from #1
     done = pyqtSignal()
     error = pyqtSignal(str)
 
@@ -157,7 +158,8 @@ class PipelineWorker(QThread):
                     self.state_update.emit("listening", "", "")
                     turn_profile.start("record")
                     audio = self.voice_in.record_audio(
-                        start_timeout_sec=self._listen_window(turn)
+                        on_chunk=self.amplitude_update.emit,
+                        start_timeout_sec=self._listen_window(turn),
                     )
                     turn_profile.end("record")
                     if self._cancelled.is_set():

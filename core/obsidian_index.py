@@ -14,6 +14,7 @@ import json
 import os
 import re
 from pathlib import Path
+from core import atomic
 
 _COLLECTION = "obsidian_vault"
 _CHUNK_CHARS = 800
@@ -73,7 +74,7 @@ def _save_state(state: dict) -> None:
     try:
         path = _state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
+        atomic.write(path,
             json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except Exception as e:

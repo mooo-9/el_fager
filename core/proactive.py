@@ -24,6 +24,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
+from core import atomic
 
 _STATE_FILE = Path("data/proactive_state.json")
 
@@ -50,6 +51,8 @@ class ProactiveEngine:
         self._thread: threading.Thread | None = None
         self._state: dict = self._load_state()
         self._hud_fn: Callable | None = None  # set by main.py via set_hud_notify()
+        self._timings: dict | None = None     # prayer timings, cached per day
+        self._timings_day: str = ""
 
     def set_hud_notify(self, fn: Callable) -> None:
         """Register a thread-safe callback for pushing proactive banners to the HUD."""
@@ -88,7 +91,7 @@ class ProactiveEngine:
 
     def _save_state(self) -> None:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_FILE.write_text(
+        atomic.write(_STATE_FILE,
             json.dumps(self._state, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -221,21 +224,32 @@ class ProactiveEngine:
         except Exception:
             pass
 
+    def _fetch_prayer_timings(self, today: str) -> dict | None:
+        """Today's prayer timings, fetched once a day — they don't change
+        between the 60-second check cycles."""
+        if self._timings_day == today:
+            return self._timings
+        import httpx
+        resp = httpx.get(
+            "https://api.aladhan.com/v1/timingsByCity",
+            params={"city": "Cairo", "country": "Egypt", "method": 5},
+            timeout=6,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            return None
+        self._timings = resp.json()["data"]["timings"]
+        self._timings_day = today
+        return self._timings
+
     def _check_prayer_times(self) -> None:
         """Speak a reminder ~10 minutes before each prayer."""
         try:
-            import httpx
-            resp = httpx.get(
-                "https://api.aladhan.com/v1/timingsByCity",
-                params={"city": "Cairo", "country": "Egypt", "method": 5},
-                timeout=6,
-                follow_redirects=True,
-            )
-            if resp.status_code != 200:
-                return
-            timings = resp.json()["data"]["timings"]
             now    = datetime.now()
             today  = date.today().isoformat()
+            timings = self._fetch_prayer_timings(today)
+            if not timings:
+                return
             for name in ("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"):
                 t_str = timings.get(name, "").split(" ")[0]
                 if not t_str:
@@ -439,14 +453,31 @@ class ProactiveEngine:
             due = mgr.get_due()
             if not due:
                 return
+            from core.agents.supervisor import assign
             for task in due[:2]:
                 mgr.mark_running(task["id"])
                 try:
-                    result = self._brain_fn(task["description"])
-                    short = (result or "Done.")[:200]
-                    mgr.complete(task["id"], short)
-                    announcement = f"Background task done: {task['description'][:50]}. {short[:100]}"
-                    self._deliver(announcement, remote=True)
+                    # Mo is not watching, so the result is inspected before it
+                    # counts as done -- a task that reported failure used to be
+                    # marked complete.
+                    report = assign("", task["description"], verify=True,
+                                    source=f"task:{task['id']}",
+                                    executor=self._brain_fn)
+                    if report.ok:
+                        short = (report.result or "Done.")[:200]
+                        mgr.complete(task["id"], short)
+                        self._deliver(
+                            f"Background task done: {task['description'][:50]}. "
+                            f"{short[:100]}",
+                            remote=True,
+                        )
+                    else:
+                        mgr.fail(task["id"], report.reason or "did not complete")
+                        self._deliver(
+                            f"Mo, the background task '{task['description'][:50]}' "
+                            f"did not get done. {report.reason[:120]}",
+                            remote=True,
+                        )
                 except Exception as e:
                     mgr.fail(task["id"], str(e))
         except Exception as e:
@@ -454,51 +485,150 @@ class ProactiveEngine:
 
     _MAX_STEPS_PER_CYCLE = 3
 
-    def _check_missions(self) -> None:
-        """Execute the current group's pending steps (up to 3 per cycle) via
-        brain.chat(). Same-group steps are independent; groups run in order.
-        Completion and blockage are announced; step results become context
-        for later groups (MissionManager.step_context)."""
-        if self._brain_fn is None:
+    @staticmethod
+    def _is_parallelisable(steps: list[dict]) -> bool:
+        """True when every step in the group names a DISTINCT registry agent.
+
+        Those agents build their own API client and share no state, so they are
+        safe to run at once. A group containing an unassigned step is not: those
+        run through brain.chat, which mutates conversation history and the
+        live-trading state machine. Two steps naming the same agent are also
+        left sequential -- an agent may hold a per-run resource (a browser, the
+        mouse), and nothing guarantees two of it can run side by side.
+        """
+        if len(steps) < 2:
+            return False
+        agents = [s.get("agent") for s in steps]
+        if not all(agents):
+            return False
+        return len(set(agents)) == len(agents)
+
+    def _run_group_in_parallel(self, mgr, active: dict, context: str,
+                               steps: list[dict]) -> None:
+        """Execute an all-agent group at once, then apply bookkeeping in step
+        order on this thread -- MissionManager rewrites the whole file on every
+        write, so concurrent bookkeeping would lose updates."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        from core.agents.supervisor import assign
+
+        def run(step: dict):
+            return assign(
+                step["agent"],
+                f"{context}\n\nYour task: {step['description']}",
+                acceptance=step.get("acceptance"),
+                source=f"mission:{active['id']}",
+                max_attempts=1,
+            )
+
+        with ThreadPoolExecutor(max_workers=len(steps)) as pool:
+            reports = list(pool.map(run, steps))
+
+        for step, report in zip(steps, reports):
+            if report.ok:
+                mgr.complete_step(active["id"], step["n"], report.result or "Done.")
+                continue
+            mgr.fail_step(active["id"], step["n"], report.reason)
+            refreshed = mgr.last_finished()
+            if refreshed and refreshed["id"] == active["id"] \
+                    and refreshed["status"] == "blocked":
+                self._announce_blocked(active, step, report)
             return
+
+        if mgr.get_active() is None:
+            self._announce_complete(mgr)
+
+    def _announce_blocked(self, active: dict, step: dict, report) -> None:
+        why = (report.reason or "").strip()[:120]
+        if why:
+            why = why[0].upper() + why[1:]
+            why = why if why.endswith(".") else why + "."
+            why += " "
+        self._deliver(
+            f"Mo, mission '{active['goal']}' is stuck at step "
+            f"{step['n']} ({step['description'][:60]}). "
+            f"{report.callsign} tried twice. {why}"
+            f"Tell me how to proceed.",
+            remote=True,
+        )
+
+    def _announce_complete(self, mgr) -> None:
+        finished = mgr.last_finished()
+        if finished and finished["status"] == "done":
+            last_result = (finished["steps"][-1].get("result") or "")[:150]
+            self._deliver(
+                f"Mission complete: {finished['goal']}. {last_result}",
+                remote=True,
+            )
+
+    def _check_missions(self) -> None:
+        """Execute the current group's pending steps (up to 3 per cycle)
+        through the supervisor: a step naming an agent goes to that agent, the
+        rest run via brain.chat(). Warden inspects every result, so a step only
+        advances when the work actually passed. Same-group steps are
+        independent; groups run in order. Completion and blockage are announced;
+        step results become context for later groups
+        (MissionManager.step_context)."""
         try:
             from core.missions import MissionManager
             mgr = MissionManager()
             steps = mgr.next_steps()[: self._MAX_STEPS_PER_CYCLE]
             if not steps:
                 return
+            # Only unassigned steps need the brain; a mission whose steps are
+            # all assigned to agents runs without one.
+            if self._brain_fn is None and not all(s.get("agent") for s in steps):
+                return
             active = mgr.get_active()
             context = mgr.step_context()
+            from core.agents.supervisor import assign
+
+            if self._is_parallelisable(steps):
+                self._run_group_in_parallel(mgr, active, context, steps)
+                return
+
             for step in steps:
-                prompt = (
-                    f"{context}\n\n"
-                    f"You are executing step {step['n']} of this mission. "
-                    f"Do it now using your tools and report the outcome concisely:\n"
-                    f"{step['description']}"
-                )
-                try:
-                    result = self._brain_fn(prompt)
-                    mgr.complete_step(active["id"], step["n"], result or "Done.")
-                except Exception as e:
-                    mgr.fail_step(active["id"], step["n"], str(e))
-                    refreshed = mgr.last_finished()
-                    if refreshed and refreshed["id"] == active["id"] \
-                            and refreshed["status"] == "blocked":
-                        self._deliver(
-                            f"Mo, mission '{active['goal']}' is stuck at step "
-                            f"{step['n']} ({step['description'][:60]}). "
-                            f"I tried twice. Tell me how to proceed.",
-                            remote=True,
-                        )
-                    return
-            if mgr.get_active() is None:
-                finished = mgr.last_finished()
-                if finished and finished["status"] == "done":
-                    last_result = (finished["steps"][-1].get("result") or "")[:150]
-                    self._deliver(
-                        f"Mission complete: {finished['goal']}. {last_result}",
-                        remote=True,
+                agent = step.get("agent")
+                if agent:
+                    # An assigned step goes to that agent verbatim; the agent
+                    # has no conversation history, so it carries its own context.
+                    report = assign(
+                        agent,
+                        f"{context}\n\nYour task: {step['description']}",
+                        acceptance=step.get("acceptance"),
+                        source=f"mission:{active['id']}",
+                        # MissionManager owns the retry: a failed step is
+                        # requeued for the next cycle, then blocks.
+                        max_attempts=1,
                     )
+                else:
+                    prompt = (
+                        f"{context}\n\n"
+                        f"You are executing step {step['n']} of this mission. "
+                        f"Do it now using your tools and report the outcome concisely:\n"
+                        f"{step['description']}"
+                    )
+                    report = assign("", prompt,
+                                    acceptance=step.get("acceptance"),
+                                    source=f"mission:{active['id']}",
+                                    executor=self._brain_fn,
+                                    max_attempts=1)
+
+                if report.ok:
+                    mgr.complete_step(active["id"], step["n"],
+                                      report.result or "Done.")
+                    continue
+
+                # Warden rejected it, or the agent failed outright. The step is
+                # NOT done -- fail_step retries it next cycle, then blocks.
+                mgr.fail_step(active["id"], step["n"], report.reason)
+                refreshed = mgr.last_finished()
+                if refreshed and refreshed["id"] == active["id"] \
+                        and refreshed["status"] == "blocked":
+                    self._announce_blocked(active, step, report)
+                return
+            if mgr.get_active() is None:
+                self._announce_complete(mgr)
         except Exception as e:
             print(f"[Proactive] mission check error: {e}")
 

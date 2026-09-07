@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
 from ui import theme, tokens
 from ui.overlay import _load_settings, _save_settings
 from ui.settings import Toggle
+from core import atomic
 
 _PROFILE = Path("profile.json")
 _ORB_PAGE = Path(__file__).parent / "assets" / "cockpit_orb.html"
@@ -288,7 +289,7 @@ class OnboardingWindow(QWidget):
         try:
             profile = json.loads(_PROFILE.read_text(encoding="utf-8"))
             profile["name"] = name
-            _PROFILE.write_text(
+            atomic.write(_PROFILE,
                 json.dumps(profile, indent=2, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass

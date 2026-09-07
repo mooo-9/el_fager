@@ -57,6 +57,7 @@ from PyQt6.QtWidgets import (
 
 from core import progress, prose, sound, staging
 from ui import theme, tokens
+from core import atomic
 
 _SETTINGS_FILE = Path("data/settings.json")
 
@@ -97,7 +98,7 @@ def _load_settings() -> dict:
 
 def _save_settings(data: dict) -> None:
     _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(_SETTINGS_FILE, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _align_left(label: QLabel) -> None:

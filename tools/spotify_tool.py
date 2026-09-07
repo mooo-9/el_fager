@@ -11,7 +11,9 @@ Token is cached to data/.spotify_cache — auto-refreshed on expiry.
 
 import logging
 import os
+import re
 import subprocess
+import threading
 import time
 
 from dotenv import load_dotenv
@@ -54,6 +56,10 @@ _NOT_SET_UP = (
 
 # ── Cached client — created once, reused across calls ────────────────────────
 _sp_client = None
+
+# Last device that accepted playback. Saves a /me/player/devices round trip on
+# every play; cleared and re-probed when the device turns out to be gone.
+_device_id: str | None = None
 
 def get_spotify():
     global _sp_client
@@ -132,7 +138,7 @@ def _launch_spotify_app() -> bool:
             return True
     return False
 
-def _get_device(sp) -> str | None:
+def _get_device(sp, use_cache: bool = True) -> str | None:
     """
     Return best available device_id.
     Prefers desktop app over Web Player.
@@ -140,6 +146,10 @@ def _get_device(sp) -> str | None:
     Passing device_id to start_playback activates the device in one shot —
     no separate transfer_playback call needed.
     """
+    global _device_id
+    if use_cache and _device_id:
+        return _device_id
+
     try:
         devices = sp.devices().get("devices", [])
     except Exception:
@@ -147,6 +157,7 @@ def _get_device(sp) -> str | None:
 
     dev = _best_device_id(devices)
     if dev:
+        _device_id = dev
         return dev
 
     print("[El Fager] No Spotify device — launching desktop app...")
@@ -161,14 +172,124 @@ def _get_device(sp) -> str | None:
             continue
         dev = _best_device_id(devices)
         if dev:
+            _device_id = dev
             return dev
 
     return None
 
 
+def _is_device_gone(e) -> bool:
+    """404 from the player endpoints means the cached device disappeared."""
+    try:
+        from spotipy.exceptions import SpotifyException
+        return isinstance(e, SpotifyException) and e.http_status == 404
+    except Exception:
+        return False
+
+
+def _start_playback(sp, dev: str, **kwargs) -> None:
+    """start_playback, re-probing once if the cached device has gone away."""
+    global _device_id
+    try:
+        sp.start_playback(device_id=dev, **kwargs)
+        return
+    except Exception as e:
+        if not _is_device_gone(e):
+            raise
+    _device_id = None
+    dev = _get_device(sp, use_cache=False)
+    if dev is None:
+        raise RuntimeError("no Spotify device available")
+    sp.start_playback(device_id=dev, **kwargs)
+
+
+def warm_up() -> None:
+    """Pre-authenticate and pre-resolve a device in the background so the first
+    'play X' of a session doesn't pay for the token refresh and device lookup.
+
+    Only runs when a token is already cached — otherwise SpotifyOAuth would pop
+    a browser consent window at every launch.
+    """
+    if not SPOTIFY_AVAILABLE or not os.path.exists("data/.spotify_cache"):
+        return
+
+    def _warm():
+        try:
+            sp = get_spotify()
+            if sp is not None:
+                _get_device(sp, use_cache=False)
+        except Exception:
+            pass
+
+    threading.Thread(target=_warm, daemon=True, name="SpotifyWarmUp").start()
+
+
+# ── "play X" command matching ─────────────────────────────────────────────────
+# Recognising the command here lets El Fager act on it without a round trip to
+# Claude — see Brain.chat(). Anything these don't match falls through to the
+# normal tool loop, which still works, just slower.
+
+_PLAY_EN = re.compile(
+    r"""^\s*
+        (?:hey\s+)?(?:el\s*fager\s*[,:]?\s*)?
+        (?:can\s+you\s+|could\s+you\s+|please\s+|pls\s+)?
+        (?:play|put\s+on)\s+
+        (?:me\s+)?(?:the\s+song\s+|the\s+track\s+|a\s+song\s+|some\s+|a\s+)?
+        (?P<q>.+?)
+        (?:\s+(?:on|in|from)\s+spotify)?
+        [\s.!?]*$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_PLAY_AR = re.compile(
+    r"^\s*(?:يا\s+الفجر[،,]?\s*)?"
+    r"(?:شغللي|شغّللي|شغلي|شغّلي|شغل|شغّل)\s+"
+    r"(?:لي\s+)?(?:أغنية\s+|اغنية\s+)?"
+    r"(?P<q>.+?)[\s.!?،]*$"
+)
+
+# Common Arabizi spellings of "شغل".
+_PLAY_ARABIZI = re.compile(
+    r"^\s*(?:sha8+al|sha3+al|shagh+al|shag+al)(?:ly|li)?\s+(?P<q>.+?)[\s.!?]*$",
+    re.IGNORECASE,
+)
+
+# Queries too vague to search for — let Claude work out what Mo meant.
+_VAGUE = frozenset({
+    "it", "this", "that", "one", "again", "it again", "that again",
+    "music", "song", "songs", "track", "tune", "something", "anything",
+    "more", "next", "next one", "next song", "next track", "previous",
+    "back", "again please",
+})
+
+# "play" that isn't about Spotify.
+_NOT_SPOTIFY = ("youtube", "video", "movie", "film", "netflix", "trailer", "episode")
+
+
+def match_play_command(message: str) -> "tuple[str, bool] | None":
+    """Return (search_query, is_arabic) for a plain 'play X' request, else None.
+
+    None means 'not confidently a play command' — the caller should fall back to
+    the normal tool loop rather than guess.
+    """
+    for pattern, arabic in ((_PLAY_EN, False), (_PLAY_AR, True), (_PLAY_ARABIZI, False)):
+        m = pattern.match(message)
+        if not m:
+            continue
+        query = " ".join(m.group("q").split())
+        # "the next track" is a skip, not a search for a song called that.
+        probe = re.sub(r"^(?:the|a|an)\s+", "", query.lower())
+        if not query or probe in _VAGUE:
+            return None
+        if any(w in query.lower() for w in _NOT_SPOTIFY):
+            return None
+        return query, arabic
+    return None
+
+
 # ── Public Spotify functions ──────────────────────────────────────────────────
 
-def play_music(query: str) -> str:
+def play_music(query: str, arabic: bool = False) -> str:
     if not SPOTIFY_AVAILABLE:
         return _NOT_SET_UP
     sp = get_spotify()
@@ -177,7 +298,9 @@ def play_music(query: str) -> str:
     try:
         dev = _get_device(sp)
         if dev is None:
-            return "Open Spotify on your PC first, then ask me to play."
+            return ("افتح سبوتيفاي على الجهاز الأول وبعدين قولي شغل."
+                    if arabic else
+                    "Open Spotify on your PC first, then ask me to play.")
 
         mood_name, mood_search = _detect_mood(query)
         if mood_search:
@@ -185,30 +308,36 @@ def play_music(query: str) -> str:
             playlists = [p for p in results.get("playlists", {}).get("items", []) if p]
             if playlists:
                 pl = playlists[0]
-                sp.start_playback(device_id=dev, context_uri=pl["uri"])
-                return f"Playing {mood_name} vibes — {pl['name']}"
+                _start_playback(sp, dev, context_uri=pl["uri"])
+                return (f"بشغّل {mood_name} — {pl['name']}" if arabic
+                        else f"Playing {mood_name} vibes — {pl['name']}")
             return f"[No playlist found for '{mood_name}' mood]"
 
         results = sp.search(q=query, type="track,playlist,album", limit=3)
 
         tracks = results.get("tracks", {}).get("items", [])
         if tracks:
-            sp.start_playback(device_id=dev, uris=[tracks[0]["uri"]])
-            return f"Playing: {_fmt_track(tracks[0])}"
+            _start_playback(sp, dev, uris=[tracks[0]["uri"]])
+            return (f"بشغّل: {_fmt_track(tracks[0])}" if arabic
+                    else f"Playing: {_fmt_track(tracks[0])}")
 
-        playlists = results.get("playlists", {}).get("items", [])
+        playlists = [p for p in results.get("playlists", {}).get("items", []) if p]
         if playlists:
             pl = playlists[0]
-            sp.start_playback(device_id=dev, context_uri=pl["uri"])
-            return f"Playing playlist: {pl['name']}"
+            _start_playback(sp, dev, context_uri=pl["uri"])
+            return (f"بشغّل بلاي ليست: {pl['name']}" if arabic
+                    else f"Playing playlist: {pl['name']}")
 
         albums = results.get("albums", {}).get("items", [])
         if albums:
             al = albums[0]
-            sp.start_playback(device_id=dev, context_uri=al["uri"])
-            return f"Playing album: {al['name']} by {', '.join(a['name'] for a in al.get('artists', []))}"
+            _start_playback(sp, dev, context_uri=al["uri"])
+            artists = ", ".join(a["name"] for a in al.get("artists", []))
+            return (f"بشغّل ألبوم: {al['name']} لـ {artists}" if arabic
+                    else f"Playing album: {al['name']} by {artists}")
 
-        return f"Nothing found for '{query}'"
+        return (f"ملقتش حاجة باسم '{query}'" if arabic
+                else f"Nothing found for '{query}'")
     except Exception as e:
         return _spotify_error(e)
 

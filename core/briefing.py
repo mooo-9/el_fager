@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from core import atomic
 
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
 _PATH = Path("data/last_briefing.json")
@@ -25,7 +26,7 @@ def already_briefed_today() -> bool:
 
 
 def mark_briefed_today():
-    _PATH.write_text(
+    atomic.write(_PATH,
         json.dumps({"date": str(datetime.now(CAIRO_TZ).date())}),
         encoding="utf-8",
     )

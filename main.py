@@ -87,6 +87,37 @@ def _make_tray_image() -> Image.Image:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Windows startup cleanup
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _remove_legacy_startup_entry():
+    """Delete the old HKCU Run entry.
+
+    Autostart is owned solely by the "El Fager Watchdog" scheduled task
+    (setup_watchdog.ps1). Earlier builds also wrote an HKCU Run value on every
+    launch, so both fired at logon and raced for the single-instance mutex.
+    Nothing but this removes that leftover value.
+    """
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_SET_VALUE,
+        )
+        try:
+            winreg.DeleteValue(key, "ElFager")
+            print("[El Fager] Removed legacy HKCU Run autostart entry.")
+        except FileNotFoundError:
+            pass
+        finally:
+            winreg.CloseKey(key)
+    except Exception as e:
+        print(f"[El Fager] Startup entry cleanup failed (non-fatal): {e}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -159,7 +190,9 @@ def _acquire_instance_lock() -> None:
                 ).show()
             except Exception:
                 pass
-        sys.exit(0)
+        # Exit 3, not 0: tells watchdog.py this is a mutex collision rather
+        # than Mo quitting, so it keeps polling instead of stopping.
+        sys.exit(3)
 
 
 def _enable_crash_trace() -> None:
@@ -277,6 +310,7 @@ def main():
         )
         if reply == QMessageBox.StandardButton.Yes:
             memory.clear_all()
+            brain.reset_conversation()   # the in-session history, not just ChromaDB
             QMessageBox.information(None, "El Fager", "Memory cleared.")
 
     signaler.memory_clear_triggered.connect(_on_memory_clear)
@@ -454,6 +488,10 @@ def main():
     tray_thread.start()
     print("[El Fager] System tray active.")
 
+    # ── Windows startup entry ──────────────────────────────────────────────
+    # Autostart lives in the watchdog scheduled task only; drop the old one.
+    _remove_legacy_startup_entry()
+
     # ── Background services (deferred past first paint) ────────────────────
     # None of these are needed in the first seconds; starting them via a
     # singleShot lets the event loop begin and the assistant window paint
@@ -502,6 +540,17 @@ def main():
         proactive.set_hud_notify(_notify_hud)
         proactive.start()
         _services["proactive"] = proactive
+
+        # Spotify warm-up: refresh the token and resolve a device in the
+        # background so the first "play X" does not pay for it.
+        from tools.spotify_tool import warm_up as _spotify_warm_up
+        _spotify_warm_up()
+
+        # Comet: start it minimised with its debugging port before Mo opens it
+        # himself — a Comet he starts has no port, and Chromium cannot add one
+        # to a live process, which would leave automation logged out all session.
+        from tools.comet_tool import autostart as _comet_autostart
+        _comet_autostart()
 
         # Macro speak callback (enables mid-macro TTS announcements)
         from tools.macro_tool import set_speak_callback as _macro_speak_cb

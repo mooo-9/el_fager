@@ -26,6 +26,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+from core import atomic
 load_dotenv()
 
 _SKIP_DIRS = {".obsidian", ".trash", ".git", ".smart-env"}
@@ -357,7 +358,7 @@ def create_note(title: str, content: str = "", folder: str = None) -> str:
 
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
-        note.write_text(content, encoding="utf-8")
+        atomic.write(note, content, encoding="utf-8")
     except OSError as e:
         return f"[Obsidian error: {e}]"
     return f"Created Obsidian note '{_rel(vault, note)}'"
@@ -477,7 +478,7 @@ def rename_note(name: str, new_title: str) -> str:
         updated = _WIKILINK_RE.sub(repoint, text)
         if updated != text:
             try:
-                other.write_text(updated, encoding="utf-8")
+                atomic.write(other, updated, encoding="utf-8")
                 relinked += 1
             except OSError:
                 pass

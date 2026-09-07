@@ -2,10 +2,12 @@
 MissionManager — El Fager's multi-step planning layer.
 
 A mission is a goal decomposed into ordered steps, persisted in
-data/missions.json. The ProactiveEngine executes ONE step per 60s cycle via
-brain.chat(); each step's prompt carries the goal plus completed-step results.
-Failed steps retry once, then the mission is marked blocked and reported.
-State lives on disk, so a crash or restart resumes at the same step.
+data/missions.json. The ProactiveEngine executes each cycle's steps through the
+supervisor: a step may name an agent (@callsign) or fall to brain.chat, and
+either way Warden inspects the result before it counts as done. Each step's
+prompt carries the goal plus completed-step results. Failed steps retry once,
+then the mission is marked blocked and reported. State lives on disk, so a
+crash or restart resumes at the same step.
 
 Only one mission runs at a time — sequential focus keeps context coherent
 and cost bounded.
@@ -14,10 +16,17 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 _MISSIONS_PATH = Path("data/missions.json")
 
 _MAX_ATTEMPTS = 2  # 1 try + 1 retry per step
+
+_FORBIDDEN_FRAGMENTS = ("confirm live trading",)
+
+
+class ForbiddenMissionError(ValueError):
+    """Raised when a mission step touches the live-trading confirmation flow."""
 
 
 class MissionManager:
@@ -36,27 +45,44 @@ class MissionManager:
 
     def _save(self, missions: list[dict]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
+        atomic.write(self._path,
             json.dumps(missions, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
     def create(self, goal: str, steps: list[str],
-               groups: list[int] | None = None) -> dict:
+               groups: list[int] | None = None,
+               agents: list[str | None] | None = None,
+               acceptance: list[str | None] | None = None) -> dict:
         """groups: same length as steps; equal numbers = independent steps
-        executed in the same cycle. None = fully sequential (one group each)."""
+        executed in the same cycle. None = fully sequential (one group each).
+        agents: per-step agent callsign, or None to let the brain execute it.
+        acceptance: per-step criteria Warden judges the result against."""
         stripped = [(i, s.strip()) for i, s in enumerate(steps) if s and s.strip()]
         if not stripped:
             raise ValueError("A mission needs at least one step.")
         if groups is not None and len(groups) != len(steps):
             raise ValueError("groups must have the same length as steps.")
+        for name, parallel in (("agents", agents), ("acceptance", acceptance)):
+            if parallel is not None and len(parallel) != len(steps):
+                raise ValueError(f"{name} must have the same length as steps.")
         kept_indices = [i for i, _ in stripped]
         steps = [s for _, s in stripped]
         if groups is None:
             step_groups = list(range(1, len(steps) + 1))
         else:
             step_groups = [groups[i] for i in kept_indices]
+        step_agents = ([agents[i] for i in kept_indices]
+                       if agents is not None else [None] * len(steps))
+        step_acceptance = ([acceptance[i] for i in kept_indices]
+                           if acceptance is not None else [None] * len(steps))
+        joined = (goal + " " + " ".join(steps)).lower()
+        for frag in _FORBIDDEN_FRAGMENTS:
+            if frag in joined:
+                raise ForbiddenMissionError(
+                    "Missions cannot include live-trading confirmation steps."
+                )
         if self.get_active() is not None:
             raise ValueError(
                 "A mission is already in progress. Finish or cancel it first."
@@ -66,7 +92,8 @@ class MissionManager:
             "goal": goal,
             "steps": [
                 {"n": i + 1, "description": desc, "status": "pending",
-                 "result": None, "attempts": 0, "group": step_groups[i]}
+                 "result": None, "attempts": 0, "group": step_groups[i],
+                 "agent": step_agents[i], "acceptance": step_acceptance[i]}
                 for i, desc in enumerate(steps)
             ],
             "status": "in_progress",

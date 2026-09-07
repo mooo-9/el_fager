@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from core.agents.verifier import verify as _real_verify
+
 import pytest
 
 import core.proactive as pa
@@ -130,6 +132,13 @@ class TestRunChecksWindows:
 
 
 class TestAutonomousTasks:
+    @pytest.fixture(autouse=True)
+    def warden_passes(self):
+        """Background tasks are inspected before they count as done. Tests that
+        care about the inspector's verdict override this."""
+        with patch("core.agents.verifier.verify", return_value=("pass", "")):
+            yield
+
     def _mgr(self, due):
         mgr = MagicMock()
         mgr.get_due.return_value = due
@@ -154,7 +163,7 @@ class TestAutonomousTasks:
         assert engine._deliver.call_args.kwargs.get("remote") is True
 
     def test_max_two_tasks_per_cycle(self, engine):
-        engine._brain_fn = MagicMock(return_value="ok")
+        engine._brain_fn = MagicMock(return_value="that task is finished")
         due = [{"id": f"t{i}", "description": f"task {i}"} for i in range(4)]
         mgr = self._mgr(due)
         with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
@@ -170,10 +179,37 @@ class TestAutonomousTasks:
         mgr.fail.assert_called_once()
         assert mgr.fail.call_args.args[0] == "t1"
         mgr.complete.assert_not_called()
-        engine._deliver.assert_not_called()
+        # Mo is told the task did not get done -- silence would leave him
+        # believing a queued task ran.
+        assert "did not get done" in engine._deliver.call_args.args[0]
+
+    def test_a_task_that_reports_failure_is_not_marked_done(self, engine):
+        """The defect this closes: any non-raising result used to count as done,
+        so an assistant replying 'I could not do that' completed the task."""
+        engine._brain_fn = MagicMock(return_value="I could not complete that.")
+        mgr = self._mgr([{"id": "t1", "description": "check NVDA RSI"}])
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
+             patch("core.agents.verifier.verify",
+                   return_value=("fail", "the agent declined the task")):
+            engine._check_autonomous_tasks()
+        mgr.complete.assert_not_called()
+        mgr.fail.assert_called_once()
+        assert "declined" in mgr.fail.call_args.args[1]
+
+    def test_a_tool_error_result_is_not_marked_done(self, engine):
+        engine._brain_fn = MagicMock(return_value="Tool error (file_search): boom")
+        mgr = self._mgr([{"id": "t1", "description": "find the invoice"}])
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
+             patch("core.agents.verifier.verify", side_effect=_real_verify):
+            engine._check_autonomous_tasks()
+        mgr.complete.assert_not_called()
+        mgr.fail.assert_called_once()
 
     def test_one_failed_task_does_not_block_the_next(self, engine):
-        engine._brain_fn = MagicMock(side_effect=[RuntimeError("boom"), "second ok"])
+        engine._brain_fn = MagicMock(
+            side_effect=[RuntimeError("boom"), RuntimeError("boom again"),
+                         "the second task is finished"]
+        )
         due = [
             {"id": "t1", "description": "fails"},
             {"id": "t2", "description": "succeeds"},
@@ -182,14 +218,19 @@ class TestAutonomousTasks:
         with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
             engine._check_autonomous_tasks()
         mgr.fail.assert_called_once()
-        mgr.complete.assert_called_once_with("t2", "second ok")
+        mgr.complete.assert_called_once_with("t2", "the second task is finished")
 
-    def test_empty_brain_result_records_done(self, engine):
+    def test_empty_brain_result_is_a_failure_not_a_silent_done(self, engine):
+        """An empty result is not evidence the work happened; it used to be
+        recorded as 'Done.'"""
         engine._brain_fn = MagicMock(return_value="")
         mgr = self._mgr([{"id": "t1", "description": "quiet task"}])
-        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
+             patch("core.agents.verifier.verify",
+                   return_value=("fail", "the agent returned nothing")):
             engine._check_autonomous_tasks()
-        mgr.complete.assert_called_once_with("t1", "Done.")
+        mgr.complete.assert_not_called()
+        mgr.fail.assert_called_once()
 
 
 class TestOAuthTokenCheck:

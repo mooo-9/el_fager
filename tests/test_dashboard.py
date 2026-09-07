@@ -5,8 +5,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import json
 import urllib.request
+import urllib.error
 from http.server import ThreadingHTTPServer
 import threading
+import time
 
 import pytest
 
@@ -17,6 +19,40 @@ import core.dashboard as db
 def isolated(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # all data/ reads resolve into tmp
     yield tmp_path
+
+
+_TOKEN = "test-token-not-a-real-secret"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The limiters are module state shared by every test in the process."""
+    db._auth_failures.reset()
+    db._commands.reset()
+    yield
+    db._auth_failures.reset()
+    db._commands.reset()
+
+
+@pytest.fixture
+def token(isolated):
+    """Give the isolated tmp dir a dashboard token, and hand it back."""
+    (isolated / "data").mkdir(exist_ok=True)
+    (isolated / "data" / "settings.json").write_text(
+        json.dumps({"dashboard_token": _TOKEN}), encoding="utf-8")
+    return _TOKEN
+
+
+def _get(url: str, tok: str | None = None):
+    """GET url, optionally bearing tok. Returns (status, body)."""
+    req = urllib.request.Request(url)
+    if tok is not None:
+        req.add_header("Authorization", f"Bearer {tok}")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
 
 
 class TestSnapshot:
@@ -33,24 +69,40 @@ class TestSnapshot:
             assert word not in blob
 
 
-class TestServer:
-    @pytest.fixture
-    def server(self, isolated):
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), db._Handler)
-        t = threading.Thread(target=srv.serve_forever, daemon=True)
-        t.start()
-        yield f"http://127.0.0.1:{srv.server_address[1]}"
-        srv.shutdown()
+@pytest.fixture
+def server(isolated):
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), db._Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
 
-    def test_api_status_serves_json(self, server):
-        with urllib.request.urlopen(f"{server}/api/status", timeout=5) as r:
-            assert r.status == 200
-            data = json.loads(r.read().decode("utf-8"))
+
+class TestServer:
+    def test_api_status_serves_json(self, server, token):
+        status, body = _get(f"{server}/api/status", token)
+        assert status == 200
+        data = json.loads(body)
         assert "cost" in data and "mission" in data
 
-    def test_root_serves_html(self, server):
-        with urllib.request.urlopen(f"{server}/", timeout=5) as r:
-            body = r.read().decode("utf-8")
+    def test_api_status_requires_a_token(self, server, token):
+        """The snapshot carries trades, API spend and task descriptions."""
+        status, _ = _get(f"{server}/api/status")
+        assert status == 401
+
+    def test_api_status_rejects_a_wrong_token(self, server, token):
+        status, _ = _get(f"{server}/api/status", "not-the-token")
+        assert status == 401
+
+    def test_api_status_denied_when_no_token_is_configured(self, server):
+        """Fails closed: an unconfigured dashboard serves nothing."""
+        status, _ = _get(f"{server}/api/status")
+        assert status == 401
+
+    def test_root_serves_html_without_a_token(self, server):
+        """The shell page carries no data — it must load to prompt for one."""
+        status, body = _get(f"{server}/")
+        assert status == 200
         assert "EL FAGER" in body
 
     def test_unknown_path_404(self, server):
@@ -239,7 +291,79 @@ class TestStartDashboard:
         srv = db.start_dashboard()
         assert srv is not None
         port = srv.server_address[1]
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status",
-                                    timeout=5) as r:
-            assert r.status == 200
+        generated = json.loads(
+            (isolated / "data" / "settings.json").read_text(encoding="utf-8")
+        )["dashboard_token"]
+        assert generated, "start_dashboard must generate a token"
+        status, _ = _get(f"http://127.0.0.1:{port}/api/status", generated)
+        assert status == 200
         srv.shutdown()
+
+
+class TestRosterSection:
+    def test_snapshot_lists_every_agent(self):
+        from core.dashboard import build_snapshot
+        from core.agents.registry import ROSTER
+        roster = build_snapshot()["roster"]
+        callsigns = {a["callsign"] for a in roster["agents"]}
+        assert callsigns == {spec.callsign for spec in ROSTER.values()}
+
+    def test_pass_rates_come_from_the_ledger(self):
+        from core.agents import ledger
+        from core.dashboard import build_snapshot
+        ledger.record("Sage", "research brokers", "pass")
+        ledger.record("Sage", "research rates", "fail", reason="declined")
+        agents = {a["callsign"]: a for a in build_snapshot()["roster"]["agents"]}
+        assert agents["Sage"]["runs"] == 2
+        assert agents["Sage"]["pass_rate"] == 50
+        assert agents["Argus"]["runs"] == 0
+
+    def test_work_in_flight_is_visible(self):
+        from core.agents import ledger
+        from core.dashboard import build_snapshot
+        token = ledger.start_run("Nomad", "book a table", "voice")
+        try:
+            agents = {a["callsign"]: a for a in build_snapshot()["roster"]["agents"]}
+            assert agents["Nomad"]["working_on"] == "book a table"
+        finally:
+            ledger.finish_run(token)
+
+    def test_a_corrupt_ledger_degrades_instead_of_breaking_the_page(self, monkeypatch):
+        from core.dashboard import build_snapshot
+        monkeypatch.setattr(
+            "core.agents.ledger.roster_status",
+            lambda days=1: (_ for _ in ()).throw(ValueError("corrupt")),
+        )
+        assert build_snapshot()["roster"] == {"agents": [], "recent": []}
+
+
+class TestRateLimiting:
+    """A correct token is cheap to check; a wrong one should not be free.
+
+    The command channel reaches every tool, and the token crosses the LAN in
+    clear text, so both guessing and flooding need a ceiling.
+    """
+
+    def test_repeated_bad_tokens_start_getting_429(self, server, token):
+        codes = [_get(f"{server}/api/status", "wrong")[0] for _ in range(8)]
+        assert codes[:db._AUTH_FAILURES_PER_MIN] == [401] * db._AUTH_FAILURES_PER_MIN
+        assert codes[db._AUTH_FAILURES_PER_MIN:] == [429] * (8 - db._AUTH_FAILURES_PER_MIN)
+
+    def test_the_right_token_still_works_while_someone_guesses(self, server, token):
+        for _ in range(8):
+            _get(f"{server}/api/status", "wrong")
+        status, _ = _get(f"{server}/api/status", token)
+        assert status == 200, "throttling a guesser must not lock out the owner"
+
+    def test_the_window_is_per_client(self):
+        limiter = db._RateLimiter(limit=2)
+        assert limiter.allow("10.0.0.1") and limiter.allow("10.0.0.1")
+        assert not limiter.allow("10.0.0.1")
+        assert limiter.allow("10.0.0.2"), "one client must not throttle another"
+
+    def test_entries_expire_with_the_window(self):
+        limiter = db._RateLimiter(limit=1, window_sec=0.05)
+        assert limiter.allow("10.0.0.1")
+        assert not limiter.allow("10.0.0.1")
+        time.sleep(0.06)
+        assert limiter.allow("10.0.0.1")

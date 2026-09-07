@@ -6,6 +6,9 @@ from typing import Any
 
 import anthropic
 
+from core import atomic
+from core.agents import registry as _registry
+
 
 def _is_transient_error(exc: Exception) -> bool:
     """True for errors worth retrying: rate limits, timeouts, flaky connections."""
@@ -378,10 +381,6 @@ TOOLS: list[dict[str, Any]] = [
                 "command": {
                     "type": "string",
                     "description": "PowerShell command to execute"
-                },
-                "safe_mode": {
-                    "type": "boolean",
-                    "description": "Block destructive commands (del, rm, format, shutdown...). Default true."
                 }
             },
             "required": ["command"]
@@ -2392,6 +2391,67 @@ TOOLS: list[dict[str, Any]] = [
     },
     # ── Spotify Tools ──────────────────────────────────────────────────────────
     {
+        "name": "youtube_search",
+        "description": (
+            "Search YouTube for a video by name and open the top result in Comet. "
+            "Use when Mo says 'play X on youtube', 'find the video X', "
+            "'search youtube for X', or names a song/clip he wants to watch."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to search YouTube for"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "youtube_latest",
+        "description": (
+            "Open the newest video from a YouTube channel in Comet. Use when Mo "
+            "asks for the latest/newest video from a channel, or 'what did X post'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string",
+                    "description": "Channel handle (@name), display name, URL, or UC... channel ID",
+                }
+            },
+            "required": ["channel"]
+        }
+    },
+    {
+        "name": "open_web_search",
+        "description": (
+            "Open a web search for a task in Comet so Mo can read the results "
+            "himself. Use when he says 'search the web/internet for X', 'look X "
+            "up', or 'google X' — i.e. he wants the browser, not a spoken answer. "
+            "Use web_search instead when he wants YOU to read the web and answer."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "What to search for"}
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "open_comet",
+        "description": (
+            "Open the Comet browser, optionally at a URL. Use for 'open the "
+            "browser', 'open comet', or 'open <site>'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Optional URL to open"}
+            }
+        }
+    },
+    {
         "name": "play_music",
         "description": "Search and play a song, artist, album, or playlist on Spotify. Detects mood keywords (chill, focus, workout, sad, happy, sleep) and picks a matching playlist.",
         "input_schema": {
@@ -4181,102 +4241,66 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Check if phone notifications are configured and working. Returns setup instructions if not configured.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # The six specialist agents are declared once in core/agents/registry.py --
+    # callsign, role, timeout and schema all live there, so adding an agent
+    # means adding one AgentSpec rather than editing this list.
+    *_registry.tool_schemas(),
     {
-        "name": "screen_agent",
+        "name": "delegate",
         "description": (
-            "Multi-step desktop control agent -- sees the screen and performs a sequence of "
-            "clicks, typing, and keyboard shortcuts to complete a task (up to 10 internal steps). "
-            "Use for: clicking buttons/links, dragging files, scrolling, multi-step UI automation "
-            "('open and then...', 'automate the...', 'control the app'). Do NOT use for a single "
-            "one-shot description of the screen -- use analyze_screen for that."
+            "Assign a task to one named agent and VERIFY it was actually done. Use when Mo "
+            "names an agent ('have Sage research X', 'get Scribe to read this contract'), or "
+            "when a task matters enough that you want it checked rather than assumed. Warden "
+            "inspects the result against the acceptance criteria; a failure is retried once "
+            "and then reported back to you. Prefer this over calling the agent tool directly "
+            "whenever the work must be confirmed complete."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "agent": {
+                    "type": "string",
+                    "description": "Agent callsign (Argus, Nomad, Midas, Sage, Scribe, Vitals) or tool name."
+                },
                 "task": {
                     "type": "string",
-                    "description": "The user's desktop-control request, verbatim or lightly cleaned up."
-                }
+                    "description": "What the agent must do, stated as a complete instruction."
+                },
+                "acceptance": {
+                    "type": "string",
+                    "description": "What a finished result must contain, e.g. 'at least 3 brokers with fee numbers'. Optional."
+                },
             },
-            "required": ["task"]
+            "required": ["agent", "task"]
         }
     },
     {
-        "name": "browser_agent",
+        "name": "agent_roster",
         "description": (
-            "Multi-step browser automation agent -- navigates websites, fills forms, logs in, and "
-            "completes multi-step web tasks. Use for: 'book a table/flight', 'log into', "
-            "'fill out the form', 'search on amazon/google', or any task naming a specific website "
-            "or '.com/.org/.net'. Do NOT use for one-off single actions when a simpler browser_* "
-            "instant tool suffices."
+            "List the agents you command, what each one does, and which are working right now. "
+            "Use for: 'who are your agents', 'what are your agents doing', 'what is Sage doing'."
         ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's web-automation request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "research_agent",
+        "name": "agent_report",
         "description": (
-            "Deep multi-source web research agent -- searches, reads multiple pages, and "
-            "synthesizes a single coherent answer. Use for: 'research everything about X', "
-            "'tell me everything about X', 'investigate X', 'comprehensive analysis of X', "
-            "'compare and contrast X and Y', 'summarize the news about X'. Do NOT use for quick "
-            "factual lookups -- use wikipedia_lookup or web_search for those."
+            "What your agents did and how much of it passed Warden's inspection. Use for: "
+            "'what did your agents do today', 'what did Sage do', 'did anything fail'."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "task": {
+                "agent": {
                     "type": "string",
-                    "description": "The research question or topic, verbatim or lightly cleaned up."
-                }
+                    "description": "Callsign to report on. Omit for the whole roster."
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "How many days back to look. Default 1."
+                },
             },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "file_agent",
-        "description": (
-            "Document intelligence agent -- reads and answers questions about PDFs, Word docs, "
-            "spreadsheets, and images. Use for: 'summarize this pdf/document/contract/invoice/"
-            "thesis/report', 'what does this file say', 'extract from this', 'what were the "
-            "payment terms'. Pass the file reference and the question together in the task string."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The file reference and question together, e.g. 'summarize my_contract.pdf'."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "health_agent",
-        "description": (
-            "Nutrition and gym tracking agent -- logs meals, calculates macros/TDEE, generates "
-            "workout programs and recipes. Use for: 'I just ate X', 'log my meal', 'calories "
-            "today', 'my macros', 'recipe for X', 'chest day', 'finished my workout', 'generate a "
-            "training program', 'what should I do today at the gym'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's nutrition or workout request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
+            "required": []
         }
     },
     {
@@ -4462,8 +4486,8 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "set_reminder", "list_reminders", "cancel_reminder",
     "get_battery_status", "get_clipboard_history",
     "analyze_screen", "ocr_screenshot",
-    "screen_agent", "browser_agent",
-    "research_agent", "file_agent", "health_agent",
+    *_registry.tool_names(),
+    "delegate", "agent_roster", "agent_report",
     "run_skill", "list_skills", "learn_skill",
 })
 
@@ -4502,7 +4526,8 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "browser_back", "browser_get_links", "browser_select",
     }),
     "media": frozenset({
-        "play_music", "pause_music", "next_track", "what_playing", "set_volume", "spotify_status",
+        "youtube_search", "youtube_latest", "open_web_search", "open_comet",
+    "play_music", "pause_music", "next_track", "what_playing", "set_volume", "spotify_status",
     }),
     "system": frozenset({
         "set_system_volume", "get_system_volume", "mute_system", "set_brightness",
@@ -4832,6 +4857,29 @@ def _select_tools(message: str, history: list | None = None) -> list:
     return [t for t in _SLIM_TOOLS if t["name"] in names]
 
 
+_LIVE_CONFIG_PATH = "data/trading_config.json"
+
+
+def _write_live_config(config_path: str) -> str:
+    """Write mode: live to trading_config.json. Returns cp1252-safe confirmation."""
+    import json
+    from pathlib import Path
+    p = Path(config_path)
+    cfg: dict = {}
+    if p.exists():
+        try:
+            cfg = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    cfg["mode"] = "live"
+    p.parent.mkdir(exist_ok=True)
+    atomic.write(p, json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return (
+        "LIVE TRADING ACTIVATED. El Fager will now trade with real money. "
+        "Say 'pause trading' at any time to halt all autonomous trading."
+    )
+
+
 _MAX_TOOL_ITERATIONS = 15
 
 _HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
@@ -4853,6 +4901,8 @@ class Brain:
         self.memory = memory
         self.conversation_history: list[dict] = []
         self._offline_mode = False
+        self._live_pending: bool = False
+        self._live_pending_ts: float = 0.0
         # Tool names selected so far this conversation. The Anthropic cache
         # prefix runs tools -> system -> messages, so a changing tools array
         # invalidates the whole cached prefix. Holding the set and only ever
@@ -4966,7 +5016,10 @@ class Brain:
             elif name == "open_app":
                 return open_app(**tool_input)
             elif name == "run_command":
-                return run_command(**tool_input)
+                # Only the command. safe_mode is deliberately not passed
+                # through: the guardrail is not the model's to lift, and a
+                # dropped schema field does not stop a model emitting the key.
+                return run_command(command=tool_input["command"])
             elif name == "get_clipboard":
                 return get_clipboard_text()
             elif name == "set_clipboard":
@@ -5597,6 +5650,18 @@ class Brain:
                 from tools.analytics_tool import profit_loss_report
                 return profit_loss_report(tool_input.get("period", "month"))
             # ── Spotify ───────────────────────────────────────────────────────────
+            elif name == "youtube_search":
+                from tools.youtube_tool import youtube_search
+                return youtube_search(tool_input["query"])
+            elif name == "youtube_latest":
+                from tools.youtube_tool import youtube_latest
+                return youtube_latest(tool_input["channel"])
+            elif name == "open_web_search":
+                from tools.web_tool import open_web_search
+                return open_web_search(tool_input["task"])
+            elif name == "open_comet":
+                from tools.comet_tool import open_comet
+                return open_comet(tool_input.get("url", ""))
             elif name == "play_music":
                 from tools.spotify_tool import play_music
                 return play_music(tool_input["query"])
@@ -6236,21 +6301,26 @@ class Brain:
             elif name == "notification_status":
                 from tools.notify_tool import notification_status as _notif_status
                 return _notif_status()
-            elif name == "screen_agent":
-                from core.agents.screen_agent import ScreenAgent
-                return ScreenAgent().run(tool_input["task"])
-            elif name == "browser_agent":
-                from core.agents.browser_agent import BrowserAgent
-                return BrowserAgent().run(tool_input["task"])
-            elif name == "research_agent":
-                from core.agents.research_agent import ResearchAgent
-                return ResearchAgent().run(tool_input["task"])
-            elif name == "file_agent":
-                from core.agents.file_agent import FileAgent
-                return FileAgent().run(tool_input["task"])
-            elif name == "health_agent":
-                from core.agents.health_agent import HealthAgent
-                return HealthAgent().run(tool_input["task"])
+            elif name in _registry.ROSTER:
+                # Live turn: Mo reads the answer himself, so Warden does not
+                # inspect it. The supervisor still enforces the agent's timeout
+                # and writes the run to the ledger.
+                from core.agents.supervisor import assign as _assign
+                return _assign(name, tool_input["task"], verify=False,
+                               source="voice").speech
+            elif name == "delegate":
+                from tools.agent_tool import delegate as _delegate
+                return _delegate(
+                    tool_input["agent"],
+                    tool_input["task"],
+                    tool_input.get("acceptance"),
+                )
+            elif name == "agent_roster":
+                from tools.agent_tool import agent_roster as _roster
+                return _roster()
+            elif name == "agent_report":
+                from tools.agent_tool import agent_report as _report
+                return _report(tool_input.get("agent"), tool_input.get("days", 1))
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)
@@ -6299,6 +6369,82 @@ class Brain:
             if _is_transient_error(e):
                 raise  # let _dispatch_tool retry with backoff
             return f"Tool error ({name}): {e}"
+
+    def _try_agent_dispatch(self, task: str) -> str | None:
+        """Intercept financial-safety state-machine commands before the tool loop.
+
+        Specialist agents are reachable as tools inside the main chat() loop
+        instead -- they are declared in core/agents/registry.py and dispatched
+        through core/agents/supervisor.py. Only the live-trading
+        confirmation flow stays here: it's a deterministic 60-second
+        confirmation window that must not be left to LLM tool-use judgment.
+        """
+        from core.agents.router import classify_intent, parse_callsign
+        intent = classify_intent(task)
+        if intent == "gate_check":
+            from core.trade_tracker import TradeTracker
+            from core.paper_metrics import PaperMetrics
+            TradeTracker().sync()
+            return PaperMetrics().gate_summary()
+        if intent == "confirm_live":
+            import time as _time
+            if not self._live_pending:
+                self._live_pending = True
+                self._live_pending_ts = _time.monotonic()
+                return (
+                    "CAUTION: You are about to switch to REAL money trading. "
+                    "Say 'confirm live trading' again within 60 seconds to activate. "
+                    "Say 'cancel live trading' to abort."
+                )
+            elapsed = _time.monotonic() - self._live_pending_ts
+            self._live_pending = False
+            self._live_pending_ts = 0.0
+            if elapsed > 60.0:
+                return (
+                    "Live trading activation timed out. "
+                    "Say 'confirm live trading' to start over."
+                )
+            from core.paper_metrics import PaperMetrics
+            if not PaperMetrics().compute()["gate_pass"]:
+                return PaperMetrics().gate_summary()
+            return _write_live_config(_LIVE_CONFIG_PATH)
+        if intent == "cancel_live":
+            self._live_pending = False
+            self._live_pending_ts = 0.0
+            return "Live trading activation cancelled."
+
+        # Mo addressing one agent by name ("Sage, research X") goes straight to
+        # that agent -- no LLM turn spent choosing a tool. Checked AFTER the
+        # financial-safety intents above so a callsign cannot bypass them.
+        named = parse_callsign(task)
+        if named is not None:
+            tool_name, agent_task = named
+            from core.agents.supervisor import assign as _assign
+            return _assign(tool_name, agent_task, verify=False,
+                           source="callsign").speech
+        return None
+
+    def _try_play_music(self, message: str) -> str | None:
+        """Handle a plain 'play <song>' without going to the model.
+
+        Returns None for anything that isn't unambiguously a play command, so
+        vaguer requests still get the tool loop's judgment.
+        """
+        try:
+            from tools.spotify_tool import match_play_command, play_music
+        except Exception:
+            return None
+        matched = match_play_command(message)
+        if matched is None:
+            return None
+        query, arabic = matched
+        result = play_music(query, arabic=arabic)
+        # Bracketed results are the tool's error convention (not set up, no
+        # Premium, no device) and nothing started playing. Let the tool loop
+        # phrase those — they'd otherwise be read out as-is.
+        if result.startswith("["):
+            return None
+        return result
 
     def _create_message(self, _telemetry_source: str, on_text=None, **kwargs):
         """All brain API calls route through here: times the call and records
@@ -6401,9 +6547,26 @@ class Brain:
         # on_text -> optional streaming callback, see _create_message.
         hist = history if history is not None else self.conversation_history
 
+        # The live-trading confirmation window is a deterministic 60s
+        # state machine and must not be left to tool-use judgment.
+        _agent_result = self._try_agent_dispatch(user_message)
+        if _agent_result is not None:
+            return _agent_result
+
         # Log user turn
         if self._logger:
             self._logger.log("user", user_message)
+
+        # "play X" goes straight to Spotify — the two API round trips the tool
+        # loop would spend (decide to call play_music, then phrase the reply)
+        # add seconds to a request whose answer is already known.
+        _play_result = self._try_play_music(user_message)
+        if _play_result is not None:
+            hist.append({"role": "user", "content": user_message})
+            hist.append({"role": "assistant", "content": _play_result})
+            if self._logger:
+                self._logger.log("assistant", _play_result, ["play_music"])
+            return _play_result
 
         system = self._build_system(memory_context)
         turn_model = self._select_model(user_message)

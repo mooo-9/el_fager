@@ -9,6 +9,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from core import atomic
 
 _TASKS_PATH = Path("data/autonomous_tasks.json")
 
@@ -132,7 +133,7 @@ class AutonomousTaskManager:
 
     def _save(self, tasks: list[dict]) -> None:
         _TASKS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _TASKS_PATH.write_text(
+        atomic.write(_TASKS_PATH,
             json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

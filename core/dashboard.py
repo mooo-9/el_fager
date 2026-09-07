@@ -14,10 +14,13 @@ dashboard_port (default 8765), dashboard_host (default 127.0.0.1 — set to
 code through the brain, so LAN exposure is opt-in).
 """
 import json
+import secrets
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from core import atomic
 
 _SETTINGS_PATH = Path("data/settings.json")
 _DATA = Path("data")
@@ -484,6 +487,31 @@ def build_snapshot() -> dict:
     with _LIVE_LOCK:
         snap["live"] = dict(_LIVE)
 
+
+    try:
+        from core.agents import ledger, registry
+        stats = ledger.roster_status(days=1)
+        working = {r["callsign"]: r["task"] for r in ledger.active_runs()}
+        snap["roster"] = {
+            "agents": [
+                {
+                    "callsign": spec.callsign,
+                    "role": spec.role,
+                    "runs": stats.get(spec.callsign, {}).get("runs", 0),
+                    "pass_rate": stats.get(spec.callsign, {}).get("pass_rate", 0),
+                    "last_verdict": stats.get(spec.callsign, {}).get("last_verdict"),
+                    "working_on": working.get(spec.callsign),
+                }
+                for spec in registry.ROSTER.values()
+            ],
+            "recent": [
+                {"ts": e["ts"][11:16], "callsign": e["callsign"],
+                 "verdict": e["verdict"], "task": e["task"][:70]}
+                for e in ledger.recent(n=10, days=1)
+            ],
+        }
+    except Exception:
+        snap["roster"] = {"agents": [], "recent": []}
     return snap
 
 
@@ -619,6 +647,7 @@ function tick(){const d=new Date();
  $('clock').textContent=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 setInterval(tick,1000);tick();
 
+let _timer=null;
 function token(){
  let t=localStorage.getItem('elf_token');
  if(!t){t=prompt('Dashboard token (data/settings.json → dashboard_token):');
@@ -706,7 +735,11 @@ function stepClass(s){return s==='done'?'done':s==='failed'?'failed':'pending';}
 
 async function load(){
  let s;
- try{const r=await fetch('/api/status');s=await r.json();}
+ try{const r=await fetch('/api/status',
+   {headers:{'Authorization':'Bearer '+token()}});
+  if(r.status===401){localStorage.removeItem('elf_token');
+    if(_timer)clearInterval(_timer);return;}
+  s=await r.json();}
  catch(e){$('date').textContent='offline — '+e;return;}
 
  // hero
@@ -810,13 +843,51 @@ async function load(){
  $('grid').innerHTML=g;
  $('foot').textContent='snapshot '+(s.generated_at||'')+'  ·  up since '+(s.started_at||'');
 }
-load();setInterval(load,30000);
+load();_timer=setInterval(load,30000);
 </script></body></html>"""
 
 
 _PAGE = _PAGE.replace("__TOKENS__", _token_css()).replace("__FONTS__", _font_css())
 
 _MAX_COMMAND_CHARS = 500
+
+
+_AUTH_FAILURES_PER_MIN = 5      # then the guesser waits
+_COMMANDS_PER_MIN = 10          # a person types slower than this
+
+
+class _RateLimiter:
+    """Sliding-window counter keyed by client address.
+
+    The server is threaded, so every touch takes the lock. Entries are dropped
+    once their window empties, which keeps the dict the size of the set of
+    clients actually talking to it.
+    """
+
+    def __init__(self, limit: int, window_sec: float = 60.0):
+        self._limit = limit
+        self._window = window_sec
+        self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            hits = [t for t in self._hits.get(key, ()) if now - t <= self._window]
+            if len(hits) >= self._limit:
+                self._hits[key] = hits
+                return False
+            hits.append(now)
+            self._hits[key] = hits
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hits.clear()
+
+
+_auth_failures = _RateLimiter(_AUTH_FAILURES_PER_MIN)
+_commands = _RateLimiter(_COMMANDS_PER_MIN)
 
 
 def _expected_token() -> str:
@@ -867,8 +938,31 @@ def confirm_send(payload: dict) -> dict:
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def _authorized(self) -> bool:
+        """Bearer token check. Fails closed: no configured token, no access."""
+        expected = _expected_token()
+        if not expected:
+            return False
+        supplied = self.headers.get("Authorization", "")
+        return secrets.compare_digest(supplied, f"Bearer {expected}")
+
+    def _unauthorized(self) -> None:
+        """401 — or 429 once this client has been guessing at the token."""
+        if _auth_failures.allow(self.client_address[0]):
+            self._send(401, "application/json",
+                       b'{"error": "missing or invalid token"}')
+        else:
+            self._send(429, "application/json",
+                       b'{"error": "too many attempts, wait a minute"}')
+
     def do_GET(self):
         if self.path == "/api/status":
+            # Trades, API spend and task descriptions — token required. The
+            # shell page below carries no data, so it stays open for the
+            # browser to load and prompt for the token.
+            if not self._authorized():
+                self._unauthorized()
+                return
             mark_viewed()
             body = json.dumps(build_snapshot()).encode("utf-8")
             self._send(200, "application/json", body)
@@ -919,11 +1013,12 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path not in self._POST_ROUTES:
             self._send(404, "text/plain", b"not found")
             return
-        expected = _expected_token()
-        supplied = self.headers.get("Authorization", "")
-        if not expected or supplied != f"Bearer {expected}":
-            self._send(401, "application/json",
-                       b'{"error": "missing or invalid token"}')
+        if not self._authorized():
+            self._unauthorized()
+            return
+        if not _commands.allow(self.client_address[0]):
+            self._send(429, "application/json",
+                       b'{"error": "too many commands, wait a minute"}')
             return
         try:
             payload = json.loads(raw.decode("utf-8"))
@@ -976,7 +1071,7 @@ def _ensure_token(settings: dict) -> dict:
         settings["dashboard_token"] = secrets.token_urlsafe(24)
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _SETTINGS_PATH.write_text(
+            atomic.write(_SETTINGS_PATH,
                 json.dumps(settings, indent=2, ensure_ascii=False),
                 encoding="utf-8")
         except Exception:

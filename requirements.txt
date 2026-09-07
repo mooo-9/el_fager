@@ -75,9 +75,7 @@ notion-client>=2.2.1
 todoist-api-python>=2.1.7
 
 # Phase 5B deps — YouTube transcript
-# 1.x replaced the classmethod API with an instance one; youtube_tool.py
-# targets 1.x, so the floor has to keep it out of 0.x.
-youtube-transcript-api>=1.0.0
+youtube-transcript-api>=0.6.0
 
 # Phase 6B deps — News reader
 feedparser>=6.0.11
@@ -94,3 +92,22 @@ pycaw>=20230710    # Windows system volume control
 
 # Phase 7A — Proactive Scheduler
 apscheduler>=3.10.0
+
+# Phase 10 — Autonomous Trading Engine
+alpaca-py>=0.8.2
+
+# Undeclared until now — imported by shipped code but missing from this file,
+# so a fresh install per the README silently lost these features at runtime.
+cryptography>=42.0.0        # core/vault.py — encrypted credential store
+yfinance>=0.2.40            # stocks/bond tools + the HUD market ticker
+pywin32>=306                # clipboard, window control, printing
+pyautogui>=0.9.54           # mouse/keyboard control, screen agent
+pygetwindow>=0.0.9          # tools/window_tool.py
+pdfplumber>=0.11.0          # core/agents/file_agent.py
+pypdf>=4.0.0                # tools/pdf_tool.py — merge/split/rotate
+reportlab>=4.0.0            # tools/pdf_tool.py — PDF creation
+playwright>=1.44.0          # browser + research agents (run `playwright install` once)
+opencv-python>=4.9.0        # tools/screen_record_tool.py
+plyer>=2.1.0                # tools/reminder_tool.py — toast fallback
+qrcode[pil]>=7.4.0          # tools/dev_utils_tool.py
+speedtest-cli>=2.1.3        # tools/network_tool.py

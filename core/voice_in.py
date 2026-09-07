@@ -17,6 +17,7 @@ import os
 import queue
 import threading
 import wave as _wave
+from typing import Callable
 import numpy as np
 import sounddevice as sd
 
@@ -237,19 +238,29 @@ class VoiceInput:
 
     # ── Recording ──────────────────────────────────────────────────────────────
 
-    def record_audio(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def record_audio(
+        self,
+        on_chunk: "Callable[[float], None] | None" = None,
+        start_timeout_sec: float | None = None,
+    ) -> "np.ndarray | None":
         """
         Record until the speaker is truly done talking.
         Uses Silero VAD if loaded, otherwise falls back to RMS silence detection.
+        on_chunk, if given, is called with a 0.0-1.0 amplitude estimate per chunk
+        (from the recording thread — safe to bridge into a Qt signal).
         start_timeout_sec: give up (return None) if speech hasn't started within
         this many seconds — used by conversation mode's follow-up window.
         """
         self._stop_flag.clear()
         if self._vad_model is not None:
-            return self._record_vad(start_timeout_sec)
-        return self._record_rms(start_timeout_sec)
+            return self._record_vad(on_chunk, start_timeout_sec)
+        return self._record_rms(on_chunk, start_timeout_sec)
 
-    def _record_vad(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def _record_vad(
+        self,
+        on_chunk: "Callable[[float], None] | None" = None,
+        start_timeout_sec: float | None = None,
+    ) -> "np.ndarray | None":
         """
         Neural end-of-speech via Silero VAD.
         Stops only after END_SILENCE_SEC of frames the model says aren't speech.
@@ -291,6 +302,9 @@ class VoiceInput:
                     continue
 
                 chunks.append(chunk)
+                if on_chunk is not None:
+                    rms = float(np.sqrt(np.mean(chunk ** 2)))
+                    on_chunk(min(1.0, rms * 6.0))
 
                 with torch.no_grad():
                     prob = self._vad_model(
@@ -315,7 +329,11 @@ class VoiceInput:
         trim = max(len(chunks) - end_frames + trail_frames, 1)
         return np.concatenate(chunks[:trim]).flatten()
 
-    def _record_rms(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def _record_rms(
+        self,
+        on_chunk: "Callable[[float], None] | None" = None,
+        start_timeout_sec: float | None = None,
+    ) -> "np.ndarray | None":
         """RMS fallback — 2.5 s silence window, 100 ms chunks."""
         chunk_size = int(SAMPLE_RATE * RMS_CHUNK_SEC)
         silence_needed = int(RMS_SILENCE_SEC / RMS_CHUNK_SEC)
@@ -342,6 +360,8 @@ class VoiceInput:
                 if not chunks:
                     continue
                 rms = float(np.sqrt(np.mean(chunks[-1] ** 2)))
+                if on_chunk is not None:
+                    on_chunk(min(1.0, rms * 6.0))
                 if rms >= RMS_THRESHOLD:
                     speech_started = True
                     consec_silence = 0

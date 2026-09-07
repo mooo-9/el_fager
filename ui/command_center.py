@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 from ui import theme, tokens
 from ui.overlay import MessageBubble, _load_settings, _save_settings
 from ui.widgets import Chip, DayArc, FlowHost, MacroBar, Sparkline, StatTile
+from core import atomic
 
 _CACHE_FILE = Path("data/command_center_cache.json")
 _DATA_DIR = Path(__file__).parent.parent / "data"
@@ -1169,7 +1170,7 @@ class CommandCenterWindow(QWidget):
             else:
                 cache[key] = value
             _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _CACHE_FILE.write_text(
+            atomic.write(_CACHE_FILE,
                 json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8"
             )
         except Exception as e:

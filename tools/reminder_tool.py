@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from core import atomic
 
 _DATA_FILE = Path(__file__).parent.parent / "data" / "reminders.json"
 
@@ -16,7 +17,7 @@ def _load() -> list:
 
 def _save(reminders: list) -> None:
     _DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _DATA_FILE.write_text(
+    atomic.write(_DATA_FILE,
         json.dumps(reminders, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

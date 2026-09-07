@@ -19,11 +19,14 @@ class FakeVoiceIn:
     def __init__(self, utterances):
         self._utterances = list(utterances)
         self.timeouts = []
+        self.on_chunks = []
 
     def is_ready(self):
         return True
 
-    def record_audio(self, start_timeout_sec=None):
+    def record_audio(self, on_chunk=None, start_timeout_sec=None):
+        # on_chunk is the live mic level the HUD waveform reads (from #1).
+        self.on_chunks.append(on_chunk)
         self.timeouts.append(start_timeout_sec)
         if self._utterances:
             return np.ones(16000, dtype=np.float32)
