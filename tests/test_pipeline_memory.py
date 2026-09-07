@@ -5,7 +5,15 @@ holds the previous turns when the next pipeline run starts.
 """
 from unittest.mock import MagicMock
 
-import core.pipeline as pipeline
+import pytest
+
+# core.pipeline pulls in PyQt6, numpy and sounddevice. requirements-dev.txt
+# deliberately omits the heavy runtime deps, so CI skips this the same way
+# tests/_optional.py handles the rest; it runs for real on the target machine.
+pipeline = pytest.importorskip(
+    "core.pipeline",
+    reason="needs PyQt6 + numpy + sounddevice (runtime deps, not in requirements-dev)",
+)
 
 
 def _worker(text: str):
