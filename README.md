@@ -47,6 +47,24 @@ python main.py
 
 El Fager starts silently in the system tray. **Right-click the tray icon** and pin it to the taskbar if Windows hides it in the overflow area.
 
+### 4. Autostart (optional)
+
+El Fager does **not** start on its own until you register the watchdog task:
+
+```powershell
+.\setup_watchdog.ps1
+```
+
+That scheduled task is the single autostart path — it launches El Fager at
+logon and restarts it if it crashes. Quitting from the tray menu stops both the
+app and the watchdog until your next logon.
+
+To stop it starting at logon:
+
+```powershell
+Unregister-ScheduledTask -TaskName 'El Fager Watchdog' -Confirm:$false
+```
+
 ---
 
 ## First Launch (What to Expect)
