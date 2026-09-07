@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from http.server import ThreadingHTTPServer
 import threading
+import time
 
 import pytest
 
@@ -21,6 +22,16 @@ def isolated(tmp_path, monkeypatch):
 
 
 _TOKEN = "test-token-not-a-real-secret"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The limiters are module state shared by every test in the process."""
+    db._auth_failures.reset()
+    db._commands.reset()
+    yield
+    db._auth_failures.reset()
+    db._commands.reset()
 
 
 @pytest.fixture
@@ -69,15 +80,16 @@ class TestSnapshot:
             assert word not in blob
 
 
-class TestServer:
-    @pytest.fixture
-    def server(self, isolated):
-        srv = ThreadingHTTPServer(("127.0.0.1", 0), db._Handler)
-        t = threading.Thread(target=srv.serve_forever, daemon=True)
-        t.start()
-        yield f"http://127.0.0.1:{srv.server_address[1]}"
-        srv.shutdown()
+@pytest.fixture
+def server(isolated):
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), db._Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
 
+
+class TestServer:
     def test_api_status_serves_json(self, server, token):
         status, body = _get(f"{server}/api/status", token)
         assert status == 200
@@ -260,3 +272,35 @@ class TestRosterSection:
             lambda days=1: (_ for _ in ()).throw(ValueError("corrupt")),
         )
         assert build_snapshot()["roster"] == {"agents": [], "recent": []}
+
+
+class TestRateLimiting:
+    """A correct token is cheap to check; a wrong one should not be free.
+
+    The command channel reaches every tool, and the token crosses the LAN in
+    clear text, so both guessing and flooding need a ceiling.
+    """
+
+    def test_repeated_bad_tokens_start_getting_429(self, server, token):
+        codes = [_get(f"{server}/api/status", "wrong")[0] for _ in range(8)]
+        assert codes[:db._AUTH_FAILURES_PER_MIN] == [401] * db._AUTH_FAILURES_PER_MIN
+        assert codes[db._AUTH_FAILURES_PER_MIN:] == [429] * (8 - db._AUTH_FAILURES_PER_MIN)
+
+    def test_the_right_token_still_works_while_someone_guesses(self, server, token):
+        for _ in range(8):
+            _get(f"{server}/api/status", "wrong")
+        status, _ = _get(f"{server}/api/status", token)
+        assert status == 200, "throttling a guesser must not lock out the owner"
+
+    def test_the_window_is_per_client(self):
+        limiter = db._RateLimiter(limit=2)
+        assert limiter.allow("10.0.0.1") and limiter.allow("10.0.0.1")
+        assert not limiter.allow("10.0.0.1")
+        assert limiter.allow("10.0.0.2"), "one client must not throttle another"
+
+    def test_entries_expire_with_the_window(self):
+        limiter = db._RateLimiter(limit=1, window_sec=0.05)
+        assert limiter.allow("10.0.0.1")
+        assert not limiter.allow("10.0.0.1")
+        time.sleep(0.06)
+        assert limiter.allow("10.0.0.1")

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from core import atomic
 
 load_dotenv()
 
@@ -45,7 +46,7 @@ def _save_results(symbol: str, result) -> None:
     }
     import datetime
     data["_run_at"] = datetime.datetime.now().isoformat()
-    _RESULTS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(_RESULTS_PATH, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def run_backtest(symbol: str = "SPY", days: int = 730) -> str:

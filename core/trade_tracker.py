@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+from core import atomic
 
 _TRADES_PATH = Path("data/trades.json")
 _CONFIG_PATH = Path("data/trading_config.json")
@@ -27,7 +28,7 @@ class TradeTracker:
 
     def _save_trades(self, trades: list[dict]) -> None:
         _TRADES_PATH.parent.mkdir(exist_ok=True)
-        _TRADES_PATH.write_text(
+        atomic.write(_TRADES_PATH,
             json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

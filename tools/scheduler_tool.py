@@ -30,6 +30,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from core import atomic
 
 _WEEKDAYS = {
     "monday": "mon", "tuesday": "tue", "wednesday": "wed",
@@ -805,5 +806,5 @@ def clear_history() -> str:
     from core.scheduler import _HISTORY_FILE
     if not _HISTORY_FILE.exists():
         return "Schedule history is already empty."
-    _HISTORY_FILE.write_text("", encoding="utf-8")
+    atomic.write(_HISTORY_FILE, "", encoding="utf-8")
     return "Schedule history cleared."

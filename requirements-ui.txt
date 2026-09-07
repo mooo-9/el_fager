@@ -1,0 +1,16 @@
+# What CI installs to run tests/ui — the headless suite's deps plus Qt.
+#
+# Kept apart from requirements-dev.txt because that file is deliberately light:
+# the non-UI suite runs without Qt, and pulling ~100 MB of wheels into it would
+# slow every run for tests it never executes.
+#
+# Needs system libraries too (libEGL and friends) and a virtual display; the
+# `ui` job in .github/workflows/ci.yml installs both.
+#
+# Verified: QT_QPA_PLATFORM=offscreen xvfb-run pytest tests/ui -> 56 passed.
+
+-r requirements-dev.txt
+
+PyQt6>=6.11.0
+PyQt6-WebEngine>=6.11.0   # tests/ui/conftest.py imports QWebEngineWidgets
+psutil>=5.9.0             # ui/overlay.py imports it at module scope

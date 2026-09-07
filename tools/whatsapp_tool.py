@@ -21,6 +21,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from core import atomic
 
 CONTACTS_PATH = Path("data/contacts.json")
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
@@ -71,7 +72,7 @@ def _load_contacts() -> dict:
 
 def _save_contacts(contacts: dict) -> None:
     CONTACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONTACTS_PATH.write_text(
+    atomic.write(CONTACTS_PATH,
         json.dumps(contacts, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

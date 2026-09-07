@@ -17,6 +17,7 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+from core import atomic
 load_dotenv()
 
 _OUTPUT_DIR = Path("data/generated_images")
@@ -55,7 +56,7 @@ def _load_index() -> list[dict]:
 
 def _save_index(entries: list[dict]) -> None:
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    _INDEX_FILE.write_text(
+    atomic.write(_INDEX_FILE,
         json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

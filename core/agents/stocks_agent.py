@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 
 from core.agents.base_agent import BaseAgent
+from core import atomic
 
 _CONFIG_PATH = Path("data/trading_config.json")
 
@@ -252,7 +253,7 @@ class StocksAgent(BaseAgent):
                 trades = []
         trades.append(trade)
         path.parent.mkdir(exist_ok=True)
-        path.write_text(json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic.write(path, json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8")
 
         result_msg = (
             f"Bought {qty:.4f} {symbol} @ ~${current_price:.2f}. "
@@ -299,6 +300,6 @@ class StocksAgent(BaseAgent):
 
     def _save_config(self, cfg: dict) -> None:
         _CONFIG_PATH.parent.mkdir(exist_ok=True)
-        _CONFIG_PATH.write_text(
+        atomic.write(_CONFIG_PATH,
             json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
         )

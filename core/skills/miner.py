@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.skills.store import SkillStore
+from core import atomic
 
 _DEFAULT_CONVERSATIONS = Path("data/conversations")
 _DEFAULT_PROPOSALS = Path("data/skill_proposals.json")
@@ -70,7 +71,7 @@ class HabitMiner:
 
     def _save(self, proposals: list[dict]) -> None:
         self._proposals_path.parent.mkdir(parents=True, exist_ok=True)
-        self._proposals_path.write_text(
+        atomic.write(self._proposals_path,
             json.dumps(proposals, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

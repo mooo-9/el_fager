@@ -13,6 +13,7 @@ import shutil
 import threading
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 HOSTS_PATH = Path(r"C:\Windows\System32\drivers\etc\hosts")
 BACKUP_PATH = Path("data/hosts_backup.txt")
@@ -57,7 +58,7 @@ def _remove_block():
         end   = content.find(MARKER_END)
         if start != -1 and end != -1:
             cleaned = content[:start] + content[end + len(MARKER_END):].lstrip("\n")
-            HOSTS_PATH.write_text(cleaned, encoding="utf-8")
+            atomic.write(HOSTS_PATH, cleaned, encoding="utf-8")
     except Exception as e:
         print(f"[El Fager] Focus mode restore error: {e}")
 

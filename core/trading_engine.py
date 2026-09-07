@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 from zoneinfo import ZoneInfo
+from core import atomic
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ class TradingEngine:
                 trades = []
         trades.append(trade)
         _TRADES_PATH.parent.mkdir(exist_ok=True)
-        _TRADES_PATH.write_text(
+        atomic.write(_TRADES_PATH,
             json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
@@ -197,7 +198,7 @@ class TradingEngine:
             "signals": signals,
         }
         _STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _STATUS_PATH.write_text(
+        atomic.write(_STATUS_PATH,
             json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

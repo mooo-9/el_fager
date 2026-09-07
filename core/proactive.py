@@ -24,6 +24,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
+from core import atomic
 
 _STATE_FILE = Path("data/proactive_state.json")
 
@@ -90,7 +91,7 @@ class ProactiveEngine:
 
     def _save_state(self) -> None:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_FILE.write_text(
+        atomic.write(_STATE_FILE,
             json.dumps(self._state, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )

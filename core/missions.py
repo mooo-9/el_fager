@@ -16,6 +16,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 _MISSIONS_PATH = Path("data/missions.json")
 
@@ -44,7 +45,7 @@ class MissionManager:
 
     def _save(self, missions: list[dict]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
+        atomic.write(self._path,
             json.dumps(missions, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

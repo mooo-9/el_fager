@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+from core import atomic
 
 _CONFIG_PATH = Path("data/trading_config.json")
 _TRADES_PATH = Path("data/trades.json")
@@ -40,7 +41,7 @@ def _load_config() -> dict:
 
 def _save_config(cfg: dict) -> None:
     _CONFIG_PATH.parent.mkdir(exist_ok=True)
-    _CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(_CONFIG_PATH, json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _default_config() -> dict:

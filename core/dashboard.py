@@ -14,9 +14,11 @@ dashboard_port (default 8765), dashboard_host (default 0.0.0.0).
 import json
 import secrets
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from core import atomic
 
 _SETTINGS_PATH = Path("data/settings.json")
 _TRADES_PATH = Path("data/trades.json")
@@ -252,6 +254,44 @@ load();_timer=setInterval(load,30000);
 _MAX_COMMAND_CHARS = 500
 
 
+_AUTH_FAILURES_PER_MIN = 5      # then the guesser waits
+_COMMANDS_PER_MIN = 10          # a person types slower than this
+
+
+class _RateLimiter:
+    """Sliding-window counter keyed by client address.
+
+    The server is threaded, so every touch takes the lock. Entries are dropped
+    once their window empties, which keeps the dict the size of the set of
+    clients actually talking to it.
+    """
+
+    def __init__(self, limit: int, window_sec: float = 60.0):
+        self._limit = limit
+        self._window = window_sec
+        self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            hits = [t for t in self._hits.get(key, ()) if now - t <= self._window]
+            if len(hits) >= self._limit:
+                self._hits[key] = hits
+                return False
+            hits.append(now)
+            self._hits[key] = hits
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hits.clear()
+
+
+_auth_failures = _RateLimiter(_AUTH_FAILURES_PER_MIN)
+_commands = _RateLimiter(_COMMANDS_PER_MIN)
+
+
 def _expected_token() -> str:
     return str(_read_json(_SETTINGS_PATH, {}).get("dashboard_token", "") or "")
 
@@ -274,8 +314,13 @@ class _Handler(BaseHTTPRequestHandler):
         return secrets.compare_digest(supplied, f"Bearer {expected}")
 
     def _unauthorized(self) -> None:
-        self._send(401, "application/json",
-                   b'{"error": "missing or invalid token"}')
+        """401 — or 429 once this client has been guessing at the token."""
+        if _auth_failures.allow(self.client_address[0]):
+            self._send(401, "application/json",
+                       b'{"error": "missing or invalid token"}')
+        else:
+            self._send(429, "application/json",
+                       b'{"error": "too many attempts, wait a minute"}')
 
     def do_GET(self):
         if self.path == "/api/status":
@@ -298,6 +343,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             self._unauthorized()
+            return
+        if not _commands.allow(self.client_address[0]):
+            self._send(429, "application/json",
+                       b'{"error": "too many commands, wait a minute"}')
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -336,7 +385,7 @@ def _ensure_token(settings: dict) -> dict:
         settings["dashboard_token"] = secrets.token_urlsafe(24)
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _SETTINGS_PATH.write_text(
+            atomic.write(_SETTINGS_PATH,
                 json.dumps(settings, indent=2, ensure_ascii=False),
                 encoding="utf-8")
         except Exception:

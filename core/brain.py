@@ -6,6 +6,7 @@ from typing import Any
 import anthropic
 
 from core.agents import registry as _registry
+from core import atomic
 
 
 def _is_transient_error(exc: Exception) -> bool:
@@ -522,10 +523,6 @@ TOOLS: list[dict[str, Any]] = [
                 "command": {
                     "type": "string",
                     "description": "PowerShell command to execute"
-                },
-                "safe_mode": {
-                    "type": "boolean",
-                    "description": "Block destructive commands (del, rm, format, shutdown...). Default true."
                 }
             },
             "required": ["command"]
@@ -5058,7 +5055,7 @@ def _write_live_config(config_path: str) -> str:
             pass
     cfg["mode"] = "live"
     p.parent.mkdir(exist_ok=True)
-    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(p, json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     return (
         "LIVE TRADING ACTIVATED. El Fager will now trade with real money. "
         "Say 'pause trading' at any time to halt all autonomous trading."
@@ -5144,7 +5141,10 @@ class Brain:
             elif name == "open_app":
                 return open_app(**tool_input)
             elif name == "run_command":
-                return run_command(**tool_input)
+                # Only the command. safe_mode is deliberately not passed through:
+                # the guardrail is not the model's to lift, and a dropped schema
+                # field does not stop a model from emitting the key anyway.
+                return run_command(command=tool_input["command"])
             elif name == "get_clipboard":
                 return get_clipboard_text()
             elif name == "set_clipboard":
