@@ -6,6 +6,7 @@ import pytest
 
 import tools.spotify_tool as sp_tool
 from tools.spotify_tool import match_play_command
+from tests._optional import requires
 
 
 @pytest.fixture(autouse=True)
@@ -111,6 +112,7 @@ class TestDeviceCache:
         assert sp.devices.call_count == 1
         assert sp.start_playback.call_count == 2
 
+    @requires("spotipy")
     def test_stale_device_is_reprobed_once(self):
         from spotipy.exceptions import SpotifyException
         sp = self._fake_client()
