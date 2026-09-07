@@ -5,6 +5,8 @@ from typing import Any
 
 import anthropic
 
+from core.agents import registry as _registry
+
 
 def _is_transient_error(exc: Exception) -> bool:
     """True for errors worth retrying: rate limits, timeouts, flaky connections."""
@@ -412,9 +414,23 @@ Automation flow (propose, never impose): if run_skill's result asks you to offer
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
 Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
 API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
+Your agents (you are their commander, not their peer):
+Argus = desktop control and vision | Nomad = browser automation | Midas = markets and trading
+Sage = deep research | Scribe = documents and files | Vitals = nutrition and gym
+Herald = inbox and messaging | Chronos = calendar and reminders | Abacus = personal money | Forge = git and code
+Warden = your inspector; he checks every agent's result against what was asked.
+Herald, Chronos, Abacus and Forge lose their side-effecting tools when they work unattended (a mission, a queued task, a dashboard command): they draft and report instead of sending, deleting, or pushing. Say so when reporting -- never tell Mo something was sent when it was only drafted.
+When Mo names an agent ("have Sage research X", "get Scribe to read this contract") -> delegate(agent, task, acceptance).
+Use delegate whenever the work must be CONFIRMED done: Warden inspects the result, a failure is retried once, and you are told the verdict. Report that verdict -- if an agent failed, say so plainly and say what you will do next. Never claim work was done because an agent replied.
+Write acceptance criteria as what a finished result must CONTAIN ("at least 3 brokers with fee numbers"), not as a restatement of the task.
+Calling the agent tool directly (screen_agent, research_agent, ...) is the unverified fast path -- fine for a live answer Mo is reading right now, wrong for anything you must vouch for later.
+"who are your agents" / "what are they doing" -> agent_roster. "what did they do today" / "did anything fail" -> agent_report.
 Missions (multi-step background goals):
 Tools: start_mission, mission_status, cancel_mission.
 When Mo gives a BIG multi-part goal that cannot finish in one reply ("research X, compare Y, then write a summary", "plan and execute Z overnight") -> decompose it into 2-8 concrete self-contained steps and call start_mission(goal, steps). Steps run in the background, roughly one per minute; results flow into later steps; Mo is told on completion or blockage.
+Assign a step to an agent by prefixing it with @callsign, and state its acceptance criteria after ->:
+  @sage research European brokers -> at least 3 brokers with fee numbers
+An unassigned step is executed by you. Every step, assigned or not, is inspected by Warden before it counts as done.
 "how is the mission going" -> mission_status. "stop the mission" -> cancel_mission.
 Do NOT use a mission for anything you can finish now in one tool loop -- just do it. Do NOT use for simple recurring reminders (autonomous tasks) or saved routines (skills).
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
@@ -4469,122 +4485,66 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Check if phone notifications are configured and working. Returns setup instructions if not configured.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # The six specialist agents are declared once in core/agents/registry.py --
+    # callsign, role, timeout and schema all live there, so adding an agent
+    # means adding one AgentSpec rather than editing this list.
+    *_registry.tool_schemas(),
     {
-        "name": "screen_agent",
+        "name": "delegate",
         "description": (
-            "Multi-step desktop control agent -- sees the screen and performs a sequence of "
-            "clicks, typing, and keyboard shortcuts to complete a task (up to 10 internal steps). "
-            "Use for: clicking buttons/links, dragging files, scrolling, multi-step UI automation "
-            "('open and then...', 'automate the...', 'control the app'). Do NOT use for a single "
-            "one-shot description of the screen -- use analyze_screen for that."
+            "Assign a task to one named agent and VERIFY it was actually done. Use when Mo "
+            "names an agent ('have Sage research X', 'get Scribe to read this contract'), or "
+            "when a task matters enough that you want it checked rather than assumed. Warden "
+            "inspects the result against the acceptance criteria; a failure is retried once "
+            "and then reported back to you. Prefer this over calling the agent tool directly "
+            "whenever the work must be confirmed complete."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "agent": {
+                    "type": "string",
+                    "description": "Agent callsign (Argus, Nomad, Midas, Sage, Scribe, Vitals) or tool name."
+                },
                 "task": {
                     "type": "string",
-                    "description": "The user's desktop-control request, verbatim or lightly cleaned up."
-                }
+                    "description": "What the agent must do, stated as a complete instruction."
+                },
+                "acceptance": {
+                    "type": "string",
+                    "description": "What a finished result must contain, e.g. 'at least 3 brokers with fee numbers'. Optional."
+                },
             },
-            "required": ["task"]
+            "required": ["agent", "task"]
         }
     },
     {
-        "name": "browser_agent",
+        "name": "agent_roster",
         "description": (
-            "Multi-step browser automation agent -- navigates websites, fills forms, logs in, and "
-            "completes multi-step web tasks. Use for: 'book a table/flight', 'log into', "
-            "'fill out the form', 'search on amazon/google', or any task naming a specific website "
-            "or '.com/.org/.net'. Do NOT use for one-off single actions when a simpler browser_* "
-            "instant tool suffices."
+            "List the agents you command, what each one does, and which are working right now. "
+            "Use for: 'who are your agents', 'what are your agents doing', 'what is Sage doing'."
         ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's web-automation request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "stocks_agent",
+        "name": "agent_report",
         "description": (
-            "Deep market analysis and conviction-gated autonomous trading agent. Use for: "
-            "'analyze NVDA', 'should I buy/sell X', 'your thesis/opinion/view on X', "
-            "'conviction on X', 'scan my watchlist', 'why did you buy/sell X', 'my trading stats', "
-            "'pause/resume trading', 'set auto-trade threshold to N'. Do NOT use for simple price "
-            "lookups -- those are instant-lane tools."
+            "What your agents did and how much of it passed Warden's inspection. Use for: "
+            "'what did your agents do today', 'what did Sage do', 'did anything fail'."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "task": {
+                "agent": {
                     "type": "string",
-                    "description": "The user's stock-analysis or trading-control request."
-                }
+                    "description": "Callsign to report on. Omit for the whole roster."
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "How many days back to look. Default 1."
+                },
             },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "research_agent",
-        "description": (
-            "Deep multi-source web research agent -- searches, reads multiple pages, and "
-            "synthesizes a single coherent answer. Use for: 'research everything about X', "
-            "'tell me everything about X', 'investigate X', 'comprehensive analysis of X', "
-            "'compare and contrast X and Y', 'summarize the news about X'. Do NOT use for quick "
-            "factual lookups -- use wikipedia_lookup or web_search for those."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The research question or topic, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "file_agent",
-        "description": (
-            "Document intelligence agent -- reads and answers questions about PDFs, Word docs, "
-            "spreadsheets, and images. Use for: 'summarize this pdf/document/contract/invoice/"
-            "thesis/report', 'what does this file say', 'extract from this', 'what were the "
-            "payment terms'. Pass the file reference and the question together in the task string."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The file reference and question together, e.g. 'summarize my_contract.pdf'."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "health_agent",
-        "description": (
-            "Nutrition and gym tracking agent -- logs meals, calculates macros/TDEE, generates "
-            "workout programs and recipes. Use for: 'I just ate X', 'log my meal', 'calories "
-            "today', 'my macros', 'recipe for X', 'chest day', 'finished my workout', 'generate a "
-            "training program', 'what should I do today at the gym'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's nutrition or workout request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
+            "required": []
         }
     },
     {
@@ -4754,8 +4714,8 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "set_reminder", "list_reminders", "cancel_reminder",
     "get_battery_status", "get_clipboard_history",
     "analyze_screen", "ocr_screenshot",
-    "screen_agent", "browser_agent", "stocks_agent",
-    "research_agent", "file_agent", "health_agent",
+    *_registry.tool_names(),
+    "delegate", "agent_roster", "agent_report",
     "run_skill", "list_skills", "learn_skill",
 })
 
@@ -6524,24 +6484,26 @@ class Brain:
             elif name == "notification_status":
                 from tools.notify_tool import notification_status as _notif_status
                 return _notif_status()
-            elif name == "screen_agent":
-                from core.agents.screen_agent import ScreenAgent
-                return ScreenAgent().run(tool_input["task"])
-            elif name == "browser_agent":
-                from core.agents.browser_agent import BrowserAgent
-                return BrowserAgent().run(tool_input["task"])
-            elif name == "stocks_agent":
-                from core.agents.stocks_agent import StocksAgent
-                return StocksAgent().run(tool_input["task"])
-            elif name == "research_agent":
-                from core.agents.research_agent import ResearchAgent
-                return ResearchAgent().run(tool_input["task"])
-            elif name == "file_agent":
-                from core.agents.file_agent import FileAgent
-                return FileAgent().run(tool_input["task"])
-            elif name == "health_agent":
-                from core.agents.health_agent import HealthAgent
-                return HealthAgent().run(tool_input["task"])
+            elif name in _registry.ROSTER:
+                # Live turn: Mo reads the answer himself, so Warden does not
+                # inspect it. The supervisor still enforces the agent's timeout
+                # and writes the run to the ledger.
+                from core.agents.supervisor import assign as _assign
+                return _assign(name, tool_input["task"], verify=False,
+                               source="voice").speech
+            elif name == "delegate":
+                from tools.agent_tool import delegate as _delegate
+                return _delegate(
+                    tool_input["agent"],
+                    tool_input["task"],
+                    tool_input.get("acceptance"),
+                )
+            elif name == "agent_roster":
+                from tools.agent_tool import agent_roster as _roster
+                return _roster()
+            elif name == "agent_report":
+                from tools.agent_tool import agent_report as _report
+                return _report(tool_input.get("agent"), tool_input.get("days", 1))
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)
@@ -6588,14 +6550,13 @@ class Brain:
     def _try_agent_dispatch(self, task: str) -> str | None:
         """Intercept financial-safety state-machine commands before the tool loop.
 
-        Specialist agents (screen/browser/stocks/research/file/health) are
-        reachable as tools inside the main chat() loop instead -- see the
-        screen_agent/browser_agent/stocks_agent/research_agent/file_agent/
-        health_agent tool definitions in TOOLS. Only the live-trading
+        Specialist agents are reachable as tools inside the main chat() loop
+        instead -- they are declared in core/agents/registry.py and dispatched
+        through core/agents/supervisor.py. Only the live-trading
         confirmation flow stays here: it's a deterministic 60-second
         confirmation window that must not be left to LLM tool-use judgment.
         """
-        from core.agents.router import classify_intent
+        from core.agents.router import classify_intent, parse_callsign
         intent = classify_intent(task)
         if intent == "gate_check":
             from core.trade_tracker import TradeTracker
@@ -6628,6 +6589,16 @@ class Brain:
             self._live_pending = False
             self._live_pending_ts = 0.0
             return "Live trading activation cancelled."
+
+        # Mo addressing one agent by name ("Sage, research X") goes straight to
+        # that agent -- no LLM turn spent choosing a tool. Checked AFTER the
+        # financial-safety intents above so a callsign cannot bypass them.
+        named = parse_callsign(task)
+        if named is not None:
+            tool_name, agent_task = named
+            from core.agents.supervisor import assign as _assign
+            return _assign(tool_name, agent_task, verify=False,
+                           source="callsign").speech
         return None
 
     def _try_play_music(self, message: str) -> str | None:
