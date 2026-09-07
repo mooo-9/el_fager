@@ -1,6 +1,5 @@
 import pytest
 import core.backtester as bt
-from core.risk_manager import get_stop_loss_price, get_take_profit_price
 
 
 def _flat_bars(n: int, price: float = 100.0) -> list[dict]:
@@ -79,9 +78,9 @@ def test_simulate_tp_hit(monkeypatch):
     _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    # Derived from risk_manager so the test tracks the configured take-profit
-    # instead of going stale when the default changes.
-    tp = get_take_profit_price(100.0)
+    # Derived from the pinned exit levels, so the test neither goes stale
+    # nor depends on whatever trading_config.json holds.
+    tp = bt.get_take_profit_price(100.0)
     expected_gain = (tp - 100.0) / 100.0 * 100
     bars[110] = _bar(tp, tp + 1.0, tp - 1.0, tp)  # high clears tp
     result = bt._simulate(bars, "TEST")
@@ -104,9 +103,9 @@ def test_simulate_sl_hit(monkeypatch):
     _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    # Derived from risk_manager so the test tracks the configured stop-loss
-    # instead of going stale when the default changes.
-    sl = get_stop_loss_price(100.0)
+    # Derived from the pinned exit levels, so the test neither goes stale
+    # nor depends on whatever trading_config.json holds.
+    sl = bt.get_stop_loss_price(100.0)
     expected_loss = abs((sl - 100.0) / 100.0 * 100)
     bars[110] = _bar(sl, sl + 1.0, sl - 1.0, sl)  # low clears sl
     result = bt._simulate(bars, "TEST")
