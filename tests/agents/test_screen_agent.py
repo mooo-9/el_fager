@@ -1,6 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 from core.agents.screen_agent import ScreenAgent
+from tests._optional import requires
 
 
 def _done_response(message: str = "Task complete.") -> dict:
@@ -11,6 +12,7 @@ def _continue_response(action: dict, message: str = "Working...") -> dict:
     return {"status": "continue", "message": message, "action": action}
 
 
+@requires("pyautogui")
 def test_run_returns_done_message_immediately():
     agent = ScreenAgent()
     done = _done_response("Clicked the button.")
@@ -25,6 +27,7 @@ def test_run_returns_done_message_immediately():
     mock_exec.assert_not_called()
 
 
+@requires("pyautogui")
 def test_run_executes_one_click_then_done():
     agent = ScreenAgent()
     click = _continue_response({"type": "click", "x": 100, "y": 200}, "Clicking submit")
@@ -40,6 +43,7 @@ def test_run_executes_one_click_then_done():
     assert result == "Done."
 
 
+@requires("pyautogui")
 def test_run_stops_at_max_steps():
     agent = ScreenAgent()
     agent.MAX_STEPS = 3

@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
 from core.agents.research_agent import ResearchAgent, _MAX_PAGE_CHARS
+from tests._optional import requires
 
 
 class TestExtractQuery:
@@ -16,6 +17,7 @@ class TestExtractQuery:
         assert ResearchAgent()._extract_query("Python data viz libraries") == "Python data viz libraries"
 
 
+@requires("duckduckgo_search")
 class TestSearch:
     def test_returns_list_on_success(self):
         mock_result = [{"title": "NVDA news", "href": "https://example.com", "body": "Strong momentum"}]
@@ -32,6 +34,7 @@ class TestSearch:
         assert results == []
 
 
+@requires("playwright")
 class TestReadPage:
     def test_returns_empty_string_on_playwright_failure(self):
         with patch("playwright.sync_api.sync_playwright", side_effect=Exception("no browser")):

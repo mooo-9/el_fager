@@ -13,6 +13,7 @@ import pytest
 
 import core.trading_engine as te
 from core.trading_engine import TradingEngine
+from tests._optional import requires
 
 
 def _analysis(conviction=80.0, direction="BUY", rationale="strong momentum"):
@@ -177,6 +178,7 @@ class TestRunCycle:
         assert place_buy.call_args.args[1] == "NVDA"
 
 
+@requires("alpaca")
 class TestPlaceBuy:
     def test_trade_log_records_conviction_and_rationale(self, tmp_path, monkeypatch):
         monkeypatch.setattr(te, "_TRADES_PATH", tmp_path / "trades.json")
