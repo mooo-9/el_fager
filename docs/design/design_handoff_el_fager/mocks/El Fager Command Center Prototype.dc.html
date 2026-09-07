@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#07080C;overflow:hidden}
+a{color:#F09950;text-decoration:none}
+a:hover{color:#FFBE7E}
+::-webkit-scrollbar{width:6px;height:0}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22)}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-button{display:none}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(1.1);opacity:.85}}
+@keyframes fgrBar{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes fgrRipple{0%{transform:scale(.45);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+</style>
+</helmet>
+<div data-screen-label="Command Center" style="width:100vw;height:100vh;display:flex;flex-direction:column;background:radial-gradient(1200px 700px at 30% -10%,#0E1220 0%,#0A0C13 60%),#0A0C13;overflow:hidden">
+
+  <!-- title bar -->
+  <div style="position:relative;display:flex;align-items:center;gap:10px;padding:13px 24px 15px;flex:none">
+    <div style="position:absolute;left:0;bottom:0;width:280px;height:26px;background:radial-gradient(180px 26px at 36px 100%,color-mix(in srgb,{{ stateColor }} {{ glowPct }},transparent),transparent 70%);pointer-events:none;transition:background 220ms"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0,{{ stateColor }} 26px,color-mix(in srgb,{{ stateColor }} 35%,transparent) 34%,rgba(255,255,255,0.06) 70%);transition:background 220ms"></div>
+    <div style="position:absolute;left:33px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:{{ stateColor }};box-shadow:0 0 8px {{ stateColor }};transition:background 220ms"></div>
+    <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap">El Fager — Command Center</div>
+    <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:{{ stateColor }};transition:color 220ms">{{ stateLabel }}</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:16px">
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">{{ dateStr }} · CAIRO 34°</div>
+      <div style="font:500 13px 'Spline Sans Mono',monospace;color:#F2EDE6">{{ clock }}</div>
+    </div>
+  </div>
+
+  <!-- content -->
+  <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:24px 24px 8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px">
+      <div>
+        <div style="font:600 32px/1.1 'Space Grotesk',sans-serif;color:#F2EDE6;letter-spacing:-.01em">{{ greeting }}</div>
+        <div style="font:400 14px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#9BA3B5;margin-top:8px;max-width:720px">Two things left today: Stripe needs a card update, and Omar is waiting on your reply. Gym in 73 minutes — protein is 32g behind. <span style="font-family:'Alexandria',sans-serif;font-weight:300">عايز أظبطلك وجبة قبل الجيم؟</span></div>
+      </div>
+      <div style="display:flex;gap:8px;flex:none">
+        <div onClick="{{ runShutdown }}" style="font:400 12px 'Space Grotesk',sans-serif;color:#FFBE7E;background:rgba(240,153,80,0.12);border:1px solid rgba(240,153,80,0.3);border-radius:99px;padding:5px 13px;cursor:pointer;white-space:nowrap" style-hover="background:rgba(240,153,80,0.2)">Evening shutdown</div>
+        <div onClick="{{ runFocus }}" style="font:400 12px 'Space Grotesk',sans-serif;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 13px;cursor:pointer;white-space:nowrap" style-hover="background:#1A2030;color:#F2EDE6">Focus mode</div>
+        <div onClick="{{ runGym }}" style="font:400 12px 'Space Grotesk',sans-serif;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 13px;cursor:pointer;white-space:nowrap" style-hover="background:#1A2030;color:#F2EDE6">Gym mode</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:20px">
+
+      <!-- calendar -->
+      <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">CALENDAR</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">1 LEFT TODAY</div></div>
+        <div style="display:flex;flex-direction:column;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:12px;height:32px;border-bottom:1px solid rgba(255,255,255,0.05);opacity:.45"><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;width:44px">11:30</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6;text-decoration:line-through">Standup</div></div>
+          <div style="display:flex;align-items:center;gap:12px;height:32px;border-bottom:1px solid rgba(255,255,255,0.05);opacity:.45"><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;width:44px">13:00</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6;text-decoration:line-through">Deep work — agent memory</div></div>
+          <div style="display:flex;align-items:center;gap:12px;height:32px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#F09950;width:44px">19:00</div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Gym — push day</div><div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:#FFBE7E">IN 1H 13M</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">TOMORROW: 4 EVENTS</div><div onClick="{{ typePlan }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer" style-hover="color:#FFD9A3">Plan tomorrow →</div></div>
+      </div>
+
+      <!-- tasks (interactive) -->
+      <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">TASKS</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#F09950">{{ dueCount }} DUE TODAY</div></div>
+        <div style="display:flex;flex-direction:column;margin-top:6px">
+          <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:10px;height:32px;border-bottom:1px solid rgba(255,255,255,0.05)">
+              <sc-if value="{{ t.done }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ t.toggle }}" style="width:13px;height:13px;border-radius:4px;background:#F09950;flex:none;cursor:pointer;display:grid;place-items:center"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M1.5 4.2 3.2 6 6.5 2.2" fill="none" stroke="#1A0F06" stroke-width="1.6" stroke-linecap="round"></path></svg></div>
+                <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5C6478;text-decoration:line-through">{{ t.label }}</div>
+              </sc-if>
+              <sc-if value="{{ t.open }}" hint-placeholder-val="{{ true }}">
+                <div onClick="{{ t.toggle }}" style="width:13px;height:13px;border-radius:4px;border:1.5px solid rgba(240,153,80,0.6);flex:none;cursor:pointer" style-hover="background:rgba(240,153,80,0.15)"></div>
+                <div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">{{ t.label }}</div>
+              </sc-if>
+              <div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:{{ t.dueColor }}">{{ t.due }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">9 IN BACKLOG</div><div onClick="{{ typeTriage }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer" style-hover="color:#FFD9A3">Triage by voice →</div></div>
+      </div>
+
+      <!-- mail -->
+      <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">MAIL</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#F09950">1 PRIORITY</div></div>
+        <div style="display:flex;flex-direction:column;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:10px;height:32px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:4px;height:4px;border-radius:50%;background:#F2604F;flex:none"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stripe — payout failed, update card</div></div>
+          <div style="display:flex;align-items:center;gap:10px;height:32px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:4px;height:4px;border-radius:50%;background:#5C6478;flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ahmed — API review → Thursday</div></div>
+          <div style="display:flex;align-items:center;gap:10px;height:32px"><div style="width:4px;height:4px;border-radius:50%;background:#5C6478;flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">GitHub — 2 PRs approved</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">12 UNREAD · 0 URGENT AFTER THESE</div><div onClick="{{ typeDrafts }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer" style-hover="color:#FFD9A3">Draft replies →</div></div>
+      </div>
+
+      <!-- health -->
+      <div style="grid-column:span 7;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">HEALTH</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#FFBE7E">{{ proteinNote }}</div></div>
+        <div style="display:flex;gap:22px;align-items:center;margin-top:8px">
+          <div style="position:relative;width:160px;height:100px;flex:none">
+            <svg width="160" height="100" viewBox="0 0 160 100">
+              <line x1="2" y1="82" x2="158" y2="82" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+              <path d="M 18 82 A 62 62 0 0 1 142 82" fill="none" stroke="#1A2030" stroke-width="8" stroke-linecap="round"></path>
+              <path d="M 18 82 A 62 62 0 0 1 142 82" fill="none" stroke="#F09950" stroke-width="8" stroke-linecap="round" stroke-dasharray="{{ kcalDash }}" style="transition:stroke-dasharray 600ms cubic-bezier(.22,1,.36,1)"></path>
+              <circle cx="{{ sunX }}" cy="{{ sunY }}" r="9" fill="rgba(255,217,163,0.22)" style="transition:cx 600ms cubic-bezier(.22,1,.36,1),cy 600ms cubic-bezier(.22,1,.36,1)"></circle>
+              <circle cx="{{ sunX }}" cy="{{ sunY }}" r="4.5" fill="{{ sunColor }}" style="transition:cx 600ms cubic-bezier(.22,1,.36,1),cy 600ms cubic-bezier(.22,1,.36,1)"></circle>
+            </svg>
+            <div style="position:absolute;left:0;right:0;bottom:6px;text-align:center"><div style="font:500 19px 'Spline Sans Mono',monospace;color:#F2EDE6">{{ kcal }}</div><div style="font:400 9px 'Spline Sans Mono',monospace;color:#5C6478">/ 2,400 KCAL</div></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+            <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>PROTEIN</span><span style="color:#FFBE7E">{{ protein }} / 160g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:{{ proteinPct }};height:5px;border-radius:3px;background:#F09950;transition:width 600ms cubic-bezier(.22,1,.36,1)"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>CARBS</span><span>{{ carbs }} / 240g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:{{ carbsPct }};height:5px;border-radius:3px;background:#FFD9A3;transition:width 600ms cubic-bezier(.22,1,.36,1)"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>FAT</span><span>{{ fat }} / 75g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:{{ fatPct }};height:5px;border-radius:3px;background:#7E8AA3;transition:width 600ms cubic-bezier(.22,1,.36,1)"></div></div></div>
+          </div>
+          <div style="width:190px;flex:none;display:flex;flex-direction:column;gap:10px">
+            <div><div style="display:flex;justify-content:space-between;font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478"><span>WEIGHT 8W</span><span style="color:#9BA3B5">81.2 kg ↘</span></div><svg width="190" height="26" viewBox="0 0 190 26" style="margin-top:3px"><polyline points="0,18 24,16 48,20 72,13 96,14 120,10 144,11 168,7" fill="none" stroke="#5C6478" stroke-width="1.5"></polyline><circle cx="184" cy="6" r="2.5" fill="#F09950"></circle></svg></div>
+            <div><div style="display:flex;justify-content:space-between;font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478"><span>SLEEP 8W</span><span style="color:#9BA3B5">7h40 ↗</span></div><svg width="190" height="26" viewBox="0 0 190 26" style="margin-top:3px"><polyline points="0,20 24,18 48,22 72,16 96,18 120,12 144,14 168,8" fill="none" stroke="#5C6478" stroke-width="1.5"></polyline><circle cx="184" cy="7" r="2.5" fill="#F09950"></circle></svg></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">{{ lastLogged }}</div><div onClick="{{ typeMeal }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer" style-hover="color:#FFD9A3">Log a meal by voice →</div></div>
+      </div>
+
+      <!-- news -->
+      <div style="grid-column:span 5;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">NEWS — YOUR BRIEF</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">3 MIN READ</div></div>
+        <div style="display:flex;flex-direction:column;margin-top:6px">
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#F09950;flex:none;width:26px">AI</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#F2EDE6">Anthropic ships computer-use API v2 — relevant to your agent work</div></div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;flex:none;width:26px">EGY</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#9BA3B5">EGP steady; fuel prices unchanged this quarter</div></div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;flex:none;width:26px">DEV</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#9BA3B5">Qt 6.8 LTS adds native color-mix in QSS</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">SOURCES YOU CHOSE · 6</div><div onClick="{{ typeBrief }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer" style-hover="color:#FFD9A3">Read it to me →</div></div>
+      </div>
+
+      <!-- knows me -->
+      <div style="grid-column:span 12;background:rgba(240,153,80,0.05);border:1px solid rgba(240,153,80,0.18);border-radius:16px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#F09950">IT'S GETTING TO KNOW YOU</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">MEMORY IS YOURS — EVERYTHING HERE CAN BE FORGOTTEN</div></div>
+        <div style="display:flex;gap:16px;margin-top:12px">
+          <div style="flex:1.2">
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">LEARNED FACTS · {{ factCount }}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <sc-for list="{{ facts }}" as="f" hint-placeholder-count="3">
+                <div style="display:inline-flex;align-items:center;gap:7px;font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px">{{ f.text }} <span onClick="{{ f.forget }}" style="color:#5C6478;cursor:pointer" style-hover="color:#F2604F">✕</span></div>
+              </sc-for>
+              <div style="font:400 12px 'Space Grotesk',sans-serif;color:#5C6478;padding:5px 6px;cursor:pointer" style-hover="color:#9BA3B5">+44 more</div>
+            </div>
+          </div>
+          <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+          <div style="flex:1">
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">ACTIVE SKILLS · 12</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">gmail</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">whatsapp</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">todoist</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">browser</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">screen</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;padding:5px 4px;cursor:pointer" style-hover="color:#9BA3B5">+7</div>
+            </div>
+          </div>
+          <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+          <div style="flex:1.4">
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">PROPOSED AUTOMATION</div>
+            <sc-if value="{{ autoProposed }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:12px;margin-top:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 14px">
+                <div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#F2EDE6;flex:1">You silence notifications every day around 13:00. Make it automatic on deep-work blocks?</div>
+                <div onClick="{{ acceptAuto }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:9px;padding:6px 13px;cursor:pointer;flex:none" style-hover="background:#FFBE7E" style-active="background:#D07E35">Yes</div>
+                <div onClick="{{ dismissAuto }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5;cursor:pointer;flex:none" style-hover="color:#F2EDE6">Not now</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ autoAccepted }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5">Automation enabled — deep-work blocks now silence notifications. Undo anytime by voice.</div></div>
+            </sc-if>
+            <sc-if value="{{ autoDismissed }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px;font:400 12.5px 'Space Grotesk',sans-serif;color:#5C6478;padding:12px 2px">Dismissed — I'll stop suggesting this one.</div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- conversation strip -->
+  <sc-if value="{{ hasMessages }}" hint-placeholder-val="{{ false }}">
+    <div ref="{{ convRef }}" style="flex:none;max-height:190px;overflow-y:auto;overflow-x:hidden;padding:10px 24px 0;display:flex;flex-direction:column;gap:11px">
+      <sc-for list="{{ messages }}" as="m" hint-placeholder-count="0">
+        <div style="display:flex;flex-direction:column">
+          <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:baseline;gap:9px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5C6478;flex:none">HEARD</div><div dir="auto" style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5C6478">{{ m.text }}</div></div>
+          </sc-if>
+          <sc-if value="{{ m.isAi }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:10px;max-width:64%"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#F09950,rgba(240,153,80,0));flex:none"></div><div dir="auto" style="font:400 13px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;flex:1">{{ m.text }}</div></div>
+          </sc-if>
+          <sc-if value="{{ m.isAction }}" hint-placeholder-val="{{ false }}">
+            <div style="max-width:480px;background:#131722;border:1px solid rgba(240,153,80,0.4);border-radius:14px;padding:13px;box-shadow:0 0 20px rgba(240,153,80,0.12)">
+              <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">WHATSAPP →</div><div style="display:inline-flex;align-items:center;gap:5px;font:400 11px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border-radius:99px;padding:2px 9px"><div style="width:12px;height:12px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 7.5px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar Adel</div></div>
+              <div dir="rtl" style="background:#0D1017;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px 12px;margin-top:10px;font:300 12.5px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟</div>
+              <div style="display:flex;gap:7px;margin-top:11px;align-items:center">
+                <div onClick="{{ confirmSend }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:9px;padding:6px 14px;cursor:pointer" style-hover="background:#FFBE7E">Send</div>
+                <div onClick="{{ cancelAction }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:6px 8px;cursor:pointer" style-hover="color:#F2EDE6">Cancel</div>
+                <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:auto">SAY "ابعت"</div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isReceipt }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;padding-left:13px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">{{ m.text }} · {{ m.time }}</div></div>
+          </sc-if>
+          <sc-if value="{{ m.isError }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;padding-left:13px"><div style="width:5px;height:5px;border-radius:50%;background:#F2604F;flex:none"></div><div style="font:400 11.5px/1.5 'Spline Sans Mono',monospace;color:#F2604F;flex:1">{{ m.text }}</div></div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ isThinking }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:8px;padding-left:13px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite;flex:none"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#A48BF5">{{ toolCaption }}</div></div>
+      </sc-if>
+      <sc-if value="{{ isSpeaking }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:8px;padding-left:13px"><div style="position:relative;width:16px;height:16px;display:grid;place-items:center;flex:none"><div style="position:absolute;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,217,163,0.6);animation:fgrRipple 1.5s ease-out infinite"></div><div style="width:5px;height:5px;border-radius:50%;background:#FFD9A3"></div></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">STREAMING AUDIO</div></div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- transcript strip -->
+  <sc-if value="{{ hasTranscript }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;align-items:center;gap:10px;padding:10px 24px;background:rgba(240,153,80,0.04)">
+      <div style="display:flex;align-items:center;gap:2.5px;flex:none"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+      <div dir="auto" style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;flex:1">{{ transcript }}<span style="display:inline-block;width:6px;height:13px;background:#F09950;border-radius:1px;vertical-align:-2px;margin:0 3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+    </div>
+  </sc-if>
+
+  <!-- command bar -->
+  <div style="flex:none;padding:12px 24px 18px">
+    <div style="display:flex;align-items:center;gap:12px;background:#131722;border:1px solid {{ barBorder }};border-radius:99px;padding:9px 9px 9px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);transition:border-color 220ms">
+      <input ref="{{ inputRef }}" value="{{ typed }}" onChange="{{ onType }}" onKeyDown="{{ onKeyDown }}" placeholder="Talk or type — اتكلم أو اكتب" style="flex:1;background:transparent;border:none;outline:none;font:400 13.5px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;min-width:0"></input>
+      <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 8px;flex:none">CTRL+SPACE</div>
+      <div onClick="{{ micDemo }}" title="Voice demo" style="width:36px;height:36px;border-radius:50%;background:#F09950;display:grid;place-items:center;flex:none;cursor:pointer;box-shadow:0 0 20px rgba(240,153,80,0.3)" style-hover="background:#FFBE7E"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#1A0F06"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#1A0F06" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#1A0F06" stroke-width="1.6"></line></svg></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;streamSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:16,&quot;min&quot;:6,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;}}">
+class Component extends DCLogic {
+  state = {
+    aState: 'idle',
+    messages: [],
+    transcript: '',
+    toolCaption: '',
+    typed: '',
+    clock: '',
+    tasks: [
+      { id: 1, label: 'Reply to Omar — meeting move', due: 'TODAY', dueColor: '#F2604F', done: false },
+      { id: 2, label: 'Fix Stripe payment method', due: 'TODAY', dueColor: '#F2604F', done: false },
+      { id: 3, label: 'Renew elfager.app domain', due: 'FRI', dueColor: '#5C6478', done: false }
+    ],
+    facts: [
+      { id: 1, text: 'Short replies before noon' },
+      { id: 2, text: 'Push/pull/legs split' },
+      { id: 3, text: 'قهوة سادة، من غير سكر' }
+    ],
+    auto: 'proposed',
+    kcal: 1840, protein: 128, carbs: 171, fat: 52,
+    lastLogged: 'LAST LOGGED: LUNCH · 14:10'
+  };
+  convRef = React.createRef();
+  inputRef = React.createRef();
+  timers = [];
+
+  componentDidMount() {
+    this.clockIv = setInterval(() => this.setState({ clock: this.now() }), 1000);
+    this.setState({ clock: this.now() });
+  }
+  componentWillUnmount() { clearInterval(this.clockIv); this.clearTimers(); }
+  componentDidUpdate() { const el = this.convRef.current; if (el) el.scrollTop = el.scrollHeight; }
+
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; if (this.iv) { clearInterval(this.iv); this.iv = null; } }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  stream(text, onPart, onDone, tick) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2);
+      onPart(text.slice(0, i));
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; if (onDone) onDone(); }
+    }, tick || (this.props.streamSpeed ?? 16));
+  }
+  updateLast(part) {
+    const m = [...this.state.messages];
+    m[m.length - 1] = { ...m[m.length - 1], text: part };
+    this.setState({ messages: m });
+  }
+
+  typeIntoBar(phrase) {
+    this.setState({ typed: phrase });
+    if (this.inputRef.current) this.inputRef.current.focus();
+  }
+
+  send(text) {
+    if (!text.trim() || this.state.aState === 'thinking') return;
+    // voice-first: one exchange on stage — keep only receipts from before
+    const msgs = [...this.state.messages.filter((x) => x.isReceipt).slice(-2), { id: Date.now(), isUser: true, text: text.trim(), time: this.now() }];
+    const t = text.toLowerCase();
+    let caption = 'reading calendar…', caption2 = 'checking todoist…', reply, action = false, err = false, after;
+    if (/fail/.test(t)) err = true;
+    else if (/omar|send|عمر|ابعت/.test(t)) { action = true; caption = 'reading calendar…'; caption2 = 'drafting whatsapp → Omar…'; }
+    else if (/meal|log|اكل|وجبة/.test(t)) {
+      caption = 'parsing meal…'; caption2 = 'writing to health log…';
+      reply = 'Logged — grilled chicken and rice, about 620 kcal and 48g protein. That closes most of the gap before the gym.';
+      after = () => this.setState({ kcal: 2460 > 2400 ? 2400 : 2460, protein: 160, carbs: 231, fat: 66, lastLogged: 'LAST LOGGED: PRE-GYM · ' + this.now() });
+    }
+    else if (/draft|repl|mail|stripe/.test(t)) { caption = 'reading gmail…'; caption2 = 'drafting 2 replies…'; reply = 'Two drafts staged: Stripe — card updated, retry the payout; Ahmed — Thursday works, you\'ll own auth. Say "review" and I\'ll read them out.'; }
+    else if (/brief|news|read/.test(t)) { caption = 'fetching your sources…'; caption2 = 'summarizing 6 items…'; reply = 'Top line: Anthropic shipped computer-use v2 — direct upgrade path for your agent. The rest is quiet; EGP steady, Qt 6.8 is out.'; }
+    else if (/plan|tomorrow/.test(t)) { caption = 'reading tomorrow\'s calendar…'; caption2 = 'balancing focus blocks…'; reply = 'Tomorrow: 4 events, front-loaded. I\'d move deep work to 14:00–17:00 and keep the morning for the review. Want me to block it?'; }
+    else if (/triage|task/.test(t)) { caption = 'reading todoist backlog…'; caption2 = 'ranking 9 items…'; reply = 'Backlog triaged: 3 can wait till next week, 2 are one-liners you could clear tonight, and "renew domain" should move to today — it expires Friday.'; }
+    else reply = 'Clear after the 3pm review. Deep work till 5, then gym at 7 — push day. Protein\'s 32g behind, by the way.';
+
+    this.setState({ messages: msgs, typed: '', transcript: '', aState: 'thinking', toolCaption: caption });
+    if (err) {
+      this.wait(() => {
+        const m = [...this.state.messages, { id: Date.now(), isError: true, text: 'WHATSAPP BRIDGE TIMED OUT — RETRYING IN 30S. TASK KEPT.', time: this.now() }];
+        this.setState({ messages: m, aState: 'error', toolCaption: '' });
+        this.wait(() => { if (this.state.aState === 'error') this.setState({ aState: 'idle' }); }, 4000);
+      }, 1400);
+      return;
+    }
+    this.wait(() => this.setState({ toolCaption: caption2 }), 750);
+    this.wait(() => {
+      if (action) {
+        const m = [...this.state.messages, { id: Date.now(), isAction: true, time: this.now() }];
+        this.setState({ messages: m, aState: 'idle', toolCaption: '' });
+      } else {
+        const m = [...this.state.messages, { id: Date.now(), isAi: true, text: '', time: this.now() }];
+        this.setState({ messages: m, aState: 'speaking', toolCaption: '' });
+        this.stream(reply, (p) => this.updateLast(p), () => {
+          if (after) after();
+          this.wait(() => this.setState({ aState: 'idle' }), 700);
+        });
+      }
+    }, 1600);
+  }
+
+  confirmSend() {
+    const m = this.state.messages.filter((x) => x.isReceipt).slice(-2);
+    m.push({ id: Date.now(), isReceipt: true, text: 'whatsapp → Omar · sent', time: this.now() });
+    m.push({ id: Date.now() + 1, isAi: true, text: '', time: this.now() });
+    const tasks = this.state.tasks.map((t) => (t.id === 1 ? { ...t, done: true } : t));
+    this.setState({ messages: m, aState: 'speaking', tasks });
+    this.stream('تمام — اتبعتت لعمر، وشيلت التاسك من القايمة.', (p) => this.updateLast(p), () => this.wait(() => this.setState({ aState: 'idle' }), 600), 40);
+  }
+  cancelAction() { this.setState({ messages: this.state.messages.filter((x) => !x.isAction), aState: 'idle' }); }
+
+  micDemo() {
+    if (this.state.aState === 'thinking' || this.state.aState === 'speaking') return;
+    this.setState({ aState: 'listening' });
+    const line = 'ابعت لعمر إن الميتنج اتأجل لبكرة';
+    this.stream(line, (p) => this.setState({ transcript: p }), () => this.wait(() => { this.setState({ transcript: '' }); this.send(line); }, 550), 55);
+  }
+
+  runRoutine(name, reply) {
+    if (this.state.aState === 'thinking') return;
+    const msgs = [...this.state.messages.filter((x) => x.isReceipt).slice(-2), { id: Date.now(), isUser: true, text: name, time: this.now() }];
+    this.setState({ messages: msgs, aState: 'thinking', toolCaption: 'running routine…' });
+    this.wait(() => {
+      const m = [...this.state.messages, { id: Date.now(), isAi: true, text: '', time: this.now() }];
+      this.setState({ messages: m, aState: 'speaking', toolCaption: '' });
+      this.stream(reply, (p) => this.updateLast(p), () => this.wait(() => this.setState({ aState: 'idle' }), 700));
+    }, 1300);
+  }
+
+  renderVals() {
+    const S = this.state.aState;
+    const colors = { idle: '#7E8AA3', listening: '#F09950', thinking: '#A48BF5', speaking: '#FFD9A3', error: '#F2604F' };
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'THINKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const d = new Date();
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const h = d.getHours();
+    const kc = this.state.kcal;
+    const frac = Math.min(1, kc / 2400);
+    const dash = Math.round(frac * 195);
+    const ang = (1 - frac) * Math.PI;
+    const pDone = this.state.protein >= 160;
+    return {
+      clock: this.state.clock,
+      dateStr: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()],
+      greeting: h < 12 ? 'Good morning, Mo' : h < 18 ? 'Good afternoon, Mo' : 'Good evening, Mo',
+      stateColor: colors[S],
+      stateLabel: labels[S],
+      barBorder: S === 'listening' ? 'rgba(240,153,80,0.45)' : 'rgba(255,255,255,0.12)',
+      messages: this.state.messages,
+      hasMessages: this.state.messages.length > 0 || S === 'thinking' || S === 'speaking',
+      hasTranscript: !!this.state.transcript,
+      transcript: this.state.transcript,
+      isThinking: S === 'thinking',
+      isSpeaking: S === 'speaking',
+      toolCaption: this.state.toolCaption,
+      typed: this.state.typed,
+      convRef: this.convRef,
+      inputRef: this.inputRef,
+      tasks: this.state.tasks.map((t) => ({
+        ...t, open: !t.done,
+        toggle: () => this.setState({ tasks: this.state.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)) })
+      })),
+      dueCount: this.state.tasks.filter((t) => !t.done && t.due === 'TODAY').length,
+      facts: this.state.facts.map((f) => ({
+        ...f,
+        forget: () => this.setState({ facts: this.state.facts.filter((x) => x.id !== f.id) })
+      })),
+      factCount: 44 + this.state.facts.length,
+      autoProposed: this.state.auto === 'proposed',
+      autoAccepted: this.state.auto === 'accepted',
+      autoDismissed: this.state.auto === 'dismissed',
+      acceptAuto: () => this.setState({ auto: 'accepted' }),
+      dismissAuto: () => this.setState({ auto: 'dismissed' }),
+      kcal: kc.toLocaleString(),
+      kcalDash: dash + ' 195',
+      sunX: (80 + 62 * Math.cos(ang)).toFixed(1),
+      sunY: (82 - 62 * Math.sin(ang)).toFixed(1),
+      sunColor: kc >= 2400 ? '#EFC868' : '#FFD9A3',
+      glowPct: (S === 'idle' ? 0 : 16) + '%',
+      protein: this.state.protein, carbs: this.state.carbs, fat: this.state.fat,
+      proteinPct: Math.min(100, Math.round((this.state.protein / 160) * 100)) + '%',
+      carbsPct: Math.min(100, Math.round((this.state.carbs / 240) * 100)) + '%',
+      fatPct: Math.min(100, Math.round((this.state.fat / 75) * 100)) + '%',
+      proteinNote: pDone ? 'PROTEIN TARGET HIT' : 'PROTEIN BEHIND — ' + (160 - this.state.protein) + 'G',
+      lastLogged: this.state.lastLogged,
+      onType: (e) => this.setState({ typed: e.target.value }),
+      onKeyDown: (e) => { e.stopPropagation(); if (e.key === 'Enter') this.send(this.state.typed); },
+      micDemo: () => this.micDemo(),
+      confirmSend: () => this.confirmSend(),
+      cancelAction: () => this.cancelAction(),
+      typePlan: () => this.typeIntoBar('Plan tomorrow'),
+      typeTriage: () => this.typeIntoBar('Triage my tasks'),
+      typeDrafts: () => this.typeIntoBar('Draft replies to priority mail'),
+      typeMeal: () => this.typeIntoBar('Log a meal: grilled chicken and rice'),
+      typeBrief: () => this.typeIntoBar('Read me the brief'),
+      runShutdown: () => this.runRoutine('Evening shutdown', 'Shutting the day down: 2 tasks roll to tomorrow morning, mail is triaged, and I\'ll go quiet until 07:30 unless something urgent lands.'),
+      runFocus: () => this.runRoutine('Focus mode', 'Focus mode on — notifications silenced, WhatsApp on hold, and I\'ll bounce anything non-urgent until you surface.'),
+      runGym: () => this.runRoutine('Gym mode', 'Gym mode: push day loaded — bench, overhead press, dips. I\'ll log sets by voice and queue your playlist.')
+    };
+  }
+}
+</script>
+</body>
+</html>

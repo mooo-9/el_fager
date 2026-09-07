@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#040508;overflow:hidden}
+a{color:#F09950;text-decoration:none}
+a:hover{color:#FFBE7E}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+</style>
+</helmet>
+<div data-screen-label="Cockpit" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:#040508">
+  <canvas ref="{{ orbRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+
+  <!-- corners -->
+  <div style="position:absolute;top:36px;left:40px">
+    <div style="font:500 32px 'Spline Sans Mono',monospace;color:#F2EDE6">{{ clock }}</div>
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em;margin-top:4px">{{ dateStr }} · CAIRO 34°</div>
+  </div>
+  <div style="position:absolute;top:36px;right:40px;text-align:right">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">NEXT</div>
+    <div style="font:500 16px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:4px">Gym — push day</div>
+    <div style="font:400 12px 'Spline Sans Mono',monospace;color:#F09950;margin-top:2px">19:00 · IN 1H 13M</div>
+  </div>
+  <div style="position:absolute;bottom:96px;left:40px">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">TODAY</div>
+    <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:6px">2 TASKS OPEN · 1,840 / 2,400 KCAL<br>MAIL CLEAR EXCEPT STRIPE</div>
+    <sc-if value="{{ hasReceipts }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:14px">
+        <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="0">
+          <div style="display:flex;align-items:center;gap:7px"><div style="width:4px;height:4px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">{{ r.text }} · {{ r.time }}</div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  <div style="position:absolute;bottom:96px;right:40px;text-align:right">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">SKILLS ONLINE</div>
+    <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:6px">GMAIL · WHATSAPP · TODOIST<br>BROWSER · SCREEN · +7</div>
+  </div>
+
+  <!-- state label under orb -->
+  <div style="position:absolute;left:0;right:0;top:calc(50% + {{ labelOffset }});text-align:center;pointer-events:none">
+    <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.3em;color:#F2EDE6;opacity:.9">{{ stateLabel }}</div>
+    <div style="font:300 15px 'Alexandria',sans-serif;color:#9BA3B5;margin-top:4px">{{ stateLabelAr }}</div>
+  </div>
+
+  <!-- the words: constrained between orb label and bottom bar -->
+  <div style="position:absolute;left:0;right:0;top:calc(50% + {{ wordsOffset }});bottom:80px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;padding:0 24px;overflow:visible;pointer-events:none">
+    <sc-if value="{{ showHeardBig }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 26px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;text-align:center;max-width:820px">{{ heard }}<span style="display:inline-block;width:9px;height:24px;background:#F09950;border-radius:1px;vertical-align:-3px;margin:0 6px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+    </sc-if>
+    <sc-if value="{{ showHeardSmall }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center">{{ heard }}</div>
+    </sc-if>
+    <sc-if value="{{ isThinking }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:9px"><div style="width:6px;height:6px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite;flex:none"></div><div style="font:400 13px 'Spline Sans Mono',monospace;color:#A48BF5">{{ toolCaption }}</div></div>
+    </sc-if>
+    <sc-if value="{{ showAnswer }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 20px/1.65 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;text-align:center;max-width:760px">{{ answer }}<span style="display:inline-block;width:8px;height:19px;background:#FFD9A3;border-radius:1px;vertical-align:-3px;margin:0 4px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ answerCaret }}"></span></div>
+    </sc-if>
+    <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+      <div style="font:400 13px/1.6 'Spline Sans Mono',monospace;color:#F2604F;text-align:center">{{ errorText }}</div>
+    </sc-if>
+  </div>
+
+  <!-- staged action: independently anchored above the bottom bar, never clipped -->
+  <div style="position:absolute;left:0;right:0;bottom:84px;display:flex;justify-content:center;pointer-events:none">
+    <sc-if value="{{ showStaged }}" hint-placeholder-val="{{ false }}">
+      <div style="width:440px;max-width:calc(100vw - 48px);box-sizing:border-box;pointer-events:auto;background:rgba(13,16,23,0.95);border:1px solid rgba(240,153,80,0.4);border-radius:16px;padding:16px;box-shadow:0 0 32px rgba(240,153,80,0.15),0 24px 64px rgba(0,0,0,0.5);text-align:left">
+        <div style="display:flex;align-items:center;gap:8px"><div style="font:400 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">WHATSAPP →</div><div style="display:inline-flex;align-items:center;gap:5px;font:400 12px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border-radius:99px;padding:3px 10px"><div style="width:13px;height:13px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 8px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar Adel</div></div>
+        <div dir="rtl" style="background:#131722;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-top:11px;font:300 14px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟</div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+          <div onClick="{{ confirmSend }}" style="font:500 13px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:10px;padding:7px 17px;cursor:pointer" style-hover="background:#FFBE7E" style-active="background:#D07E35">Send</div>
+          <div onClick="{{ cancelAction }}" style="font:500 13px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:7px 10px;cursor:pointer" style-hover="color:#F2EDE6">Cancel</div>
+          <div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:auto">SAY "ابعت" OR "SEND"</div>
+        </div>
+      </div>
+    </sc-if>
+  </div>>
+
+  <!-- bottom bar: mic status + typing fallback + demo -->
+  <div style="position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:14px;padding:0 40px;height:64px;border-top:1px solid rgba(255,255,255,0.05);background:rgba(4,5,8,0.6)">
+    <div style="display:flex;align-items:center;gap:9px"><div style="width:7px;height:7px;border-radius:50%;background:{{ stateColor }};box-shadow:0 0 9px {{ stateColor }};transition:background 220ms"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5C6478">MIC IS LIVE · SAY "HEY FAGER" ANYTIME</div></div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#3E4557">DEMO — SIMULATE SPEECH:</div>
+      <div onClick="{{ micDemo }}" title="Speak (demo)" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;border:1px dashed rgba(255,255,255,0.18);border-radius:99px;padding:5px 13px" style-hover="border-color:rgba(240,153,80,0.5)"><svg width="8" height="10" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#9BA3B5"></path></svg><div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9BA3B5">{{ demoLabel }}</div></div>
+    </div>
+    <sc-if value="{{ typedMode }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:8px;background:#0D1017;border:1px solid rgba(240,153,80,0.35);border-radius:99px;padding:6px 6px 6px 14px;width:340px">
+        <input ref="{{ inputRef }}" value="{{ typed }}" onChange="{{ onType }}" onKeyDown="{{ onKeyDown }}" placeholder="Type it — same brain" style="flex:1;background:transparent;border:none;outline:none;font:400 12.5px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;min-width:0"></input>
+        <div onClick="{{ toggleTyped }}" style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;cursor:pointer;padding:4px 8px" style-hover="color:#F2EDE6">HIDE</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ voiceMode }}" hint-placeholder-val="{{ true }}">
+      <div onClick="{{ toggleTyped }}" title="Type instead" style="width:32px;height:32px;border-radius:50%;background:#0D1017;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;cursor:pointer;flex:none" style-hover="border-color:rgba(255,255,255,0.25)"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="3.5" width="12" height="7.5" rx="1.5" fill="none" stroke="#9BA3B5" stroke-width="1.1"></rect><line x1="3.5" y1="9" x2="10.5" y2="9" stroke="#9BA3B5" stroke-width="1.1"></line></svg></div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;streamSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:18,&quot;min&quot;:6,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;orbIntensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.5,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Orb&quot;}}">
+class Component extends DCLogic {
+  state = {
+    aState: 'idle', phase: 'empty',
+    heard: '', answer: '', toolCaption: '', errorText: '',
+    receipts: [], typed: '', typedMode: false, demoIdx: 0, clock: '', changedAt: 0
+  };
+  orbRef = React.createRef();
+  inputRef = React.createRef();
+  timers = [];
+  cur = { r: 126, g: 138, b: 163 };
+  pulses = [];
+  lastPulse = 0;
+
+  componentDidMount() {
+    this.clockIv = setInterval(() => this.setState({ clock: this.now() }), 1000);
+    this.setState({ clock: this.now() });
+    this.sizeCanvas();
+    this.resizeH = () => this.sizeCanvas();
+    window.addEventListener('resize', this.resizeH);
+    this.raf = requestAnimationFrame(this.tick);
+    this.timers.push(setTimeout(() => this.setState({ aState: 'listening' }), 900));
+  }
+  componentWillUnmount() {
+    clearInterval(this.clockIv);
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('resize', this.resizeH);
+    this.clearTimers();
+  }
+  sizeCanvas() {
+    const c = this.orbRef.current;
+    if (c) { const dpr = window.devicePixelRatio || 1; c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr; }
+  }
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; if (this.iv) { clearInterval(this.iv); this.iv = null; } }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  tick = (now) => {
+    this.raf = requestAnimationFrame(this.tick);
+    const c = this.orbRef.current;
+    if (!c || !c.width) return;
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = c.width / dpr, H = c.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const t = now / 1000;
+    const S = this.state.aState;
+    const I = Math.max(0.3, Math.min(2, this.props.orbIntensity ?? 1));
+    const COLORS = { idle: [126,138,163], listening: [240,153,80], thinking: [164,139,245], speaking: [255,217,163], error: [242,96,79] };
+    const tg = COLORS[S] || COLORS.idle;
+    this.cur.r += (tg[0] - this.cur.r) * 0.07;
+    this.cur.g += (tg[1] - this.cur.g) * 0.07;
+    this.cur.b += (tg[2] - this.cur.b) * 0.07;
+    const col = (a) => 'rgba(' + (this.cur.r|0) + ',' + (this.cur.g|0) + ',' + (this.cur.b|0) + ',' + a + ')';
+    const cx = W / 2, cy = H / 2 - 60;
+
+    let amp = 0;
+    if (S === 'idle') amp = 0.12 + 0.1 * Math.sin(t * 2 * Math.PI / 3.6);
+    if (S === 'listening') amp = 0.28 + 0.5 * Math.abs(Math.sin(t * 3.1) * 0.6 + Math.sin(t * 7.7) * 0.4);
+    if (S === 'thinking') amp = 0.22 + 0.08 * Math.sin(t * 2.2);
+    if (S === 'speaking') amp = 0.25 + 0.55 * Math.max(0, Math.sin(t * 5.3)) * (0.65 + 0.35 * Math.sin(t * 0.9));
+    if (S === 'error') amp = 0.15;
+
+    let master = 1;
+    if (S === 'error') {
+      const dt = now - this.state.changedAt;
+      if (dt < 380) master = (Math.floor(dt / 95) % 2) ? 0.15 : 1;
+      else master = 0.75;
+    }
+    ctx.globalAlpha = master;
+
+    const R = 54 + amp * 30 * I;
+    let g = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 4.2);
+    g.addColorStop(0, col(0.16 * I));
+    g.addColorStop(1, col(0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 4.2, 0, 7); ctx.fill();
+
+    g = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,236,210,0.95)');
+    g.addColorStop(0.45, col(0.9));
+    g.addColorStop(1, col(0.05));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+
+    const N = 110;
+    const speed = { idle: 0.05, listening: 0.14, thinking: 0.55, speaking: 0.2, error: 0.02 }[S] || 0.05;
+    const jit = { idle: 3, listening: 16, thinking: 7, speaking: 7, error: 2 }[S] || 3;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + t * speed * Math.PI * 2;
+      let wob = Math.sin(ang * 5 + t * 2.4) * jit * (S === 'listening' ? (0.4 + amp) : 1);
+      if (S === 'thinking') wob += Math.sin(ang * 2 - t * 4.4) * 9;
+      const rad = R + 44 + wob;
+      ctx.fillStyle = col(0.28 + 0.3 * Math.abs(Math.sin(ang * 3 + t)));
+      ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.98, 1.5, 0, 7); ctx.fill();
+    }
+    if (S === 'thinking') {
+      for (let k = 0; k < 3; k++) {
+        const ang = t * 2.6 + k * (Math.PI * 2 / 3);
+        ctx.fillStyle = col(0.9);
+        ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * (R + 24), cy + Math.sin(ang) * (R + 24) * 0.55, 3.2, 0, 7); ctx.fill();
+      }
+    }
+    if (S === 'speaking' && now - this.lastPulse > 420) { this.lastPulse = now; this.pulses.push(now); }
+    this.pulses = this.pulses.filter((p) => now - p < 1500);
+    for (const p of this.pulses) {
+      const k = (now - p) / 1500;
+      ctx.strokeStyle = col(0.35 * (1 - k));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 36 + k * 190, 0, 7); ctx.stroke();
+    }
+    ctx.globalAlpha = master * 0.5;
+    const hg = ctx.createLinearGradient(cx - 300, 0, cx + 300, 0);
+    hg.addColorStop(0, col(0)); hg.addColorStop(0.5, col(0.5)); hg.addColorStop(1, col(0));
+    ctx.fillStyle = hg;
+    ctx.fillRect(cx - 300, cy + R + 92, 600, 1);
+    ctx.globalAlpha = 1;
+  };
+
+  stream(text, onPart, onDone, tick) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2);
+      onPart(text.slice(0, i));
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; if (onDone) onDone(); }
+    }, tick || (this.props.streamSpeed ?? 18));
+  }
+  setA(aState, extra) { this.setState(Object.assign({ aState, changedAt: performance.now() }, extra || {})); }
+
+  beginExchange(utterance, viaVoice) {
+    this.clearTimers();
+    this.setState({ answer: '', toolCaption: '', errorText: '' });
+    const go = () => this.route(utterance);
+    if (viaVoice) {
+      this.setA('listening', { phase: 'hearing', heard: '' });
+      this.stream(utterance, (p) => this.setState({ heard: p }), () => this.wait(go, 450), 55);
+    } else {
+      this.setState({ heard: utterance, phase: 'hearing' });
+      this.wait(go, 150);
+    }
+  }
+
+  route(text) {
+    const t = text.toLowerCase();
+    if (/fail/.test(t) || /النت/.test(text)) {
+      this.setA('thinking', { phase: 'doing', toolCaption: 'connecting whatsapp bridge…' });
+      this.wait(() => {
+        this.setA('error', { phase: 'error', errorText: 'WHATSAPP BRIDGE TIMED OUT — NOTHING WAS SENT.', toolCaption: '' });
+        this.wait(() => { if (this.state.phase === 'error') this.setA('listening', { phase: 'empty', heard: '' }); }, 4000);
+      }, 1400);
+      return;
+    }
+    const isAction = /omar|عمر|send|ابعت/.test(t) || /ابعت/.test(text);
+    this.setA('thinking', { phase: 'doing', toolCaption: 'reading calendar…' });
+    this.wait(() => this.setState({ toolCaption: isAction ? 'drafting whatsapp → Omar…' : 'checking todoist + health log…' }), 750);
+    this.wait(() => {
+      if (isAction) {
+        this.setA('speaking', { phase: 'staged', toolCaption: '' });
+        this.stream('Staged — look it over before it goes.', (p) => this.setState({ answer: p }), () => this.setA('idle'));
+      } else {
+        this.setA('speaking', { phase: 'answering', toolCaption: '' });
+        this.stream("Clear after the 3pm review. Deep work till 5, gym at 7 — protein's 32g behind.", (p) => this.setState({ answer: p }), () => this.wait(() => this.setA('listening', { phase: 'empty', heard: '', answer: '' }), 2600));
+      }
+    }, 1600);
+  }
+
+  confirmSend() {
+    this.clearTimers();
+    const receipts = [{ text: 'whatsapp → Omar · sent', time: this.now() }, ...this.state.receipts].slice(0, 3);
+    this.setA('speaking', { receipts, phase: 'answering', answer: '' });
+    this.stream('تمام — اتبعتت.', (p) => this.setState({ answer: p }), () => this.wait(() => this.setA('listening', { phase: 'empty', heard: '', answer: '' }), 1600), 45);
+  }
+  cancelAction() { this.clearTimers(); this.setA('listening', { phase: 'empty', heard: '', answer: '' }); }
+
+  micDemo() {
+    if (this.state.aState === 'thinking' || this.state.phase === 'staged' || this.state.phase === 'hearing') return;
+    const scripts = ['إيه شكل بعد الضهر النهارده؟', 'ابعت لعمر إن الميتنج اتأجل لبكرة', 'ابعت رسالة بس النت فاصل — fail'];
+    const line = scripts[this.state.demoIdx % scripts.length];
+    this.setState({ demoIdx: this.state.demoIdx + 1 });
+    this.beginExchange(line, true);
+  }
+
+  renderVals() {
+    const S = this.state.aState, P = this.state.phase;
+    const colors = { idle: '#7E8AA3', listening: '#F09950', thinking: '#A48BF5', speaking: '#FFD9A3', error: '#F2604F' };
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'THINKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const labelsAr = { idle: 'ساكن', listening: 'سامعك', thinking: 'بفكّر', speaking: 'بتكلم', error: 'في مشكلة' };
+    const d = new Date();
+    const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const demoLabels = ['ASK THE BRIEF', 'SEND TO OMAR', 'TRY A FAILURE'];
+    return {
+      orbRef: this.orbRef,
+      clock: this.state.clock,
+      dateStr: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()],
+      stateColor: colors[S],
+      stateLabel: labels[S],
+      stateLabelAr: labelsAr[S],
+      labelOffset: '96px',
+      wordsOffset: '160px',
+      showHeardBig: P === 'hearing',
+      showHeardSmall: !!this.state.heard && (P === 'doing' || P === 'answering' || P === 'staged' || P === 'error'),
+      heard: this.state.heard,
+      isThinking: P === 'doing',
+      toolCaption: this.state.toolCaption,
+      showAnswer: !!this.state.answer,
+      answer: this.state.answer,
+      answerCaret: S === 'speaking' ? '1' : '0',
+      showError: P === 'error',
+      errorText: this.state.errorText,
+      showStaged: P === 'staged',
+      receipts: this.state.receipts,
+      hasReceipts: this.state.receipts.length > 0,
+      typedMode: this.state.typedMode,
+      voiceMode: !this.state.typedMode,
+      typed: this.state.typed,
+      inputRef: this.inputRef,
+      demoLabel: demoLabels[this.state.demoIdx % 3],
+      onType: (e) => this.setState({ typed: e.target.value }),
+      onKeyDown: (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && this.state.typed.trim()) { const t = this.state.typed.trim(); this.setState({ typed: '' }); this.beginExchange(t, false); }
+      },
+      toggleTyped: () => {
+        const on = !this.state.typedMode;
+        this.setState({ typedMode: on });
+        if (on) this.wait(() => { if (this.inputRef.current) this.inputRef.current.focus(); }, 60);
+      },
+      micDemo: () => this.micDemo(),
+      confirmSend: () => this.confirmSend(),
+      cancelAction: () => this.cancelAction()
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -3,17 +3,25 @@ ConversationLogger — appends every conversation turn to a daily JSONL file.
 
 Each entry: {timestamp, role, content, tools_used}
 Files live at data/conversations/YYYY-MM-DD.jsonl
+
+Set EL_FAGER_TEST_MODE=1 to write to data/conversations_test/ instead, so
+synthetic test sessions never pollute the real usage logs that HabitMiner
+and journal insights mine.
 """
 
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
 class ConversationLogger:
     LOG_DIR = Path("data/conversations")
+    TEST_LOG_DIR = Path("data/conversations_test")
 
     def __init__(self):
+        if os.getenv("EL_FAGER_TEST_MODE", "").strip() in ("1", "true", "yes"):
+            self.LOG_DIR = self.TEST_LOG_DIR
         self.LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     def _today_file(self) -> Path:

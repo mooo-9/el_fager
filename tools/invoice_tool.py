@@ -6,7 +6,6 @@ Data: data/invoices.json
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from core import atomic
 
 _INVOICE_PATH = Path("data/invoices.json")
 
@@ -19,7 +18,7 @@ def _load() -> dict:
 
 def _save(data: dict) -> None:
     _INVOICE_PATH.parent.mkdir(exist_ok=True)
-    atomic.write(_INVOICE_PATH, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _INVOICE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _is_overdue(inv: dict) -> bool:

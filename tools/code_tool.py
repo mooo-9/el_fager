@@ -39,7 +39,6 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from core import atomic
 
 _MAX_OUTPUT   = 3000
 _PYTHON       = sys.executable
@@ -162,7 +161,7 @@ def _load_bg_jobs() -> dict:
 
 def _save_bg_jobs(jobs: dict) -> None:
     _BG_DIR.mkdir(parents=True, exist_ok=True)
-    atomic.write(_BG_FILE, json.dumps(jobs, indent=2, ensure_ascii=False), encoding="utf-8")
+    _BG_FILE.write_text(json.dumps(jobs, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _pid_alive(pid: int) -> bool:
@@ -186,7 +185,7 @@ def _pid_alive(pid: int) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_python(code: str, timeout: int = 30) -> str:
-    """Run arbitrary Python code in an isolated subprocess. Arabic/Unicode safe."""
+    """Run arbitrary Python code in an isolated subprocess. Unicode safe."""
     if not code.strip():
         return "No code provided."
     try:
@@ -657,7 +656,7 @@ def create_script(name: str, code: str, language: str = "python") -> str:
 
     _SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
     path = _SCRIPTS_DIR / f"{name}{ext}"
-    atomic.write(path, code, encoding="utf-8")
+    path.write_text(code, encoding="utf-8")
     lines = len(code.splitlines())
     return f"Script '{name}' saved ({lines} line{'s' if lines != 1 else ''}, {lang}) -> {path}"
 

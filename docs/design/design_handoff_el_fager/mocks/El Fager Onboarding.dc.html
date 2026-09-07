@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#02040A;overflow:hidden}
+a{color:#38E0FF;text-decoration:none}
+a:hover{color:#8FF0FF}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.12);opacity:1}}
+@keyframes fgrBar{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes fgrRipple{0%{transform:scale(.5);opacity:.8}100%{transform:scale(2.2);opacity:0}}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+</style>
+</helmet>
+<div data-screen-label="Onboarding" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(1000px 700px at 50% 30%,#050B18 0%,#02040A 65%);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Space Grotesk','Alexandria',sans-serif">
+  <div style="position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(255,255,255,0.012) 0 1px,transparent 1px 3px)"></div>
+  <div style="position:absolute;top:30px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:14px;pointer-events:none">
+    <div style="width:110px;height:1px;background:linear-gradient(90deg,transparent,rgba(56,224,255,0.3))"></div>
+    <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.32em;color:#38E0FF;white-space:nowrap">FIRST LIGHT · التشغيل الأول</div>
+    <div style="width:110px;height:1px;background:linear-gradient(90deg,rgba(56,224,255,0.3),transparent)"></div>
+  </div>
+
+  <!-- the being, present from the first frame -->
+  <div style="position:relative;width:170px;height:170px;display:grid;place-items:center;flex:none">
+    <div style="position:absolute;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,{{ orbGlow }} 0%,transparent 70%);animation:fgrBreath 3.6s ease-in-out infinite;transition:background 400ms"></div>
+    <sc-if value="{{ isListenStep }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;width:130px;height:130px;border-radius:50%;border:1.5px solid rgba(56,224,255,0.5);animation:fgrRipple 1.6s ease-out infinite"></div>
+    </sc-if>
+    <div style="width:58px;height:58px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#FFFFFF 0%,{{ orbCore }} 55%,#06283A 100%);box-shadow:0 0 44px {{ orbGlow }};transition:background 400ms,box-shadow 400ms"></div>
+  </div>
+
+  <!-- steps -->
+  <div style="width:520px;max-width:calc(100vw - 48px);margin-top:34px;min-height:260px">
+
+    <sc-if value="{{ isStep0 }}" hint-placeholder-val="{{ true }}">
+      <div style="text-align:center">
+        <div style="font:600 30px 'Space Grotesk',sans-serif;color:#EAF2F7;letter-spacing:-.01em">I'm Fager.</div>
+        <div style="font:300 20px 'Alexandria',sans-serif;color:#9FB1C2;margin-top:6px">أنا الفجر — مساعدك</div>
+        <div style="font:400 14px/1.7 'Space Grotesk',sans-serif;color:#5F7183;margin-top:16px;text-wrap:pretty">I live in your tray, wake when you call, and act only with your sign-off. Two minutes of setup, then we talk.</div>
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 20px;margin-top:26px">
+          <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;flex:none">What should I call you?</div>
+          <input ref="{{ nameRef }}" value="{{ userName }}" onChange="{{ onName }}" placeholder="Mo" style="flex:1;background:transparent;border:none;outline:none;font:500 15px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;min-width:0;text-align:center"></input>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ false }}">
+      <div style="text-align:center">
+        <div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">Let me hear you, {{ userName }}</div>
+        <div style="font:400 14px/1.7 'Space Grotesk',sans-serif;color:#5F7183;margin-top:10px">Say anything — English, عربي, or both in one breath.</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:30px">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:26px"><div style="width:4px;height:10px;border-radius:2px;background:#38E0FF;animation:fgrBar 1s ease-in-out infinite"></div><div style="width:4px;height:18px;border-radius:2px;background:#38E0FF;animation:fgrBar .75s ease-in-out infinite;animation-delay:.1s"></div><div style="width:4px;height:24px;border-radius:2px;background:#8FF0FF;animation:fgrBar .6s ease-in-out infinite;animation-delay:.05s"></div><div style="width:4px;height:18px;border-radius:2px;background:#38E0FF;animation:fgrBar .85s ease-in-out infinite;animation-delay:.16s"></div><div style="width:4px;height:10px;border-radius:2px;background:#38E0FF;animation:fgrBar 1.1s ease-in-out infinite;animation-delay:.08s"></div></div>
+        </div>
+        <div dir="auto" style="font:400 15px 'Spline Sans Mono',monospace;color:#9FB1C2;margin-top:22px;min-height:24px">{{ calibText }}<span style="display:inline-block;width:7px;height:15px;background:#38E0FF;border-radius:1px;vertical-align:-2px;margin:0 4px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ calibCaret }}"></span></div>
+        <sc-if value="{{ calibDone }}" hint-placeholder-val="{{ false }}">
+          <div style="display:inline-flex;align-items:center;gap:8px;margin-top:14px;background:rgba(86,201,156,0.08);border:1px solid rgba(86,201,156,0.3);border-radius:99px;padding:6px 16px"><div style="width:6px;height:6px;border-radius:50%;background:#56C99C"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#56C99C">VOICE LOCKED — BOTH LANGUAGES, ONE PROFILE</div></div>
+        </sc-if>
+        <sc-if value="{{ calibIdle }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ calibrate }}" style="display:inline-flex;align-items:center;gap:7px;margin-top:14px;cursor:pointer;border:1px dashed rgba(255,255,255,0.2);border-radius:99px;padding:6px 16px" style-hover="border-color:rgba(56,224,255,0.5)"><svg width="8" height="10" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#9FB1C2"></path></svg><div style="font:500 10.5px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9FB1C2">SIMULATE SPEAKING</div></div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7;text-align:center">What can I touch?</div>
+        <div style="font:400 13.5px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:8px;text-align:center;text-wrap:pretty">Pick what I'm allowed to reach. Anything that sends or posts always shows you a preview first — that rule has no off switch.</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:22px">
+          <sc-for list="{{ skills }}" as="k" hint-placeholder-count="5">
+            <div onClick="{{ k.toggle }}" style="display:flex;align-items:center;gap:12px;background:rgba(5,11,24,0.9);border:1px solid {{ k.border }};border-radius:12px;padding:12px 16px;cursor:pointer;transition:border-color 140ms">
+              <div style="width:6px;height:6px;border-radius:50%;background:{{ k.dot }};flex:none"></div>
+              <div style="flex:1"><div style="font:500 13.5px 'Spline Sans Mono',monospace;color:#EAF2F7">{{ k.name }}</div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5F7183">{{ k.perm }}</div></div>
+              <div style="font:400 14px 'Space Grotesk',sans-serif;color:{{ k.checkColor }};flex:none">{{ k.check }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+      <div style="text-align:center">
+        <div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">One last thing — call me</div>
+        <div style="font:500 26px 'Spline Sans Mono',monospace;color:#38E0FF;margin-top:14px">"hey Fager"</div>
+        <div style="font:400 13.5px/1.7 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">Or Ctrl+Space when your hands are on the keys. Try it now.</div>
+        <sc-if value="{{ wakeDone }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:20px">
+            <div style="font:400 17px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7">Heard you, {{ userName }}. <span style="font-family:'Alexandria',sans-serif;font-weight:300">تحت أمرك.</span></div>
+            <div style="font:400 11px 'Spline Sans Mono',monospace;color:#56C99C;margin-top:10px;letter-spacing:.14em">WAKE WORD ARMED — SETUP COMPLETE</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ wakeIdle }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ tryWake }}" style="display:inline-flex;align-items:center;gap:7px;margin-top:22px;cursor:pointer;border:1px dashed rgba(255,255,255,0.2);border-radius:99px;padding:7px 18px" style-hover="border-color:rgba(56,224,255,0.5)"><svg width="8" height="10" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#9FB1C2"></path></svg><div style="font:500 10.5px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9FB1C2">SIMULATE "HEY FAGER"</div></div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- footer nav -->
+  <div style="display:flex;align-items:center;gap:20px;margin-top:36px">
+    <div onClick="{{ back }}" style="font:500 13px 'Space Grotesk',sans-serif;color:{{ backColor }};cursor:pointer;padding:8px 12px" style-hover="color:#EAF2F7">Back</div>
+    <div style="display:flex;gap:8px">
+      <div style="width:7px;height:7px;border-radius:50%;background:{{ dot0 }};transition:background 220ms"></div>
+      <div style="width:7px;height:7px;border-radius:50%;background:{{ dot1 }};transition:background 220ms"></div>
+      <div style="width:7px;height:7px;border-radius:50%;background:{{ dot2 }};transition:background 220ms"></div>
+      <div style="width:7px;height:7px;border-radius:50%;background:{{ dot3 }};transition:background 220ms"></div>
+    </div>
+    <div onClick="{{ next }}" style="font:500 13px 'Space Grotesk',sans-serif;color:#04121A;background:{{ nextBg }};border-radius:10px;padding:8px 22px;cursor:pointer;transition:background 140ms" style-hover="background:#8FF0FF">{{ nextLabel }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1180px&quot;,&quot;height&quot;:&quot;760px&quot;}}">
+class Component extends DCLogic {
+  state = {
+    step: 0, userName: '', calib: 'idle', calibText: '', wake: 'idle',
+    skills: { gmail: true, whatsapp: true, todoist: true, browser: false, screen: false }
+  };
+  nameRef = React.createRef();
+  timers = [];
+  componentWillUnmount() { this.timers.forEach(clearTimeout); if (this.iv) clearInterval(this.iv); }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+
+  calibrate() {
+    if (this.state.calib !== 'idle') return;
+    this.setState({ calib: 'running', calibText: '' });
+    const line = 'testing one two — واحد اتنين تلاتة';
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 2;
+      this.setState({ calibText: line.slice(0, i) });
+      if (i >= line.length) { clearInterval(this.iv); this.iv = null; this.wait(() => this.setState({ calib: 'done' }), 500); }
+    }, 55);
+  }
+  tryWake() {
+    if (this.state.wake !== 'idle') return;
+    this.setState({ wake: 'done' });
+  }
+  renderVals() {
+    const S = this.state;
+    const cyan = '#38E0FF';
+    const cores = { 0: '#38E0FF', 1: '#38E0FF', 2: '#F09950', 3: S.wake === 'done' ? '#FFD782' : '#38E0FF' };
+    const glows = { 0: 'rgba(56,224,255,0.3)', 1: 'rgba(56,224,255,0.45)', 2: 'rgba(240,153,80,0.3)', 3: S.wake === 'done' ? 'rgba(255,215,130,0.45)' : 'rgba(56,224,255,0.3)' };
+    const skillDefs = [
+      ['gmail', '#EA6C5A', 'Read inbox · draft replies'],
+      ['whatsapp', '#25D366', 'Read chats · send after preview'],
+      ['todoist', '#E8746A', 'Read · add · complete tasks'],
+      ['browser', '#38E0FF', 'Drive a browser on request'],
+      ['screen', '#5B8DEF', 'See the screen — only when asked']
+    ];
+    const canNext = S.step === 0 ? true : S.step === 1 ? S.calib === 'done' : S.step === 3 ? S.wake === 'done' : true;
+    return {
+      isStep0: S.step === 0, isStep1: S.step === 1, isStep2: S.step === 2, isStep3: S.step === 3,
+      isListenStep: S.step === 1 && S.calib === 'running',
+      orbCore: cores[S.step], orbGlow: glows[S.step],
+      userName: S.userName || 'Mo',
+      nameRef: this.nameRef,
+      onName: (e) => this.setState({ userName: e.target.value }),
+      calibrate: () => this.calibrate(),
+      calibText: S.calibText,
+      calibCaret: S.calib === 'running' ? '1' : '0',
+      calibDone: S.calib === 'done', calibIdle: S.calib === 'idle',
+      tryWake: () => this.tryWake(),
+      wakeDone: S.wake === 'done', wakeIdle: S.wake === 'idle',
+      skills: skillDefs.map(([id, dot, perm]) => ({
+        name: id, dot, perm,
+        border: S.skills[id] ? 'rgba(56,224,255,0.35)' : 'rgba(255,255,255,0.07)',
+        check: S.skills[id] ? '✓' : '',
+        checkColor: cyan,
+        toggle: () => this.setState({ skills: { ...S.skills, [id]: !S.skills[id] } })
+      })),
+      back: () => { if (S.step > 0) this.setState({ step: S.step - 1 }); },
+      backColor: S.step > 0 ? '#9FB1C2' : 'transparent',
+      next: () => { if (!canNext) return; if (S.step < 3) this.setState({ step: S.step + 1 }); },
+      nextBg: canNext && S.step < 3 ? cyan : (S.step === 3 && S.wake === 'done' ? '#56C99C' : 'rgba(255,255,255,0.15)'),
+      nextLabel: S.step === 3 ? (S.wake === 'done' ? 'Open the cockpit' : 'Waiting…') : 'Continue',
+      dot0: S.step === 0 ? cyan : 'rgba(255,255,255,0.15)',
+      dot1: S.step === 1 ? cyan : 'rgba(255,255,255,0.15)',
+      dot2: S.step === 2 ? cyan : 'rgba(255,255,255,0.15)',
+      dot3: S.step === 3 ? cyan : 'rgba(255,255,255,0.15)'
+    };
+  }
+}
+</script>
+</body>
+</html>

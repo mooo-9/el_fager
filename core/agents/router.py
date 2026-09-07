@@ -19,63 +19,6 @@ _BROWSER_KEYWORDS = [
     "search on google", "search on amazon",
 ]
 
-# StocksAgent handles ANALYTICAL and AGENTIC stock tasks.
-# Checked BEFORE _STOCKS_KEYWORDS so these take priority.
-_STOCKS_AGENT_KEYWORDS = [
-    "analyze", "thesis on", "your thesis",
-    "should i buy", "should i sell", "should we buy",
-    "your view on", "your opinion on",
-    "what do you think about", "what's your take on",
-    "conviction on", "outlook for", "stock outlook",
-    "deep analysis", "deep dive",
-    "why did you buy", "why did we buy",
-    "why did you sell", "why did we sell",
-    "my trading stats", "trading performance",
-    "scan my watchlist", "scan portfolio", "scan watchlist",
-    "pause trading", "resume trading", "unpause trading",
-    "stop auto-trade", "start auto-trade",
-    "set auto-trade threshold", "set threshold",
-    "auto-trade threshold", "auto trade threshold",
-    "explain my portfolio", "explain my trades",
-]
-
-# Instant-lane stock tools: price lookups, watchlist, alerts, market overview.
-_STOCKS_KEYWORDS = [
-    "stock", "stocks", "trade", "trading", "portfolio", "ticker",
-    "buy shares", "sell shares", "invest", "investing", "investment",
-    "trading engine", "trading agent", "open positions", "trade history",
-    "bull", "bear", "bullish", "bearish", "earnings", "dividend",
-    "p/e ratio", "rsi", "macd", "moving average",
-    "nvda", "aapl", "msft", "amzn", "googl", "meta", "tsla",
-    "spy", "qqq", "btc", "eth", "crypto",
-]
-
-_GATE_CHECK_KEYWORDS = [
-    "ready for real trading",
-    "passed the paper trading",
-    "paper trading gate",
-    "paper trading results",
-    "am i ready to go live",
-    "how are we doing trading",
-]
-
-_CONFIRM_LIVE_KEYWORDS = [
-    "confirm real trading",
-    "confirm live trading",
-    "activate real trading",
-    "activate live trading",
-    "go live with trading",
-    "switch to real trading",
-    "switch to live trading",
-]
-
-_CANCEL_LIVE_KEYWORDS = [
-    "cancel live trading",
-    "cancel real trading",
-    "abort live trading",
-    "stop live trading activation",
-]
-
 _HEALTH_FOOD_KEYWORDS = [
     "i just ate", "i ate", "i just had", "log meal", "log food",
     "nutrition", "calories today", "how many calories", "macro", "macros",
@@ -120,11 +63,6 @@ _FILE_KEYWORDS = [
 _LABEL_KEYWORDS = [
     ("screen", _SCREEN_KEYWORDS),
     ("browser", _BROWSER_KEYWORDS),
-    ("stocks_agent", _STOCKS_AGENT_KEYWORDS),  # checked before "stocks"
-    ("confirm_live", _CONFIRM_LIVE_KEYWORDS),  # checked before gate_check and stocks
-    ("cancel_live", _CANCEL_LIVE_KEYWORDS),    # checked before gate_check and stocks
-    ("gate_check", _GATE_CHECK_KEYWORDS),      # checked before generic "stocks"
-    ("stocks", _STOCKS_KEYWORDS),
     ("health", _HEALTH_FOOD_KEYWORDS + _HEALTH_GYM_KEYWORDS),
     ("research", _RESEARCH_KEYWORDS),
     ("file", _FILE_KEYWORDS),
@@ -134,9 +72,8 @@ _LABEL_KEYWORDS = [
 def classify_intent(message: str) -> str:
     """Return the agent label that should handle this message.
 
-    Returns one of: 'screen', 'browser', 'stocks_agent', 'confirm_live',
-    'cancel_live', 'gate_check', 'stocks', 'research', 'file', 'instant'.
-    Uses keyword matching. First match wins.
+    Returns one of: 'screen', 'browser', 'health', 'research', 'file',
+    'instant'. Uses keyword matching. First match wins.
     """
     import re
     msg = message.lower()
@@ -146,40 +83,3 @@ def classify_intent(message: str) -> str:
             if re.search(pattern, msg):
                 return label
     return "instant"
-
-
-# Words that may precede a callsign when Mo addresses an agent out loud.
-_VOCATIVE_LEAD = r"(?:hey|ok|okay|yo|hi|el\s+fager|elfager)[\s,]+"
-
-
-def parse_callsign(message: str) -> tuple[str, str] | None:
-    """Detect Mo addressing one agent by name: 'Sage, research X'.
-
-    Requires an explicit address -- a comma or colon after the callsign, or a
-    vocative lead-in ('hey Sage research X'). A bare 'Sage tea recipe' or
-    'forge a signature' is NOT an invocation: several callsigns are ordinary
-    English words, and silently routing past the brain on one of them is worse
-    than missing an invocation. A miss costs nothing -- the message falls
-    through to the tool loop, which can still pick the same agent.
-
-    Returns (tool_name, task) or None.
-    """
-    import re
-    from core.agents.registry import ROSTER
-
-    if not message:
-        return None
-    text = message.strip().lstrip("-*").strip()
-    for spec in ROSTER.values():
-        name = re.escape(spec.callsign)
-        patterns = (
-            rf"^{name}\s*[,:]\s*(.+)$",            # "Sage, research X"
-            rf"^{_VOCATIVE_LEAD}{name}\b[\s,:]+(.+)$",  # "hey Sage research X"
-        )
-        for pattern in patterns:
-            match = re.match(pattern, text, re.IGNORECASE)
-            if match:
-                task = match.group(1).strip()
-                if len(task) >= 3:
-                    return spec.tool_name, task
-    return None

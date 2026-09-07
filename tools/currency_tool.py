@@ -8,12 +8,12 @@ import httpx
 _BASE_URL = "https://api.exchangerate-api.com/v4/latest/{}"
 
 _ALIASES = {
-    "pound":   "EGP", "جنيه": "EGP", "جنيه مصري": "EGP",
-    "dollar":  "USD", "دولار": "USD",
-    "euro":    "EUR", "يورو": "EUR",
-    "riyal":   "SAR", "ريال": "SAR",
-    "dirham":  "AED", "درهم": "AED",
-    "sterling":"GBP", "جنيه إسترليني": "GBP",
+    "pound":   "EGP",
+    "dollar":  "USD",
+    "euro":    "EUR",
+    "riyal":   "SAR",
+    "dirham":  "AED",
+    "sterling":"GBP",
 }
 
 def _normalise(code: str) -> str:

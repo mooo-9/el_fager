@@ -12,7 +12,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
-from core import atomic
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -55,7 +54,7 @@ def _load_schedules() -> list[dict]:
 
 def _save_schedules(data: list[dict]) -> None:
     _SCHEDULES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write(_SCHEDULES_FILE,
+    _SCHEDULES_FILE.write_text(
         json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 

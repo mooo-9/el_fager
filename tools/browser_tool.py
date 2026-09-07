@@ -20,20 +20,12 @@ _browser = None
 _context = None
 _page = None
 _owner_thread: int = None  # OS thread ID that created the browser
-_owned = True              # False when attached to Mo's own running Comet
 
 
 def _reset_browser_state():
-    """Teardown browser objects without raising (used when thread changes).
-
-    When attached to Mo's Comet we only close the tab we opened — closing his
-    context or browser would end his session.
-    """
-    global _playwright, _browser, _context, _page, _owner_thread, _owned
-    teardown = [(_page, "close")]
-    if _owned:
-        teardown += [(_context, "close"), (_browser, "close")]
-    for obj, method in teardown:
+    """Teardown browser objects without raising (used when thread changes)."""
+    global _playwright, _browser, _context, _page, _owner_thread
+    for obj, method in [(_page, "close"), (_context, "close"), (_browser, "close")]:
         if obj is not None:
             try:
                 getattr(obj, method)()
@@ -45,12 +37,11 @@ def _reset_browser_state():
         except Exception:
             pass
     _playwright = _browser = _context = _page = _owner_thread = None
-    _owned = True
 
 
 def _ensure_browser(headless: bool = False):
     """Initialize browser if not already open. Auto-resets if thread changed."""
-    global _playwright, _browser, _context, _page, _owner_thread, _owned
+    global _playwright, _browser, _context, _page, _owner_thread
     current_thread = threading.current_thread().ident
 
     # If browser exists but was created in a different thread, reset it
@@ -59,9 +50,9 @@ def _ensure_browser(headless: bool = False):
 
     if _page is None:
         from playwright.sync_api import sync_playwright
-        from tools.comet_tool import automation_context
         _playwright = sync_playwright().start()
-        _browser, _context, _owned = automation_context(_playwright, headless=headless)
+        _browser = _playwright.chromium.launch(headless=headless)
+        _context = _browser.new_context()
         _page = _context.new_page()
         _owner_thread = current_thread
 

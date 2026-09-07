@@ -18,7 +18,6 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
-from core import atomic
 load_dotenv()
 
 _TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -45,7 +44,7 @@ def _load_contacts() -> dict:
 
 def _save_contacts(contacts: dict) -> None:
     _CONTACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write(_CONTACTS_PATH,
+    _CONTACTS_PATH.write_text(
         json.dumps(contacts, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

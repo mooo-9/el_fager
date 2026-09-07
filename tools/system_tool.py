@@ -1,12 +1,8 @@
 import subprocess
 
-# A generic "open a browser" — and Chrome, which Comet replaces — go to Comet.
-# Naming another browser outright (edge, firefox) still opens that one.
-_BROWSER_NAMES = frozenset({
-    "browser", "comet", "chrome", "google chrome", "web browser", "internet",
-})
-
 _APP_ALIASES: dict[str, str] = {
+    "chrome": "chrome.exe",
+    "google chrome": "chrome.exe",
     "firefox": "firefox.exe",
     "edge": "msedge.exe",
     "notepad": "notepad.exe",
@@ -43,11 +39,6 @@ _BLOCKED_KEYWORDS = [
 def open_app(app_name: str) -> str:
     """Launch a Windows application by name or alias."""
     name_lower = app_name.lower().strip()
-
-    if name_lower in _BROWSER_NAMES:
-        from tools.comet_tool import open_comet
-        return open_comet()
-
     exe = _APP_ALIASES.get(name_lower, app_name)
 
     try:

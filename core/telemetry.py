@@ -158,31 +158,3 @@ def instrument_client(client, source: str):
     except Exception:
         pass
     return client
-
-
-_DEFAULT_DAILY_BUDGET_USD = 5.0
-_SETTINGS_PATH = Path("data/settings.json")
-
-
-def daily_budget() -> float:
-    """Today's API spend cap from data/settings.json. 0 disables the cap."""
-    try:
-        if _SETTINGS_PATH.exists():
-            settings = json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
-            return float(settings.get("api_daily_budget_usd",
-                                      _DEFAULT_DAILY_BUDGET_USD))
-    except Exception:
-        pass
-    return _DEFAULT_DAILY_BUDGET_USD
-
-
-def over_budget() -> tuple[bool, float, float]:
-    """(over, spent_today, budget). Never raises; a broken read is 'not over'."""
-    try:
-        budget = daily_budget()
-        if budget <= 0:
-            return False, cost_today(), budget
-        spent = cost_today()
-        return spent > budget, spent, budget
-    except Exception:
-        return False, 0.0, 0.0

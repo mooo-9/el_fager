@@ -83,7 +83,7 @@ class ScreenAgent(BaseAgent):
             else "None yet."
         )
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-sonnet-5",
             max_tokens=512,
             system=_VISION_SYSTEM,
             messages=[

@@ -22,7 +22,6 @@ import random
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from core import atomic
 
 _JOURNAL_DIR = Path("data/journal")
 _PINS_FILE   = _JOURNAL_DIR / "pins.json"
@@ -153,7 +152,7 @@ def _load_pins() -> list[dict]:
 
 def _save_pins(pins: list[dict]) -> None:
     _JOURNAL_DIR.mkdir(parents=True, exist_ok=True)
-    atomic.write(_PINS_FILE, json.dumps(pins, ensure_ascii=False, indent=2), encoding="utf-8")
+    _PINS_FILE.write_text(json.dumps(pins, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # ── Core CRUD ─────────────────────────────────────────────────────────────────
@@ -245,7 +244,7 @@ def delete_journal_entry(entry_number: int, date_str: str = None) -> str:
         path.unlink()
         return f"Deleted the only entry from {d} — journal file removed."
 
-    atomic.write(path, _rebuild_file(file_header, entries), encoding="utf-8")
+    path.write_text(_rebuild_file(file_header, entries), encoding="utf-8")
     return f"Deleted entry {entry_number} from {d}: {deleted_heading}"
 
 
@@ -261,7 +260,7 @@ def edit_journal_entry(entry_number: int, new_text: str, date_str: str = None) -
 
     heading = entries[idx][0]
     entries[idx] = (heading, f"\n{new_text.strip()}\n\n")
-    atomic.write(path, _rebuild_file(file_header, entries), encoding="utf-8")
+    path.write_text(_rebuild_file(file_header, entries), encoding="utf-8")
     return f"Updated entry {entry_number} from {d}: {heading.lstrip('#').strip()}"
 
 
@@ -277,7 +276,7 @@ def append_to_entry(entry_number: int, additional_text: str, date_str: str = Non
     heading, old_body = entries[idx]
     new_body = f"{old_body.rstrip()}\n{additional_text.strip()}\n\n"
     entries[idx] = (heading, new_body)
-    atomic.write(path, _rebuild_file(file_header, entries), encoding="utf-8")
+    path.write_text(_rebuild_file(file_header, entries), encoding="utf-8")
     return f"Appended to entry {entry_number} from {d}."
 
 
@@ -293,7 +292,7 @@ def rename_entry_title(entry_number: int, new_title: str, date_str: str = None) 
     time_part = time_m.group(1) if time_m else heading.split("—")[0].rstrip()
     new_heading = f"{time_part} — {new_title.strip()}"
     entries[idx] = (new_heading, body)
-    atomic.write(path, _rebuild_file(file_header, entries), encoding="utf-8")
+    path.write_text(_rebuild_file(file_header, entries), encoding="utf-8")
     return f"Renamed entry {entry_number} from {d} to: {new_title.strip()}"
 
 
@@ -775,7 +774,7 @@ def export_journal(start_date: str = None, end_date: str = None) -> str:
 
     range_label = f"{(start_d or selected[0].stem)}_{end_d}"
     export_path = _JOURNAL_DIR / f"export_{range_label}.md"
-    atomic.write(export_path, combined, encoding="utf-8")
+    export_path.write_text(combined, encoding="utf-8")
 
     try:
         os.startfile(str(export_path))
@@ -824,7 +823,7 @@ def copy_journal_to_clipboard(date_str: str = None) -> str:
         # Last resort: write to a temp file and tell Mo where it is
         import tempfile
         tmp = Path(tempfile.gettempdir()) / f"journal_{d}.md"
-        atomic.write(tmp, content, encoding="utf-8")
+        tmp.write_text(content, encoding="utf-8")
         return f"Clipboard unavailable — journal saved to {tmp} instead."
 
     return f"Copied journal for {_date_label(d)} to clipboard."

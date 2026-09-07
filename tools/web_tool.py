@@ -1,10 +1,3 @@
-import urllib.parse
-
-# Comet is a Perplexity browser, so its own search is the natural surface
-# for an open-ended "look this up for me".
-_SEARCH_URL = "https://www.perplexity.ai/search?q={}"
-
-
 def web_search(query: str, max_results: int = 5) -> str:
     try:
         try:
@@ -38,16 +31,3 @@ def fetch_page(url: str, max_chars: int = 3000) -> str:
         return text if text else "[No readable content found]"
     except Exception as e:
         return f"[fetch failed: {e}]"
-
-
-def open_web_search(task: str) -> str:
-    """Open a web search for `task` in Comet so Mo can read it himself.
-
-    web_search() is the other half of this: it reads the web and answers.
-    This one hands Mo the browser.
-    """
-    from tools.comet_tool import open_url
-    url = _SEARCH_URL.format(urllib.parse.quote_plus(task))
-    used_comet = open_url(url)
-    where = "Comet" if used_comet else "your default browser (Comet not found)"
-    return f"Searching '{task}' in {where}."

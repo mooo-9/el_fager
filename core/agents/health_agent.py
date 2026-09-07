@@ -5,7 +5,6 @@ from pathlib import Path
 
 from core.agents.base_agent import BaseAgent
 from core.agents.nutrition_db import NutritionDB, FoodNotFoundError
-from core import atomic
 
 _PROFILE_PATH     = Path("data/health_profile.json")
 _MEAL_LOG_PATH    = Path("data/meal_log.json")
@@ -103,7 +102,7 @@ class HealthAgent(BaseAgent):
             "weekly_report_time": "08:00 AM",
         }
         _PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        atomic.write(_PROFILE_PATH, json.dumps(profile, indent=2))
+        _PROFILE_PATH.write_text(json.dumps(profile, indent=2))
 
         return (
             f"Profile saved. Daily target: {tdee:.0f} kcal -- "
@@ -123,7 +122,7 @@ class HealthAgent(BaseAgent):
         for word, field in field_map.items():
             if word in task_lower and value:
                 profile["overrides"][field] = value
-                atomic.write(_PROFILE_PATH, json.dumps(profile, indent=2))
+                _PROFILE_PATH.write_text(json.dumps(profile, indent=2))
                 return f"Got it -- daily {word} target updated to {value:.0f}{'g' if field != 'kcal' else ' kcal'}."
         return "I didn't catch what to update. Try: set my daily protein to 200g"
 
@@ -275,7 +274,7 @@ class HealthAgent(BaseAgent):
     def _save_workout_log(self, log: dict) -> None:
         _WORKOUT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         try:
-            atomic.write(_WORKOUT_LOG_PATH, json.dumps(log, indent=2))
+            _WORKOUT_LOG_PATH.write_text(json.dumps(log, indent=2))
         except Exception:
             pass
 
@@ -324,7 +323,7 @@ class HealthAgent(BaseAgent):
 
             program = {"type": "custom", "split": split, "exercises": {}}
             _GYM_PROGRAM_PATH.parent.mkdir(parents=True, exist_ok=True)
-            atomic.write(_GYM_PROGRAM_PATH, json.dumps(program, indent=2))
+            _GYM_PROGRAM_PATH.write_text(json.dumps(program, indent=2))
             days_listed = ", ".join(f"{d.capitalize()} ({s})" for d, s in split.items())
             return f"Program saved -- {days_listed}."
 
@@ -356,7 +355,7 @@ class HealthAgent(BaseAgent):
     def _save_meal_log(self, log: dict) -> None:
         _MEAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         try:
-            atomic.write(_MEAL_LOG_PATH, json.dumps(log, indent=2))
+            _MEAL_LOG_PATH.write_text(json.dumps(log, indent=2))
         except Exception:
             pass
 

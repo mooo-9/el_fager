@@ -20,17 +20,12 @@ Natural language 'when' parsing supports:
   One-shot:
     "in 30 seconds" / "in 30 minutes" / "in 2 hours" / "in 1 day"
     "tomorrow at 9am" / "tonight at 10pm"
-
-  Arabizi shortcuts:
-    "kol youm" / "kol yom" → daily
-    "kol sa3a" → every hour
 """
 
 import json
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from core import atomic
 
 _WEEKDAYS = {
     "monday": "mon", "tuesday": "tue", "wednesday": "wed",
@@ -60,17 +55,6 @@ _ORDINALS = {
     "26th": 26, "27th": 27, "28th": 28, "last": "last",
 }
 
-# Arabizi → English equivalent
-_ARABIZI_MAP = {
-    "kol youm": "every day at 8am",
-    "kol yom": "every day at 8am",
-    "kol sa3a": "every hour",
-    "kol sa3eten": "every 2 hours",
-    "kol nuss sa3a": "every 30 minutes",
-    "kol yom el sob7": "every morning",
-    "kol leila": "every night",
-}
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # When-string parser
@@ -90,19 +74,6 @@ def _parse_hm(hour_str: str, min_str: str | None, ampm: str | None) -> tuple[int
 
 def _parse_when(when: str) -> dict | None:
     w = when.strip().lower()
-
-    # ── Arabizi shortcuts ───────────────────────────────────────────────────
-    for arabizi, english in _ARABIZI_MAP.items():
-        if arabizi in w:
-            w = w.replace(arabizi, english)
-            break
-
-    # ── Arabic Unicode basics ───────────────────────────────────────────────
-    # كل يوم → every day at 8
-    if "كل يوم" in w:
-        m2 = re.search(r"الساعة\s+(\d{1,2})", w)
-        h = int(m2.group(1)) if m2 else 8
-        return {"type": "cron", "hour": h, "minute": 0}
 
     # ── Raw 5-field cron ────────────────────────────────────────────────────
     parts = w.split()
@@ -806,5 +777,5 @@ def clear_history() -> str:
     from core.scheduler import _HISTORY_FILE
     if not _HISTORY_FILE.exists():
         return "Schedule history is already empty."
-    atomic.write(_HISTORY_FILE, "", encoding="utf-8")
+    _HISTORY_FILE.write_text("", encoding="utf-8")
     return "Schedule history cleared."

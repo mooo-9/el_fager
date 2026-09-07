@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.skills.store import SkillStore
-from core import atomic
 
 _DEFAULT_CONVERSATIONS = Path("data/conversations")
 _DEFAULT_PROPOSALS = Path("data/skill_proposals.json")
@@ -37,7 +36,7 @@ _STOPWORDS = {
 
 def normalize(text: str) -> str:
     text = text.lower()
-    text = re.sub(r"[^a-z؀-ۿ\s]", " ", text)  # keep latin + arabic letters
+    text = re.sub(r"[^a-z\s]", " ", text)  # keep latin letters only
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -71,7 +70,7 @@ class HabitMiner:
 
     def _save(self, proposals: list[dict]) -> None:
         self._proposals_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic.write(self._proposals_path,
+        self._proposals_path.write_text(
             json.dumps(proposals, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 

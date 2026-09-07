@@ -1,0 +1,120 @@
+/* ============================================================
+   EL FAGER — DESIGN TOKENS (CSS)
+   For QWebEngine panels + the phone dashboard (PWA).
+   Source of truth: "El Fager Design Language.dc.html", board 01–05.
+   Keep in sync with el_fager_tokens.py / el-fager-tokens.qss.
+   ============================================================ */
+
+:root {
+  /* ---- NIGHT — grounds (always cold) ---- */
+  --bg-void: #07080C;        /* HUD / desktop scrim */
+  --surface-0: #0D1017;      /* window base */
+  --surface-1: #131722;      /* card */
+  --surface-2: #1A2030;      /* raised / hover */
+  --surface-3: #222A3D;      /* active / selected */
+  --stroke-hairline: rgba(255,255,255,0.08);
+  --stroke-hairline-strong: rgba(255,255,255,0.14);
+
+  /* ---- TEXT (warm white on cold ground) ---- */
+  --text-hi: #F2EDE6;
+  --text-mid: #9BA3B5;
+  --text-low: #5C6478;
+  --text-on-ember: #1A0F06;  /* never white on ember */
+
+  /* ---- WARM LIGHT — the only accent ---- */
+  --accent-ember: #F09950;
+  --accent-bright: #FFBE7E;  /* hover */
+  --accent-press: #D07E35;
+  --accent-wash: rgba(240,153,80,0.13);
+  --accent-wash-border: rgba(240,153,80,0.25);
+
+  /* ---- THE FIVE LIGHTS — assistant states ---- */
+  /* DAWN palette — compact overlay + Command Center */
+  --state-idle: #7E8AA3;      /* ash */
+  --state-listening: #F09950; /* ember = brand moment */
+  --state-thinking: #A48BF5;  /* twilight violet */
+  --state-speaking: #FFD9A3;  /* risen gold */
+  --state-error: #F2604F;     /* flare */
+
+  /* COCKPIT palette (v4) — full-screen cockpit; cyan listening / orange working / gold speaking */
+  --ck-idle: #7E8AA3;
+  --ck-listening: #38E0FF;    /* cyan */
+  --ck-working: #F09950;      /* ember orange */
+  --ck-speaking: #FFD782;     /* gold */
+  --ck-error: #FF5042;        /* flare */
+  /* cockpit grounds (colder than dawn) */
+  --ck-void: #02040A;
+  --ck-panel: #050B18;
+  --ck-card: #081120;
+  --ck-chip: #0D1B2E;
+  --ck-hairline: #16283E;
+  --ck-text-hi: #EAF2F7;
+  --ck-text-mid: #9FB1C2;
+  --ck-text-low: #5F7183;
+  --ck-text-faint: #3A4A5C;
+
+  /* per-skill micro-tint dots (captions/receipts only — never fills) */
+  --skill-whatsapp: #25D366;
+  --skill-gmail: #EA6C5A;
+  --skill-todoist: #E8746A;
+  --skill-calendar: #5B8DEF;
+  --skill-browser: #38E0FF;
+
+  /* ---- SEMANTIC (dots, text, hairlines only — never fills) ---- */
+  --sem-ok: #56C99C;
+  --sem-warn: #EFC868;
+  --sem-bad: #F2604F;
+
+  /* ---- TYPE ----
+     Latin UI/display: "Space Grotesk" (400/500/600)
+     Arabic UI/display: "Alexandria" (300/400/500; one weight lighter than Latin)
+     Data/mono: "Spline Sans Mono"
+     Stack everything as: 'Space Grotesk','Alexandria',sans-serif  */
+  --font-ui: 'Space Grotesk', 'Alexandria', sans-serif;
+  --font-ar: 'Alexandria', 'Space Grotesk', sans-serif;
+  --font-mono: 'Spline Sans Mono', monospace;
+
+  --type-hero: 600 44px/1.1 var(--font-ui);
+  --type-display: 500 28px/1.2 var(--font-ui);
+  --type-title: 500 21px/1.3 var(--font-ui);
+  --type-emphasis: 500 17px/1.45 var(--font-ui);
+  --type-body: 400 15px/1.55 var(--font-ui);
+  --type-ui: 500 13.5px/1.4 var(--font-ui);
+  --type-caption: 400 12px/1.4 var(--font-ui);
+  --type-data: 400 12px/1.5 var(--font-mono);
+  /* Arabic body sits +1px vs Latin (x-height compensation). Never italic, never letter-spaced. */
+
+  /* ---- SPACING — base 4 ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 48px;
+
+  /* ---- RADII ---- */
+  --r-1: 6px;   /* chips, kbd */
+  --r-2: 10px;  /* buttons, inputs */
+  --r-3: 16px;  /* cards, bubbles */
+  --r-4: 22px;  /* windows, overlay */
+  --r-pill: 999px;
+
+  /* ---- ELEVATION ---- */
+  --e-1: inset 0 1px 0 rgba(255,255,255,0.06);                          /* card edge */
+  --e-2: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.35); /* raised */
+  --e-3: 0 24px 64px rgba(0,0,0,0.55);                                  /* floating */
+  --e-glow: 0 0 24px rgba(240,153,80,0.22);  /* LIVE ONLY: mic open or action armed */
+
+  /* ---- MOTION ---- */
+  --t-instant: 80ms;   /* hover, press */
+  --t-fast: 140ms;     /* summon / dismiss */
+  --t-standard: 220ms; /* state hue crossfades */
+  --t-gentle: 360ms;   /* dialogs, HUD readouts */
+  --t-decay: 600ms;    /* speaking -> idle fade */
+  --t-breath: 3600ms;  /* idle loop */
+  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);  /* every mechanical move */
+  --ease-sine: cubic-bezier(0.37, 0, 0.63, 1);   /* every organic loop */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);       /* dismiss only */
+}
+
+/* Laws of light:
+   1. Never a warm surface, never a cold accent.
+   2. One glowing thing per view, max.
+   3. Glow = live now (mic open / action staged), never decoration.
+   4. Semantic colors: 4px dots, text, hairlines — never fills. */

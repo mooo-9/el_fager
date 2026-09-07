@@ -165,6 +165,11 @@ class WakeWordListener:
                                         pass
                                     print(f"[El Fager] Wake word detected! ({model_name}: {score:.3f})")
                                     try:
+                                        from core import wake_metrics
+                                        wake_metrics.note_detection(model_name, score)
+                                    except Exception:
+                                        pass   # measurement never blocks a wake
+                                    try:
                                         self._on_detected()
                                     except Exception as e:
                                         print(f"[El Fager] Wake word callback error: {e}")

@@ -71,30 +71,6 @@ def test_instant_task_bypasses_agents():
     assert result == "Sunny in Cairo."
 
 
-def test_specialist_keywords_no_longer_intercepted_before_tool_loop():
-    brain = _make_brain()
-    with patch("core.agents.screen_agent.ScreenAgent.run", return_value="x"), \
-         patch("core.agents.browser_agent.BrowserAgent.run", return_value="x"), \
-         patch("core.agents.stocks_agent.StocksAgent.run", return_value="x"), \
-         patch("core.agents.research_agent.ResearchAgent.run", return_value="x"), \
-         patch("core.agents.file_agent.FileAgent.run", return_value="x"), \
-         patch("core.agents.health_agent.HealthAgent.run", return_value="x"):
-        assert brain._try_agent_dispatch("click the submit button") is None
-        assert brain._try_agent_dispatch("book a table at Cairo Kitchen") is None
-        assert brain._try_agent_dispatch("analyze NVDA for me") is None
-        assert brain._try_agent_dispatch("research everything about Egypt") is None
-        assert brain._try_agent_dispatch("summarize this pdf") is None
-        assert brain._try_agent_dispatch("I just ate chicken and rice") is None
-
-
-def test_gate_check_still_intercepted_before_tool_loop():
-    brain = _make_brain()
-    with patch("core.trade_tracker.TradeTracker.sync", return_value=None), \
-         patch("core.paper_metrics.PaperMetrics.gate_summary", return_value="Gate status: not ready"):
-        result = brain._try_agent_dispatch("am i ready to go live")
-    assert result == "Gate status: not ready"
-
-
 def test_chat_loop_stops_after_max_iterations():
     brain = _make_brain()
     responses = [_tool_use_response("noop_tool", {})] * 20

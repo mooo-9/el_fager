@@ -33,7 +33,6 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
-from core import atomic
 load_dotenv()
 
 _HUE_IP   = os.getenv("HUE_BRIDGE_IP",   "").strip()
@@ -198,7 +197,7 @@ def _load_states() -> dict:
 
 def _save_states(data: dict) -> None:
     _STATES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write(_STATES_FILE, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _STATES_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _cancel_wake_timers(key: str) -> None:

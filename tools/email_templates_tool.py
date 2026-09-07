@@ -7,7 +7,6 @@ Claude fills in placeholders and calls compose_gmail / create_draft to send.
 
 import json
 from pathlib import Path
-from core import atomic
 
 TEMPLATES_PATH = Path("data/email_templates.json")
 
@@ -101,14 +100,14 @@ _DEFAULTS = {
 def _load() -> dict:
     if not TEMPLATES_PATH.exists():
         TEMPLATES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        atomic.write(TEMPLATES_PATH,
+        TEMPLATES_PATH.write_text(
             json.dumps(_DEFAULTS, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     return json.loads(TEMPLATES_PATH.read_text(encoding="utf-8"))
 
 
 def _save(templates: dict):
-    atomic.write(TEMPLATES_PATH,
+    TEMPLATES_PATH.write_text(
         json.dumps(templates, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

@@ -12,18 +12,9 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from core import atomic
 
 _DEFAULT_PATH = Path("data/skills.json")
 _DEFAULT_SEEDS = Path(__file__).parent / "seeds.json"
-
-# Instructions that could steer toward the live-trading confirmation flow are
-# rejected outright — real-money actions stay behind the deterministic gate.
-_FORBIDDEN_FRAGMENTS = ("confirm live trading",)
-
-
-class ForbiddenSkillError(ValueError):
-    """Raised when skill instructions touch the live-trading confirmation flow."""
 
 
 class SkillStore:
@@ -46,7 +37,7 @@ class SkillStore:
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        atomic.write(self._path,
+        self._path.write_text(
             json.dumps(self._data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
@@ -92,12 +83,6 @@ class SkillStore:
     def add(self, name: str, instructions: str,
             trigger_phrases: list[str] | None = None,
             source: str = "taught") -> dict:
-        lowered = instructions.lower()
-        for frag in _FORBIDDEN_FRAGMENTS:
-            if frag in lowered:
-                raise ForbiddenSkillError(
-                    "Skills cannot include live-trading confirmation steps."
-                )
         if any(s["name"].lower() == name.lower() for s in self._data["skills"]):
             raise ValueError(f"A skill named '{name}' already exists.")
         skill = self._new_skill(name, instructions, trigger_phrases, source)

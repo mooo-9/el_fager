@@ -9,7 +9,6 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from core import atomic
 
 HISTORY_PATH = Path("data/clipboard_history.jsonl")
 MAX_ENTRIES = 200
@@ -58,7 +57,7 @@ def _append_entry(text: str):
         lines = HISTORY_PATH.read_text(encoding="utf-8").splitlines()
         if len(lines) >= MAX_ENTRIES:
             keep = lines[-(MAX_ENTRIES - 1):]
-            atomic.write(HISTORY_PATH, "\n".join(keep) + "\n", encoding="utf-8")
+            HISTORY_PATH.write_text("\n".join(keep) + "\n", encoding="utf-8")
 
     entry = {
         "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

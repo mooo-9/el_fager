@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 
 from core.conversation_log import ConversationLogger
-from core import atomic
 
 _logger = ConversationLogger()
 
@@ -73,7 +72,7 @@ def export_conversation(date_str: str = "today") -> str:
     lines = [f"El Fager Conversation — {date_str}", "=" * 40]
     for e in entries:
         lines.append(_format_entry(e))
-    atomic.write(out_path, "\n".join(lines), encoding="utf-8")
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     try:
         os.startfile(str(out_path))
     except Exception:

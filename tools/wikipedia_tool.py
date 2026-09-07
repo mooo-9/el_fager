@@ -1,17 +1,9 @@
 """
 Wikipedia quick lookup — Phase 6D.
 Uses the MediaWiki action API (more reliable than the REST summary endpoint).
-Auto-selects Arabic or English Wikipedia based on the query language.
 """
 
-import re
 import httpx
-
-_AR_RE = re.compile(r"[؀-ۿ]")
-
-
-def _is_arabic_query(text: str) -> bool:
-    return len(_AR_RE.findall(text)) > len(text) * 0.2
 
 
 def _mediawiki_extract(query: str, lang: str) -> str | None:
@@ -67,16 +59,13 @@ def _search_title(query: str, lang: str) -> str | None:
         return None
 
 
-def wikipedia_lookup(query: str, language: str = "auto") -> str:
+def wikipedia_lookup(query: str, language: str = "en") -> str:
     """
     Return a concise Wikipedia summary for a topic.
     query    — person, place, or concept to look up
-    language — 'auto' (default), 'en', or 'ar'
+    language — Wikipedia edition to search (default: 'en')
     """
-    if language == "auto":
-        lang = "ar" if _is_arabic_query(query) else "en"
-    else:
-        lang = language.lower()[:2]
+    lang = language.lower()[:2] if language else "en"
 
     # Try direct title first
     result = _mediawiki_extract(query, lang)
@@ -86,14 +75,6 @@ def wikipedia_lookup(query: str, language: str = "auto") -> str:
         best_title = _search_title(query, lang)
         if best_title:
             result = _mediawiki_extract(best_title, lang)
-
-    # Arabic fallback → English
-    if result is None and lang == "ar":
-        result = _mediawiki_extract(query, "en")
-        if result is None:
-            best_title = _search_title(query, "en")
-            if best_title:
-                result = _mediawiki_extract(best_title, "en")
 
     if result is None:
         return f"No Wikipedia article found for '{query}'."

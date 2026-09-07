@@ -7,8 +7,9 @@ Speech-to-text with automatic backend selection (best available wins):
 
 VAD (end-of-speech detection):
   Silero VAD neural network loads after Whisper. Replaces the old RMS timer.
-  Recording stops only after 2.5 s of frames the model classifies as non-speech,
-  so natural mid-sentence pauses never trigger an early cut-off.
+  Recording stops after 1.0 s of frames the model classifies as non-speech —
+  short enough to feel responsive, long enough for natural mid-sentence pauses
+  (typically 200–800 ms) not to trigger an early cut-off.
 """
 
 import io
@@ -16,7 +17,6 @@ import os
 import queue
 import threading
 import wave as _wave
-from typing import Callable
 import numpy as np
 import sounddevice as sd
 
@@ -29,17 +29,73 @@ MAX_RECORD_SECONDS = 60
 # Silero VAD settings
 VAD_CHUNK = 512           # 32 ms at 16 kHz — required frame size
 SPEECH_THRESHOLD = 0.5    # probability above which a frame counts as speech
-END_SILENCE_SEC = 2.5     # seconds of continuous non-speech before stopping
+END_SILENCE_SEC = 1.0     # seconds of continuous non-speech before stopping
 TRAIL_KEEP_SEC = 0.4      # keep a short tail so Whisper sees the sentence boundary
 
 # RMS fallback settings (if Silero VAD fails to load)
 RMS_CHUNK_SEC = 0.1
 RMS_THRESHOLD = 0.01
-RMS_SILENCE_SEC = 2.5
+RMS_SILENCE_SEC = 1.5     # RMS can't tell soft speech from silence — keep a margin
+
+# Hallucination guards.
+# El Fager listens in English only, so transcription is forced to English.
+# Because the decode is forced, the backend echoes "en" back and the language
+# check is only a backstop against a backend that ignores the request — the
+# real filter on noise is NO_SPEECH_MAX.
+TRANSCRIBE_LANGUAGE = "en"
+NO_SPEECH_MAX = 0.6  # drop segments Whisper itself flags as probable non-speech
 
 _BACKEND_GROQ   = "groq"
 _BACKEND_FASTER = "faster_whisper"
 _BACKEND_OPENAI = "openai_whisper"
+
+
+_BIAS_CACHE: "str | None" = None
+
+
+def _bias_prompt() -> str:
+    """A sample utterance in the style we want back.
+
+    Whisper's `prompt` is not an instruction — it is treated as text preceding
+    the audio, and the decode continues its style and vocabulary. So this is
+    written as a real sentence Mo might say, carrying the proper nouns Whisper
+    otherwise guesses at, and punctuated the way a transcript should read.
+
+    Built from the profile and contacts so it stays true as those change, and
+    kept short: the prompt window is small and long ones crowd out the audio.
+    """
+    global _BIAS_CACHE
+    if _BIAS_CACHE is not None:
+        return _BIAS_CACHE
+
+    names: list[str] = []
+    try:
+        import json
+        from pathlib import Path
+        profile = json.loads(Path("profile.json").read_text(encoding="utf-8"))
+        for key in ("name", "full_name"):
+            value = (profile.get(key) or "").strip()
+            if value and value not in names:
+                names.append(value)
+    except Exception:
+        pass
+    try:
+        import json
+        from pathlib import Path
+        contacts = json.loads(Path("data/contacts.json").read_text(encoding="utf-8"))
+        for person in list(contacts)[:8]:
+            person = str(person).strip()
+            if person and person.lower() != "test user" and person not in names:
+                names.append(person)
+    except Exception:
+        pass
+
+    who = ", ".join(names[:6]) if names else "Mo"
+    _BIAS_CACHE = (
+        f"Hey El Fager, remind {who} about the review at 4 PM, "
+        f"check my Todoist and my Obsidian notes, and tell me what's on my calendar."
+    )
+    return _BIAS_CACHE
 
 
 def _numpy_to_wav_bytes(audio: np.ndarray, sr: int = SAMPLE_RATE) -> bytes:
@@ -52,6 +108,40 @@ def _numpy_to_wav_bytes(audio: np.ndarray, sr: int = SAMPLE_RATE) -> bytes:
         wf.setframerate(sr)
         wf.writeframes(pcm.tobytes())
     return buf.getvalue()
+
+
+def _is_english(language: "str | None") -> bool:
+    """Backends disagree on how to name a language: Groq's verbose_json says
+    "English", faster-whisper says "en", others say "en-US". Comparing the raw
+    value against "en" silently discarded every utterance from Groq — the
+    normalisation here is the whole point of the function.
+
+    Unknown or missing is treated as English: the decode was forced to English,
+    so a backend that declines to say is not evidence of anything else.
+    """
+    if not language:
+        return True
+    head = language.strip().lower().replace("_", "-").split("-")[0]
+    return head in {"en", "eng", "english"}
+
+
+def _join_speech_segments(language: str | None,
+                          segments: "list[tuple[str, float | None]]") -> str:
+    """
+    Join (text, no_speech_prob) segments into a transcript, dropping segments
+    Whisper flags as probable non-speech.
+
+    `language` must be what the backend actually *reported*, not the constant
+    we asked it for — pass the constant and the check below compares "en" to
+    "en" and can never fire. It is a backstop for a backend that ignores the
+    forced language, not the main hallucination filter; that job belongs to
+    NO_SPEECH_MAX, since a decode forced to English cannot report anything else.
+    """
+    if not _is_english(language):
+        return ""
+    kept = [t.strip() for t, p in segments
+            if t.strip() and (p is None or p < NO_SPEECH_MAX)]
+    return " ".join(kept).strip()
 
 
 def _normalise(audio: np.ndarray) -> np.ndarray:
@@ -147,21 +237,19 @@ class VoiceInput:
 
     # ── Recording ──────────────────────────────────────────────────────────────
 
-    def record_audio(
-        self, on_chunk: "Callable[[float], None] | None" = None
-    ) -> "np.ndarray | None":
+    def record_audio(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """
         Record until the speaker is truly done talking.
         Uses Silero VAD if loaded, otherwise falls back to RMS silence detection.
-        on_chunk, if given, is called with a 0.0-1.0 amplitude estimate per chunk
-        (from the recording thread — safe to bridge into a Qt signal).
+        start_timeout_sec: give up (return None) if speech hasn't started within
+        this many seconds — used by conversation mode's follow-up window.
         """
         self._stop_flag.clear()
         if self._vad_model is not None:
-            return self._record_vad(on_chunk)
-        return self._record_rms(on_chunk)
+            return self._record_vad(start_timeout_sec)
+        return self._record_rms(start_timeout_sec)
 
-    def _record_vad(self, on_chunk: "Callable[[float], None] | None" = None) -> "np.ndarray | None":
+    def _record_vad(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """
         Neural end-of-speech via Silero VAD.
         Stops only after END_SILENCE_SEC of frames the model says aren't speech.
@@ -172,6 +260,8 @@ class VoiceInput:
         end_frames  = int(END_SILENCE_SEC * SAMPLE_RATE / VAD_CHUNK)
         trail_frames = int(TRAIL_KEEP_SEC  * SAMPLE_RATE / VAD_CHUNK)
         max_frames  = int(MAX_RECORD_SECONDS * SAMPLE_RATE / VAD_CHUNK)
+        start_frames = (int(start_timeout_sec * SAMPLE_RATE / VAD_CHUNK)
+                        if start_timeout_sec else None)
 
         chunks: list[np.ndarray] = []
         aq: queue.Queue = queue.Queue(maxsize=200)
@@ -201,9 +291,6 @@ class VoiceInput:
                     continue
 
                 chunks.append(chunk)
-                if on_chunk is not None:
-                    rms = float(np.sqrt(np.mean(chunk ** 2)))
-                    on_chunk(min(1.0, rms * 6.0))
 
                 with torch.no_grad():
                     prob = self._vad_model(
@@ -218,6 +305,8 @@ class VoiceInput:
                     consec_silence += 1
                     if consec_silence >= end_frames:
                         break
+                elif start_frames is not None and len(chunks) >= start_frames:
+                    break  # follow-up window expired with no speech
 
         if self._stop_flag.is_set() or not speech_started:
             return None
@@ -226,11 +315,13 @@ class VoiceInput:
         trim = max(len(chunks) - end_frames + trail_frames, 1)
         return np.concatenate(chunks[:trim]).flatten()
 
-    def _record_rms(self, on_chunk: "Callable[[float], None] | None" = None) -> "np.ndarray | None":
+    def _record_rms(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
         """RMS fallback — 2.5 s silence window, 100 ms chunks."""
         chunk_size = int(SAMPLE_RATE * RMS_CHUNK_SEC)
         silence_needed = int(RMS_SILENCE_SEC / RMS_CHUNK_SEC)
         max_chunks = int(MAX_RECORD_SECONDS / RMS_CHUNK_SEC)
+        start_chunks = (int(start_timeout_sec / RMS_CHUNK_SEC)
+                        if start_timeout_sec else None)
 
         chunks: list[np.ndarray] = []
         consec_silence = 0
@@ -251,8 +342,6 @@ class VoiceInput:
                 if not chunks:
                     continue
                 rms = float(np.sqrt(np.mean(chunks[-1] ** 2)))
-                if on_chunk is not None:
-                    on_chunk(min(1.0, rms * 6.0))
                 if rms >= RMS_THRESHOLD:
                     speech_started = True
                     consec_silence = 0
@@ -260,6 +349,9 @@ class VoiceInput:
                     consec_silence += 1
                 if speech_started and consec_silence >= silence_needed:
                     break
+                if (not speech_started and start_chunks is not None
+                        and len(chunks) >= start_chunks):
+                    break  # follow-up window expired with no speech
 
         if self._stop_flag.is_set() or not speech_started:
             return None
@@ -271,7 +363,10 @@ class VoiceInput:
     def transcribe(self, audio: np.ndarray) -> str:
         """
         Convert float32 numpy audio → text using the best available backend.
-        Auto-detects language (Arabic, English, French, Arabizi).
+        Transcription is forced to English. Segments Whisper flags as probable
+        non-speech are dropped; a decode that comes back tagged as some other
+        language is dropped too, though a backend honouring the forced language
+        will not produce one.
         """
         if audio is None or len(audio) < SAMPLE_RATE * 0.3:
             return ""
@@ -286,16 +381,30 @@ class VoiceInput:
 
     def _transcribe_groq(self, audio: np.ndarray) -> str:
         try:
-            from groq import Groq
-            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            from core import groq_client
+            client = groq_client.get()
+            if client is None:
+                raise RuntimeError("no Groq key configured")
             wav = _numpy_to_wav_bytes(audio)
             result = client.audio.transcriptions.create(
                 model="whisper-large-v3-turbo",
                 file=("audio.wav", wav),
-                response_format="text",
+                response_format="verbose_json",
+                language=TRANSCRIBE_LANGUAGE,
+                prompt=_bias_prompt(),
             )
-            # result is a string when response_format="text"
-            return result.strip() if isinstance(result, str) else result.text.strip()
+            raw_segments = getattr(result, "segments", None) or []
+            segments = [
+                (
+                    (s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "")),
+                    (s.get("no_speech_prob") if isinstance(s, dict) else getattr(s, "no_speech_prob", None)),
+                )
+                for s in raw_segments
+            ]
+            if not segments:  # API variant without segment detail
+                segments = [(getattr(result, "text", "") or "", None)]
+            detected = getattr(result, "language", None)
+            return _join_speech_segments(detected or TRANSCRIBE_LANGUAGE, segments)
         except Exception as e:
             print(f"[El Fager] Groq transcription error: {e}")
             # Graceful degradation: fall back to local if available
@@ -306,24 +415,33 @@ class VoiceInput:
             return ""
 
     def _transcribe_faster(self, audio: np.ndarray) -> str:
-        segments, _ = self._whisper.transcribe(
+        segments, info = self._whisper.transcribe(
             audio,
-            language=None,
+            language=TRANSCRIBE_LANGUAGE,
+            initial_prompt=_bias_prompt(),
             beam_size=5,
             best_of=5,
             temperature=0.0,
             condition_on_previous_text=False,
             vad_filter=False,  # we handle VAD ourselves
         )
-        return " ".join(s.text for s in segments).strip()
+        pairs = [(s.text, getattr(s, "no_speech_prob", None)) for s in segments]
+        return _join_speech_segments(
+            getattr(info, "language", None) or TRANSCRIBE_LANGUAGE, pairs)
 
     def _transcribe_openai(self, audio: np.ndarray) -> str:
         result = self._whisper.transcribe(
             audio,
-            language=None,
+            language=TRANSCRIBE_LANGUAGE,
+            initial_prompt=_bias_prompt(),
             task="transcribe",
             fp16=False,
             temperature=0.0,
             condition_on_previous_text=False,
         )
-        return result["text"].strip()
+        pairs = [(s.get("text", ""), s.get("no_speech_prob"))
+                 for s in result.get("segments", [])]
+        if not pairs:
+            pairs = [(result.get("text", ""), None)]
+        return _join_speech_segments(
+            result.get("language") or TRANSCRIBE_LANGUAGE, pairs)

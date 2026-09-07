@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "El Fager (GUI)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["main.py"],
+      "port": null
+    },
+    {
+      "name": "Tests",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "pytest", "tests", "-v"],
+      "port": null
+    }
+  ]
+}

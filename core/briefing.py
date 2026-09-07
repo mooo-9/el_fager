@@ -9,7 +9,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from core import atomic
 
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
 _PATH = Path("data/last_briefing.json")
@@ -26,7 +25,7 @@ def already_briefed_today() -> bool:
 
 
 def mark_briefed_today():
-    atomic.write(_PATH,
+    _PATH.write_text(
         json.dumps({"date": str(datetime.now(CAIRO_TZ).date())}),
         encoding="utf-8",
     )
@@ -43,8 +42,6 @@ def get_briefing_prompt() -> str:
     return (
         f"{greeting} Mo! Give me my daily briefing: "
         "check Cairo weather, list my events for today, "
-        "check for unread emails, check my deadline facts from memory, "
-        "and check my paper trading status including open positions, "
-        "today's P&L, and how close I am to the 30-trade live trading gate. "
-        "Keep it short — 4-6 spoken sentences covering all five."
+        "check for unread emails, and check my deadline facts from memory. "
+        "Keep it short — 4-6 spoken sentences covering all four."
     )

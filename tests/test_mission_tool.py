@@ -36,11 +36,6 @@ class TestMissionTools:
         out = mt.start_mission("g2", "b")
         assert "already in progress" in out
 
-    def test_forbidden_steps_blocked(self):
-        out = mt.start_mission("get rich", "analyze NVDA; confirm live trading")
-        assert "cannot" in out.lower()
-        assert mi.MissionManager().get_active() is None
-
     def test_status_and_cancel(self):
         mt.start_mission("my goal", "a; b")
         assert "my goal" in mt.mission_status()

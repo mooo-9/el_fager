@@ -1,6 +1,6 @@
 # El Fager — Personal AI Assistant
 
-Your always-on JARVIS for Windows 11. Lives in the system tray, wakes up with `Ctrl+Space`, listens to you in Arabic/English/French/Arabizi, thinks with Claude, and talks back.
+Your JARVIS for Windows 11. Starts when you launch it, lives in the system tray while it runs, wakes up with `Ctrl+Space`, listens to you in English, thinks with Claude, and talks back.
 
 ---
 
@@ -47,24 +47,6 @@ python main.py
 
 El Fager starts silently in the system tray. **Right-click the tray icon** and pin it to the taskbar if Windows hides it in the overflow area.
 
-### 4. Autostart (optional)
-
-El Fager does **not** start on its own until you register the watchdog task:
-
-```powershell
-.\setup_watchdog.ps1
-```
-
-That scheduled task is the single autostart path — it launches El Fager at
-logon and restarts it if it crashes. Quitting from the tray menu stops both the
-app and the watchdog until your next logon.
-
-To stop it starting at logon:
-
-```powershell
-Unregister-ScheduledTask -TaskName 'El Fager Watchdog' -Confirm:$false
-```
-
 ---
 
 ## First Launch (What to Expect)
@@ -73,7 +55,7 @@ On first launch, two models download automatically:
 
 | Model | Size | Where | When |
 |---|---|---|---|
-| Whisper `medium` | ~1.5 GB | `~/.cache/whisper/` | Background at startup |
+| Whisper `large-v3-turbo` (faster-whisper, override with `WHISPER_MODEL`) | ~1.6 GB | `~/.cache/huggingface/` | Background at startup — skipped entirely when `GROQ_API_KEY` is set (cloud transcription) |
 | Sentence-transformer `all-MiniLM-L6-v2` | ~90 MB | `~/.cache/torch/` | On first memory query |
 
 The Whisper download happens in the background — El Fager will show "Loading Whisper model..." if you press `Ctrl+Space` before it's ready. Just wait a moment.
@@ -84,8 +66,9 @@ The Whisper download happens in the background — El Fager will show "Loading W
 
 | Action | What Happens |
 |---|---|
-| `Ctrl+Space` | Opens the overlay and starts listening immediately |
-| Speak naturally | Arabic, English, French, Arabizi — all work |
+| `Ctrl+Space` or `Ctrl+F12` | Opens the overlay and starts listening immediately |
+| `Ctrl+Shift+Space` or `Ctrl+Shift+F12` | Opens the Command Center |
+| Speak naturally | English |
 | Stop speaking | El Fager detects silence (~1.5s) and starts thinking |
 | `Escape` | Closes the overlay and cancels any in-progress recording |
 | `Ctrl+Space` again | Closes overlay if already open |
@@ -180,9 +163,10 @@ python -m pip install google-auth google-auth-oauthlib google-auth-httplib2 goog
 
 ## Voices
 
-| Language | Voice |
-|---|---|
-| Arabic (Egyptian) | `ar-EG-ShakirNeural` (male) |
-| English | `en-US-GuyNeural` (male) |
+TTS picks the best available backend: Groq Orpheus (neural, needs `GROQ_API_KEY`) with Edge TTS as the always-available fallback.
 
-Voice is auto-detected from the text content of each response. To change, edit `VOICE_AR` / `VOICE_EN` in `core/voice_out.py`.
+| Language | Orpheus (`.env` var) | Edge fallback (`.env` var) |
+|---|---|---|
+| English | `daniel` (`TTS_VOICE_EN`) | `en-US-GuyNeural` (`EDGE_VOICE_EN`) |
+
+See the docstring in `core/voice_out.py` for all Orpheus voice options.

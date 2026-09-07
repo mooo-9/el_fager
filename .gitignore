@@ -27,10 +27,6 @@ desktop.ini
 
 # Logs
 *.log
-*.txt
-# The blanket *.txt above silently swallowed requirements-dev.txt.
-# (.gitignore has no trailing comments — this must sit on its own line.)
-!requirements*.txt
 startup_*
 
 # Pip/curl artifacts

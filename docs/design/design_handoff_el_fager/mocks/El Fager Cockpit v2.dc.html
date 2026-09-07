@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#02040A;overflow:hidden}
+a{color:#38E0FF;text-decoration:none}
+a:hover{color:#8FF0FF}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+</style>
+</helmet>
+<div data-screen-label="Cockpit v2" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(1200px 900px at 50% 42%,#050B18 0%,#02040A 70%)">
+  <canvas ref="{{ orbRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+  <!-- scanlines -->
+  <div style="position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(255,255,255,0.012) 0 1px,transparent 1px 3px)"></div>
+
+  <!-- ambient wake: any click on the stage wakes the readouts -->
+  <div onClick="{{ wake }}" style="position:absolute;inset:0"></div>
+
+  <!-- top center tag -->
+  <div style="position:absolute;top:30px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:14px;pointer-events:none;opacity:{{ ambientOpacity }};transition:opacity 900ms cubic-bezier(.37,0,.63,1)">
+    <div style="width:120px;height:1px;background:linear-gradient(90deg,transparent,{{ stateDim }})"></div>
+    <div style="font:500 10.5px 'Spline Sans Mono',monospace;letter-spacing:.34em;color:{{ stateColor }};transition:color 220ms;white-space:nowrap;flex:none">EL FAGER · ONLINE</div>
+    <div style="width:120px;height:1px;background:linear-gradient(90deg,{{ stateDim }},transparent)"></div>
+  </div>
+
+  <!-- corners -->
+  <div style="position:absolute;top:64px;left:40px;border-left:1px solid {{ stateDim }};padding-left:14px;transition:border-color 220ms,opacity 900ms;opacity:{{ ambientOpacity }};pointer-events:none">
+    <div style="font:500 32px 'Spline Sans Mono',monospace;color:#EAF2F7">{{ clock }}</div>
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5F7183;letter-spacing:.16em;margin-top:4px">{{ dateStr }} · CAIRO 34°</div>
+  </div>
+  <div style="position:absolute;top:64px;right:40px;text-align:right;border-right:1px solid {{ stateDim }};padding-right:14px;transition:border-color 220ms,opacity 900ms;opacity:{{ ambientOpacity }};pointer-events:none">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5F7183;letter-spacing:.16em">NEXT</div>
+    <div style="font:500 16px 'Space Grotesk',sans-serif;color:#EAF2F7;margin-top:4px">Gym — push day</div>
+    <div style="font:400 12px 'Spline Sans Mono',monospace;color:{{ stateColor }};margin-top:2px;transition:color 220ms">7:00 PM · IN 1H 13M</div>
+  </div>
+  <div style="position:absolute;bottom:96px;left:40px;border-left:1px solid {{ stateDim }};padding-left:14px;transition:border-color 220ms,opacity 900ms;opacity:{{ ambientOpacity }};pointer-events:none">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5F7183;letter-spacing:.16em">TODAY</div>
+    <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9FB1C2;margin-top:6px">2 TASKS OPEN · 1,840 / 2,400 KCAL<br>MAIL CLEAR EXCEPT STRIPE</div>
+    <sc-if value="{{ hasReceipts }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:14px">
+        <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="0">
+          <div style="display:flex;align-items:center;gap:7px"><div style="width:4px;height:4px;border-radius:50%;background:#25D366;flex:none"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5F7183">{{ r.text }} · {{ r.time }}</div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  <div style="position:absolute;bottom:96px;right:40px;text-align:right;border-right:1px solid {{ stateDim }};padding-right:14px;transition:border-color 220ms,opacity 900ms;opacity:{{ ambientOpacity }};pointer-events:none">
+    <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5F7183;letter-spacing:.16em">SKILLS ONLINE</div>
+    <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9FB1C2;margin-top:6px">GMAIL · WHATSAPP · TODOIST<br>BROWSER · SCREEN · +7</div>
+  </div>
+
+  <!-- state label under orb -->
+  <div style="position:absolute;left:0;right:0;top:calc(50% + min(108px,13vh));text-align:center;pointer-events:none">
+    <div style="font:500 {{ enLabelSize }} 'Spline Sans Mono',monospace;letter-spacing:.34em;color:{{ stateColor }};transition:color 220ms,font-size 220ms,opacity 220ms;white-space:nowrap;opacity:{{ enLabelOpacity }}">{{ stateLabel }}</div>
+    <div style="font:300 {{ arLabelSize }} 'Alexandria',sans-serif;color:#9FB1C2;margin-top:4px;opacity:{{ arLabelOpacity }};transition:opacity 220ms,font-size 220ms">{{ stateLabelAr }}</div>
+  </div>
+
+  <!-- the words: top scales with viewport so it never runs under the bottom bar -->
+  <div style="position:absolute;left:0;right:0;top:{{ wordsTop }};bottom:72px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px;padding:0 24px;pointer-events:none;overflow:hidden;transition:top 220ms cubic-bezier(.22,1,.36,1)">
+    <sc-if value="{{ showBarged }}" hint-placeholder-val="{{ false }}">
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#3A4A5C;text-align:center;max-width:640px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ barged }} · INTERRUPTED</div>
+    </sc-if>
+    <sc-if value="{{ showHeardBig }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 26px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;text-align:center;max-width:820px">{{ heard }}<span style="display:inline-block;width:9px;height:24px;background:{{ stateColor }};border-radius:1px;vertical-align:-3px;margin:0 6px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+    </sc-if>
+    <sc-if value="{{ showHeardSmall }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 12px 'Spline Sans Mono',monospace;color:#5F7183;text-align:center">{{ heard }}</div>
+    </sc-if>
+    <sc-if value="{{ hasSteps }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="0">
+          <div style="display:flex;align-items:center;gap:9px"><div style="width:6px;height:6px;border-radius:50%;background:{{ s.dot }};box-shadow:0 0 8px {{ s.dot }};animation:{{ s.anim }};flex:none;transition:background 220ms"></div><div style="font:400 12px 'Spline Sans Mono',monospace;color:{{ s.txtColor }};transition:color 220ms;white-space:nowrap">{{ s.label }} <span style="color:#56C99C">{{ s.mark }}</span></div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showAnswer }}" hint-placeholder-val="{{ false }}">
+      <div dir="auto" style="font:400 20px/1.65 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;text-align:center;max-width:760px">{{ answer }}<span style="display:inline-block;width:8px;height:19px;background:#FFD782;border-radius:1px;vertical-align:-3px;margin:0 4px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ answerCaret }}"></span></div>
+    </sc-if>
+    <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+      <div style="font:400 13px/1.6 'Spline Sans Mono',monospace;color:#FF5A4E;text-align:center">{{ errorText }}</div>
+    </sc-if>
+    <sc-if value="{{ showRetry }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:8px;align-items:center;pointer-events:auto">
+        <div onClick="{{ retryStep }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#04121A;background:#38E0FF;border-radius:9px;padding:6px 15px;cursor:pointer" style-hover="background:#8FF0FF" style-active="background:#1FB8D6">Retry</div>
+        <div onClick="{{ skipStep }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#9FB1C2;padding:6px 8px;cursor:pointer" style-hover="color:#EAF2F7">Skip</div>
+        <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183">SAY "RETRY" OR "SKIP"</div>
+      </div>
+    </sc-if>
+    <!-- data moment: transient viz while the answer speaks, fades with the exchange -->
+    <sc-if value="{{ showDataHealth }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:32px;align-items:center;margin-top:2px;flex:none">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:34px">PRO</div><div style="width:120px;height:4px;border-radius:2px;background:#16283E"><div style="width:80%;height:4px;border-radius:2px;background:#F09950"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#FFD782">128 / 160g</div></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:34px">CARB</div><div style="width:120px;height:4px;border-radius:2px;background:#16283E"><div style="width:71%;height:4px;border-radius:2px;background:#38E0FF"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#9FB1C2">171 / 240g</div></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:34px">FAT</div><div style="width:120px;height:4px;border-radius:2px;background:#16283E"><div style="width:69%;height:4px;border-radius:2px;background:#5B8DEF"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#9FB1C2">52 / 75g</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183">WEIGHT 8W · <span style="color:#9FB1C2">81.2 KG ↘</span></div>
+          <svg width="150" height="28" viewBox="0 0 150 28"><polyline points="0,20 19,18 38,22 57,15 76,16 95,12 114,13 133,8" fill="none" stroke="#5F7183" stroke-width="1.5"></polyline><circle cx="144" cy="7" r="2.5" fill="#FFD782"></circle></svg>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showDataBrief }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:32px;align-items:center;margin-top:2px;flex:none">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg width="100" height="58" viewBox="0 0 100 58">
+            <line x1="2" y1="50" x2="98" y2="50" stroke="rgba(255,255,255,0.1)" stroke-width="1"></line>
+            <path d="M 12 50 A 38 38 0 0 1 88 50" fill="none" stroke="#16283E" stroke-width="5" stroke-linecap="round"></path>
+            <path d="M 12 50 A 38 38 0 0 1 88 50" fill="none" stroke="#F09950" stroke-width="5" stroke-linecap="round" stroke-dasharray="92 120"></path>
+            <circle cx="71" cy="19" r="6" fill="rgba(255,215,130,0.22)"></circle>
+            <circle cx="71" cy="19" r="3" fill="#FFD782"></circle>
+          </svg>
+          <div style="font:400 9.5px/1.6 'Spline Sans Mono',monospace;color:#5F7183">1,840<br>/ 2,400<br>KCAL</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:52px">3:00 PM</div><div style="width:110px;height:4px;border-radius:2px;background:#16283E"><div style="width:34%;height:4px;border-radius:2px;background:#38E0FF"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#9FB1C2">REVIEW</div></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:52px">3:30 PM</div><div style="width:110px;height:4px;border-radius:2px;background:#16283E"><div style="width:80%;height:4px;border-radius:2px;background:#5B8DEF"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#9FB1C2">DEEP WORK</div></div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;width:52px">7:00 PM</div><div style="width:110px;height:4px;border-radius:2px;background:#16283E"><div style="width:56%;height:4px;border-radius:2px;background:#FFD782"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#9FB1C2">GYM</div></div>
+        </div>
+      </div>
+    </sc-if>
+    <!-- P6: mail summary data moment -->
+    <sc-if value="{{ showDataMail }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;flex:none;min-width:340px">
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:5px;height:5px;border-radius:50%;background:#FF5042;flex:none"></div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#EAF2F7;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stripe — payout failed, update card</div><div style="font:400 9px 'Spline Sans Mono',monospace;color:#EA6C5A">PRIORITY</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:5px;height:5px;border-radius:50%;background:#5F7183;flex:none"></div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#9FB1C2;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ahmed — API review moved to Thursday</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:5px;height:5px;border-radius:50%;background:#5F7183;flex:none"></div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#9FB1C2;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">GitHub — 2 PRs approved</div></div>
+        <div style="font:400 9px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:#3A4A5C;margin-top:2px">12 UNREAD · 1 NEEDS YOU · 0 URGENT AFTER THIS</div>
+      </div>
+    </sc-if>
+    <!-- P6: empty / nothing-to-report state -->
+    <sc-if value="{{ showDataEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;margin-top:2px;flex:none">
+        <div style="width:6px;height:6px;border-radius:50%;background:#56C99C;flex:none"></div>
+        <div style="font:400 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:#5F7183">INBOX ZERO · NO TASKS DUE · NOTHING NEEDS YOU</div>
+      </div>
+    </sc-if>
+    <!-- P6: clarification (ambiguous request) -->
+    <sc-if value="{{ showClarify }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:10px;margin-top:2px;flex:none;pointer-events:auto">
+        <sc-for list="{{ clarifyOptions }}" as="o" hint-placeholder-count="2">
+          <div onClick="{{ o.pick }}" style="display:flex;flex-direction:column;gap:3px;background:#081120;border:1px solid rgba(56,224,255,0.3);border-radius:12px;padding:11px 16px;cursor:pointer;min-width:120px" style-hover="border-color:rgba(56,224,255,0.6);background:#0D1B2E">
+            <div style="font:500 13px 'Space Grotesk',sans-serif;color:#EAF2F7">{{ o.name }}</div>
+            <div style="font:400 10px 'Spline Sans Mono',monospace;color:#5F7183">{{ o.hint }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- staged action: anchored above the bottom bar -->
+  <div style="position:absolute;left:0;right:0;bottom:84px;display:flex;justify-content:center;pointer-events:none">
+    <sc-if value="{{ showStaged }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:flex-end;pointer-events:auto;max-width:calc(100vw - 40px)">
+        <sc-for list="{{ stagedCards }}" as="c" hint-placeholder-count="0">
+          <div style="width:390px;max-width:calc(100vw - 48px);box-sizing:border-box;background:rgba(5,11,24,0.95);border:1px solid rgba(56,224,255,0.35);border-radius:16px;padding:16px;box-shadow:0 0 32px rgba(56,224,255,0.12),0 24px 64px rgba(0,0,0,0.55);text-align:left">
+            <div style="display:flex;align-items:center;gap:8px"><div style="font:400 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#8FF0FF;white-space:nowrap">{{ c.label }}</div><div style="display:inline-flex;align-items:center;gap:5px;font:400 12px 'Space Grotesk',sans-serif;color:#EAF2F7;background:#0D1B2E;border-radius:99px;padding:3px 10px"><div style="width:13px;height:13px;border-radius:50%;background:#16283E;display:grid;place-items:center;font:500 8px 'Space Grotesk',sans-serif;color:#9FB1C2">{{ c.initial }}</div>{{ c.to }}</div><div style="margin-left:auto;font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183">{{ c.queue }}</div></div>
+            <div dir="{{ c.dir }}" style="background:#081120;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-top:11px;font:300 13.5px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#EAF2F7">{{ c.body }}</div>
+            <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+              <div onClick="{{ c.confirm }}" style="font:500 13px 'Space Grotesk',sans-serif;color:#04121A;background:#38E0FF;border-radius:10px;padding:7px 17px;cursor:pointer" style-hover="background:#8FF0FF" style-active="background:#1FB8D6">Send</div>
+              <div onClick="{{ c.cancel }}" style="font:500 13px 'Space Grotesk',sans-serif;color:#9FB1C2;padding:7px 10px;cursor:pointer" style-hover="color:#EAF2F7">Cancel</div>
+              <div style="font:400 10px 'Spline Sans Mono',monospace;color:#5F7183;margin-left:auto">SAY "ابعت" OR "SEND"</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ hasMultiple }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ confirmAll }}" style="pointer-events:auto;font:500 12.5px 'Space Grotesk',sans-serif;color:#04121A;background:#38E0FF;border-radius:10px;padding:8px 22px;cursor:pointer;margin-top:12px" style-hover="background:#8FF0FF">Send all <span style="font-family:'Spline Sans Mono',monospace;font-size:10px;opacity:.7">⏎</span></div>
+    </sc-if>
+  </div>
+
+  <!-- P7: undo toast after send -->
+  <sc-if value="{{ hasUndo }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:0;right:0;bottom:78px;display:flex;justify-content:center;pointer-events:none;z-index:4">
+      <div style="display:flex;align-items:center;gap:14px;background:rgba(5,11,24,0.96);border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:8px 10px 8px 18px;box-shadow:0 12px 40px rgba(0,0,0,0.5);pointer-events:auto">
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C"></div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#9FB1C2">{{ undoText }}</div></div>
+        <div onClick="{{ undoSend }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#38E0FF;background:#0D1B2E;border-radius:99px;padding:5px 14px;cursor:pointer" style-hover="color:#8FF0FF">Undo</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- P7: keyboard help overlay -->
+  <sc-if value="{{ kbdHelp }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ toggleHelp }}" style="position:absolute;inset:0;z-index:6;background:rgba(2,4,10,0.82);display:flex;align-items:center;justify-content:center">
+      <div style="background:#050B18;border:1px solid rgba(56,224,255,0.25);border-radius:20px;padding:30px 36px;box-shadow:0 30px 80px rgba(0,0,0,0.6)">
+        <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.28em;color:#38E0FF">KEYBOARD</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px">
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">Ctrl+Space</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Summon from anywhere</div></div>
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">Space</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Push to talk</div></div>
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">Enter</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Confirm staged action · Send all</div></div>
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">Esc</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Cancel · dismiss · close</div></div>
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">T</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Type instead of talk</div></div>
+          <div style="display:flex;align-items:center;gap:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#EAF2F7;background:#0D1B2E;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:4px 12px;min-width:64px;text-align:center">?</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9FB1C2">This help — click anywhere to close</div></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- bottom bar -->
+  <div style="position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:14px;padding:0 40px;height:64px;border-top:1px solid rgba(255,255,255,0.05);background:rgba(2,4,10,0.7)">
+    <div style="display:flex;align-items:center;gap:9px"><div style="width:7px;height:7px;border-radius:50%;background:{{ stateColor }};box-shadow:0 0 9px {{ stateColor }};transition:background 220ms"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5F7183;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">MIC IS LIVE · SAY "HEY FAGER" ANYTIME</div></div>
+    <div style="flex:1"></div>
+    <div onClick="{{ toggleHelp }}" title="Keyboard (?)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,255,255,0.14);display:grid;place-items:center;cursor:pointer;flex:none;font:500 11px 'Spline Sans Mono',monospace;color:#9FB1C2" style-hover="border-color:rgba(56,224,255,0.5);color:#8FF0FF">?</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#3A4A5C;white-space:nowrap">DEMO:</div>
+      <div onClick="{{ micDemo }}" title="Speak (demo)" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;border:1px dashed rgba(255,255,255,0.18);border-radius:99px;padding:5px 13px;white-space:nowrap;flex:none" style-hover="border-color:rgba(56,224,255,0.5)"><svg width="8" height="10" viewBox="0 0 9 11"><path d="M0.5 0.8 8.2 5.5 0.5 10.2Z" fill="#9FB1C2"></path></svg><div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9FB1C2">{{ demoLabel }}</div></div>
+    </div>
+    <sc-if value="{{ typedMode }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:8px;background:#081120;border:1px solid rgba(56,224,255,0.35);border-radius:99px;padding:6px 6px 6px 14px;width:340px">
+        <input ref="{{ inputRef }}" value="{{ typed }}" onChange="{{ onType }}" onKeyDown="{{ onKeyDown }}" placeholder="Type it — same brain" style="flex:1;background:transparent;border:none;outline:none;font:400 12.5px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;min-width:0"></input>
+        <div onClick="{{ toggleTyped }}" style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5F7183;cursor:pointer;padding:4px 8px" style-hover="color:#EAF2F7">HIDE</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ voiceMode }}" hint-placeholder-val="{{ true }}">
+      <div onClick="{{ toggleTyped }}" title="Type instead" style="width:32px;height:32px;border-radius:50%;background:#081120;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;cursor:pointer;flex:none" style-hover="border-color:rgba(56,224,255,0.4)"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="3.5" width="12" height="7.5" rx="1.5" fill="none" stroke="#9FB1C2" stroke-width="1.1"></rect><line x1="3.5" y1="9" x2="10.5" y2="9" stroke="#9FB1C2" stroke-width="1.1"></line></svg></div>
+    </sc-if>
+    <a href="El Fager Trust Ledger.dc.html" title="Trust Ledger — everything it did" style="width:32px;height:32px;border-radius:50%;background:#081120;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;flex:none;text-decoration:none" style-hover="border-color:rgba(56,224,255,0.5)"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h6" stroke="#9FB1C2" stroke-width="1.3" stroke-linecap="round"></path></svg></a>
+    <a href="El Fager Settings.dc.html" title="Settings" style="width:32px;height:32px;border-radius:50%;background:#081120;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;flex:none" style-hover="border-color:rgba(56,224,255,0.4)"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.2" fill="none" stroke="#9FB1C2" stroke-width="1.2"></circle><path d="M7 1.2v1.8M7 11v1.8M1.2 7h1.8M11 7h1.8M2.9 2.9l1.3 1.3M9.8 9.8l1.3 1.3M11.1 2.9 9.8 4.2M4.2 9.8l-1.3 1.3" stroke="#9FB1C2" stroke-width="1.2" stroke-linecap="round"></path></svg></a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;streamSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:18,&quot;min&quot;:6,&quot;max&quot;:60,&quot;step&quot;:2,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;ambientDelay&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:20,&quot;min&quot;:5,&quot;max&quot;:120,&quot;step&quot;:5,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+class Component extends DCLogic {
+  state = {
+    aState: 'idle', phase: 'empty',
+    heard: '', answer: '', toolCaption: '', errorText: '',
+    receipts: [], typed: '', typedMode: false, demoIdx: 0, clock: '', changedAt: 0,
+    ambient: false, steps: [], stagedCards: [], barged: '', dataMoment: '', canRetry: false, clarify: null,
+    kbdHelp: false, undo: null
+  };
+  orbRef = React.createRef();
+  inputRef = React.createRef();
+  timers = [];
+  cur = { r: 100, g: 125, b: 155 };
+  lag = { r: 100, g: 125, b: 155 };  // outer ring trails one state behind
+  pulses = [];
+  lastPulse = 0;
+
+  componentDidMount() {
+    this.clockIv = setInterval(() => this.setState({ clock: this.now() }), 1000);
+    this.setState({ clock: this.now() });
+    this.sizeCanvas();
+    this.resizeH = () => this.sizeCanvas();
+    window.addEventListener('resize', this.resizeH);
+    this.raf = requestAnimationFrame(this.tick);
+    this.timers.push(setTimeout(() => this.setA('listening'), 900));
+    this.armAmbient();
+    this.keyH = (e) => this.onKey(e);
+    window.addEventListener('keydown', this.keyH);
+  }
+  // P7 — keyboard control: the whole cockpit by keys, not just the mouse
+  onKey(e) {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    const k = e.key;
+    if (k === '?') { e.preventDefault(); this.setState({ kbdHelp: !this.state.kbdHelp }); return; }
+    if (k === 'Escape') {
+      if (this.state.kbdHelp) { this.setState({ kbdHelp: false }); return; }
+      if (this.state.phase === 'staged') { this.clearTimers(); this.setA('listening', { phase: 'empty', heard: '', answer: '', stagedCards: [] }); this.armAmbient(); return; }
+      if (this.state.canRetry) { this.skipStep(); return; }
+    }
+    if (k === ' ' || k === 'Spacebar') { e.preventDefault(); this.wake(true); this.micDemo(); return; }
+    if (k === 'Enter') {
+      if (this.state.phase === 'staged' && this.state.stagedCards.length) { e.preventDefault(); this.state.stagedCards.length > 1 ? this.confirmAll() : this.confirmCard(this.state.stagedCards[0]); return; }
+      if (this.state.canRetry) { e.preventDefault(); this.retryStep(); return; }
+    }
+    if (k === 't' || k === 'T') { e.preventDefault(); this.setState({ typedMode: true }); this.wait(() => { if (this.inputRef.current) this.inputRef.current.focus(); }, 60); return; }
+  }
+  // ambient mode: 60s (demo: ambientDelay) of silence → readouts fade, orb rests
+  armAmbient() {
+    if (this.ambientT) clearTimeout(this.ambientT);
+    this.ambientT = setTimeout(() => {
+      if (this.state.phase === 'empty' && (this.state.aState === 'listening' || this.state.aState === 'idle')) {
+        this.setA('idle', { ambient: true });
+      }
+    }, (this.props.ambientDelay ?? 20) * 1000);
+  }
+  // P1.5 — voice wake gets a bloom; click wake is silent
+  wake(viaVoice) {
+    if (this.state.ambient) {
+      if (viaVoice) this.bloomAt = performance.now();
+      this.setA('listening', { ambient: false });
+    }
+    this.armAmbient();
+  }
+  componentWillUnmount() {
+    if (this.ambientT) clearTimeout(this.ambientT);
+    if (this.undoT) clearTimeout(this.undoT);
+    window.removeEventListener('keydown', this.keyH);
+    clearInterval(this.clockIv);
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('resize', this.resizeH);
+    this.clearTimers();
+  }
+  sizeCanvas() {
+    const c = this.orbRef.current;
+    if (c) { const dpr = window.devicePixelRatio || 1; c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr; }
+  }
+  clearTimers() { this.timers.forEach(clearTimeout); this.timers = []; if (this.iv) { clearInterval(this.iv); this.iv = null; } }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+  now() { const d = new Date(); let h = d.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap; }
+
+  // STATE COLORS: listening=cyan, doing tasks=ember orange, talking=gold, error=red
+  static COLORS = { idle: [100,125,155], listening: [56,224,255], thinking: [240,153,80], speaking: [255,215,130], error: [255,80,66] };
+
+  tick = (now) => {
+    this.raf = requestAnimationFrame(this.tick);
+    const c = this.orbRef.current;
+    if (!c || !c.width) return;
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = c.width / dpr, H = c.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const t = now / 1000;
+    const S = this.state.aState;
+    const tg = Component.COLORS[S] || Component.COLORS.idle;
+    this.cur.r += (tg[0] - this.cur.r) * 0.07;
+    this.cur.g += (tg[1] - this.cur.g) * 0.07;
+    this.cur.b += (tg[2] - this.cur.b) * 0.07;
+    // lag chases cur ~6x slower → outer ring holds the previous state's hue for a beat
+    this.lag.r += (this.cur.r - this.lag.r) * 0.012;
+    this.lag.g += (this.cur.g - this.lag.g) * 0.012;
+    this.lag.b += (this.cur.b - this.lag.b) * 0.012;
+    const col = (a) => 'rgba(' + (this.cur.r|0) + ',' + (this.cur.g|0) + ',' + (this.cur.b|0) + ',' + a + ')';
+    const colLag = col; // option 1 (lag rings) tested and dropped — trailing hue read as latency
+    const cx = W / 2, cy = H / 2 - 56;
+
+    let amp = 0;
+    if (S === 'idle') amp = 0.12 + 0.1 * Math.sin(t * 2 * Math.PI / 3.6);
+    if (S === 'listening') amp = 0.28 + 0.5 * Math.abs(Math.sin(t * 3.1) * 0.6 + Math.sin(t * 7.7) * 0.4);
+    if (S === 'thinking') amp = 0.22 + 0.08 * Math.sin(t * 2.2);
+    if (S === 'speaking') amp = 0.25 + 0.55 * Math.max(0, Math.sin(t * 5.3)) * (0.65 + 0.35 * Math.sin(t * 0.9));
+    if (S === 'error') amp = 0.15;
+
+    let master = 1;
+    if (S === 'error') {
+      const dt = now - this.state.changedAt;
+      if (dt < 380) master = (Math.floor(dt / 95) % 2) ? 0.15 : 1;
+      else master = 0.8;
+    }
+    ctx.globalAlpha = master;
+
+    // corner vignette — deepens the frame, focuses the orb
+    let vg = ctx.createRadialGradient(cx, cy, Math.min(W, H) * 0.26, cx, cy, Math.max(W, H) * 0.68);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.6, 'rgba(0,0,0,0.25)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.65)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+
+    // depth wash: faint indigo→teal atmosphere behind everything (option 3)
+    let dw = ctx.createRadialGradient(cx - W * 0.18, cy - 60, 40, cx, cy, Math.max(W, H) * 0.55);
+    dw.addColorStop(0, 'rgba(88,80,200,0.05)');
+    dw.addColorStop(0.5, 'rgba(30,140,170,0.035)');
+    dw.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = dw;
+    ctx.fillRect(0, 0, W, H);
+
+    // faint polar grid
+    ctx.lineWidth = 1;
+    for (let r = 90; r <= 330; r += 80) {
+      ctx.strokeStyle = col(0.04);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+    }
+
+    // ambient: orb rests smaller, rings dimmer
+    const amb = this.state.ambient ? 0.55 : 1;
+    ctx.globalAlpha = master * (this.state.ambient ? 0.75 : 1);
+    const R = (46 + amp * 22) * amb;
+
+    // atmosphere
+    let g = ctx.createRadialGradient(cx, cy, R * 0.4, cx, cy, R * 4.4);
+    g.addColorStop(0, col(0.18));
+    g.addColorStop(1, col(0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 4.4, 0, 7); ctx.fill();
+
+    // arc-reactor core: white-hot center
+    g = ctx.createRadialGradient(cx, cy, 1, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,255,255,0.98)');
+    g.addColorStop(0.35, col(0.95));
+    g.addColorStop(1, col(0.03));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+
+    // wake-word bloom: bright double ring expanding from the core (~900ms)
+    if (this.bloomAt && now - this.bloomAt < 900) {
+      const k = (now - this.bloomAt) / 900;
+      const reach = Math.max(W, H);
+      ctx.strokeStyle = col(0.7 * (1 - k));
+      ctx.lineWidth = 2.5 * (1 - k) + 0.5;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 20 + k * reach * 0.45, 0, 7); ctx.stroke();
+      ctx.strokeStyle = col(0.4 * (1 - k));
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 10 + k * reach * 0.3, 0, 7); ctx.stroke();
+    }
+
+    // inner tick ring (60 ticks, slow rotation)
+    const tickR = R + 26;
+    const rot1 = t * 0.12 * Math.PI * 2 * (S === 'thinking' ? 3 : 1);
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 60; i++) {
+      const ang = (i / 60) * Math.PI * 2 + rot1;
+      const long = i % 5 === 0;
+      const l1 = tickR - (long ? 6 : 3), l2 = tickR + (long ? 6 : 3);
+      ctx.strokeStyle = col(long ? 0.55 : 0.25);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang) * l1, cy + Math.sin(ang) * l1);
+      ctx.lineTo(cx + Math.cos(ang) * l2, cy + Math.sin(ang) * l2);
+      ctx.stroke();
+    }
+
+    // listening: radial waveform bars riding amplitude
+    if (S === 'listening') {
+      const bars = 48;
+      for (let i = 0; i < bars; i++) {
+        const ang = (i / bars) * Math.PI * 2 - Math.PI / 2;
+        const n = Math.abs(Math.sin(i * 2.7 + t * 6)) * 0.6 + Math.abs(Math.sin(i * 1.3 - t * 4)) * 0.4;
+        const len = 4 + n * 26 * (0.4 + amp);
+        const r0 = R + 46;
+        ctx.strokeStyle = col(0.5 + 0.4 * n);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
+        ctx.lineTo(cx + Math.cos(ang) * (r0 + len), cy + Math.sin(ang) * (r0 + len));
+        ctx.stroke();
+      }
+    }
+
+    // segmented arc ring, counter-rotating — TRAILS one state behind (two-tone test)
+    const segR = R + (S === 'listening' ? 92 : 58);
+    const rot2 = -t * 0.2 * Math.PI * 2 * (S === 'thinking' ? 2.4 : 1);
+    ctx.lineWidth = 3;
+    for (let s = 0; s < 6; s++) {
+      const a0 = rot2 + s * (Math.PI / 3) + 0.09;
+      ctx.strokeStyle = colLag(0.45);
+      ctx.beginPath(); ctx.arc(cx, cy, segR, a0, a0 + Math.PI / 3 - 0.18); ctx.stroke();
+    }
+
+    // outer blade ring — also lagged
+    const bladeR = segR + 26;
+    const rot3 = t * 0.32 * Math.PI * 2 * (S === 'thinking' ? 2 : 1) * (S === 'error' ? 0.05 : 1);
+    ctx.lineWidth = 1.5;
+    for (let s = 0; s < 3; s++) {
+      const a0 = rot3 + s * (Math.PI * 2 / 3);
+      ctx.strokeStyle = colLag(0.6);
+      ctx.beginPath(); ctx.arc(cx, cy, bladeR, a0, a0 + 0.5); ctx.stroke();
+    }
+    ctx.strokeStyle = colLag(0.12);
+    ctx.beginPath(); ctx.arc(cx, cy, bladeR, 0, 7); ctx.stroke();
+
+    // thinking / doing tasks: radar sweep wedge
+    if (S === 'thinking') {
+      const sweep = t * 2.2;
+      g = ctx.createConicGradient ? null : null;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, bladeR - 4, sweep, sweep + 0.7);
+      ctx.closePath();
+      const lg = ctx.createRadialGradient(cx, cy, R, cx, cy, bladeR);
+      lg.addColorStop(0, col(0.16));
+      lg.addColorStop(1, col(0.02));
+      ctx.fillStyle = lg;
+      ctx.fill();
+      ctx.restore();
+      for (let k = 0; k < 3; k++) {
+        const ang = t * 2.6 + k * (Math.PI * 2 / 3);
+        ctx.fillStyle = col(0.9);
+        ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * (R + 14), cy + Math.sin(ang) * (R + 14) * 0.6, 3, 0, 7); ctx.fill();
+      }
+    }
+
+    // speaking: emitted rings on cadence
+    if (S === 'speaking' && now - this.lastPulse > 420) { this.lastPulse = now; this.pulses.push(now); }
+    this.pulses = this.pulses.filter((p) => now - p < 1500);
+    for (const p of this.pulses) {
+      const k = (now - p) / 1500;
+      ctx.strokeStyle = col(0.4 * (1 - k));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, bladeR + 10 + k * 200, 0, 7); ctx.stroke();
+    }
+
+    // crosshair accents
+    ctx.strokeStyle = col(0.3);
+    ctx.lineWidth = 1;
+    for (const ang of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang) * (bladeR + 14), cy + Math.sin(ang) * (bladeR + 14));
+      ctx.lineTo(cx + Math.cos(ang) * (bladeR + 26), cy + Math.sin(ang) * (bladeR + 26));
+      ctx.stroke();
+    }
+
+    // horizon
+    ctx.globalAlpha = master * 0.5;
+    const hg = ctx.createLinearGradient(cx - 320, 0, cx + 320, 0);
+    hg.addColorStop(0, col(0)); hg.addColorStop(0.5, col(0.5)); hg.addColorStop(1, col(0));
+    ctx.fillStyle = hg;
+    ctx.fillRect(cx - 320, cy + bladeR + 44, 640, 1);
+    ctx.globalAlpha = 1;
+  };
+
+  stream(text, onPart, onDone, tick) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.iv = setInterval(() => {
+      i += 1 + Math.floor(Math.random() * 2);
+      onPart(text.slice(0, i));
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; if (onDone) onDone(); }
+    }, tick || (this.props.streamSpeed ?? 18));
+  }
+  setA(aState, extra) { this.setState(Object.assign({ aState, changedAt: performance.now() }, extra || {})); }
+
+  // ── audio engine (mirrors El Fager Sound Cues.dc.html) ──
+  ensureAudio() {
+    if (!this.ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      this.ac = new AC();
+      const master = this.ac.createGain(); master.gain.value = (this.props.soundOn === false ? 0 : 0.9); master.connect(this.ac.destination);
+      const comp = this.ac.createDynamicsCompressor();
+      comp.threshold.value = -20; comp.knee.value = 22; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.18; comp.connect(master);
+      const len = Math.floor(this.ac.sampleRate * 0.9), imp = this.ac.createBuffer(2, len, this.ac.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = imp.getChannelData(c); for (let i = 0; i < len; i++) { const t = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3.2); } }
+      const rev = this.ac.createConvolver(); rev.buffer = imp; const rg = this.ac.createGain(); rg.gain.value = 0.16; rev.connect(rg); rg.connect(master);
+      this.masterGain = master; this.bus = { dry: comp, wet: rev };
+    }
+    if (this.ac.state === 'suspended') this.ac.resume();
+    return this.ac;
+  }
+  aNote(freq, start, dur, peak, o) {
+    o = o || {}; const ac = this.ac, bright = o.bright == null ? 1 : o.bright;
+    const g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(freq * 5 * bright, start); lp.frequency.exponentialRampToValueAtTime(Math.max(300, freq * 1.6), start + dur); lp.Q.value = 0.3;
+    g.connect(lp); lp.connect(this.bus.dry); lp.connect(this.bus.wet);
+    [[1, 1], [1.002, 0.7], [0.997, 0.7], [2, 0.18 * bright], [3, 0.08 * bright]].forEach(([m, a], i) => { const osc = ac.createOscillator(); osc.type = i < 3 ? 'sine' : 'triangle'; osc.frequency.value = freq * m; const pg = ac.createGain(); pg.gain.value = a; osc.connect(pg); pg.connect(g); osc.start(start); osc.stop(start + dur + 0.05); });
+    const atk = o.atk == null ? 0.008 : o.atk;
+    g.gain.setValueAtTime(0.0001, start); g.gain.exponentialRampToValueAtTime(peak, start + atk); g.gain.exponentialRampToValueAtTime(peak * 0.55, start + atk + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    if (o.click !== false) this.aNoise(start, 0.02, peak * 0.5, freq * 3, 3);
+  }
+  aFm(freq, start, dur, peak, ratio, index, o) {
+    o = o || {}; const ac = this.ac;
+    const car = ac.createOscillator(); car.type = 'sine'; car.frequency.value = freq;
+    const mod = ac.createOscillator(); mod.type = 'sine'; mod.frequency.value = freq * ratio;
+    const mg = ac.createGain(); mg.gain.setValueAtTime(freq * index, start); mg.gain.exponentialRampToValueAtTime(Math.max(1, freq * index * 0.15), start + dur); mod.connect(mg); mg.connect(car.frequency);
+    const g = ac.createGain(); car.connect(g); g.connect(this.bus.dry); g.connect(this.bus.wet);
+    const atk = o.atk == null ? 0.005 : o.atk;
+    g.gain.setValueAtTime(0.0001, start); g.gain.exponentialRampToValueAtTime(peak, start + atk); g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    car.start(start); car.stop(start + dur + 0.05); mod.start(start); mod.stop(start + dur + 0.05);
+  }
+  aNoise(start, dur, peak, center, q) {
+    const ac = this.ac, n = Math.max(1, Math.floor(ac.sampleRate * dur)), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * 0.6;
+    const src = ac.createBufferSource(); src.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = center || 900; f.Q.value = q || 0.7; const g = ac.createGain();
+    src.connect(f); f.connect(g); g.connect(this.bus.dry);
+    g.gain.setValueAtTime(0.0001, start); g.gain.linearRampToValueAtTime(peak, start + dur * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    src.start(start); src.stop(start + dur);
+  }
+  cue(id) {
+    if (!this.ensureAudio()) return;
+    const t = this.ac.currentTime + 0.02;
+    if (id === 'summon') { this.aFm(587.33, t, 0.26, 0.13, 3.5, 2.2, { atk: 0.004 }); this.aFm(880, t + 0.08, 0.28, 0.14, 3.5, 1.8); }
+    else if (id === 'heard') { this.aNoise(t, 0.012, 0.16, 2400, 2.5); this.aNote(1567.98, t, 0.04, 0.08, { bright: 1.8, atk: 0.002, click: false }); }
+    else if (id === 'step') { this.aNoise(t, 0.02, 0.14, 800, 4); this.aNote(392, t, 0.11, 0.12, { bright: 0.55 }); }
+    else if (id === 'run') { this.aNote(146.83, t, 0.5, 0.17, { bright: 0.6 }); this.aNote(220, t + 0.006, 0.52, 0.11, { bright: 0.6 }); this.aNote(293.66, t + 0.012, 0.4, 0.06, { bright: 0.7, click: false }); }
+    else if (id === 'armed') { this.aFm(523.25, t, 0.18, 0.12, 2, 1.4); this.aFm(698.46, t + 0.09, 0.32, 0.13, 2, 1.6, { atk: 0.02 }); }
+    else if (id === 'sent') { this.aNote(880, t, 0.1, 0.12, { bright: 1.3, click: false }); this.aNote(698.46, t + 0.07, 0.12, 0.13, { bright: 1.3, click: false }); this.aNote(587.33, t + 0.15, 0.34, 0.15, { bright: 1.2, click: false }); }
+    else if (id === 'error') { this.aFm(155.56, t, 0.14, 0.15, 1.41, 1.2, { click: false }); this.aFm(146.83, t + 0.17, 0.17, 0.15, 1.41, 1.4, { click: false }); }
+  }
+
+  beginExchange(utterance, viaVoice) {
+    this.clearTimers();
+    this.wake(viaVoice);
+    // P1.3 — barge-in: interrupting TTS collapses the spoken answer to a dim receipt line
+    const barged = (this.state.aState === 'speaking' && this.state.answer) ? this.state.answer : '';
+    this.setState({ answer: '', toolCaption: '', errorText: '', steps: [], dataMoment: '', stagedCards: [], canRetry: false, barged });
+    const go = () => this.route(utterance);
+    if (viaVoice) {
+      this.setA('listening', { phase: 'hearing', heard: '' });
+      this.stream(utterance, (p) => this.setState({ heard: p }), () => { this.cue('heard'); this.wait(go, 450); }, 55);
+    } else {
+      this.setState({ heard: utterance, phase: 'hearing' });
+      this.wait(go, 150);
+    }
+  }
+
+  // step ledger: run a scripted sequence of tool calls, each completing green
+  runSteps(steps, onDone) {
+    const seq = steps.map((s) => ({ ...s, state: 'pending' }));
+    this.setState({ steps: seq });
+    let i = 0;
+    const next = () => {
+      if (i > 0) seq[i - 1] = { ...seq[i - 1], state: 'done' };
+      if (i >= seq.length) { this.setState({ steps: seq }); onDone(); return; }
+      seq[i] = { ...seq[i], state: 'active' };
+      this.cue('step');
+      this.setState({ steps: [...seq] });
+      const dur = seq[i].ms || 900;
+      i++;
+      this.wait(next, dur);
+    };
+    next();
+  }
+
+  endExchange(delay) {
+    this.wait(() => { this.setA('listening', { phase: 'empty', heard: '', answer: '', steps: [], dataMoment: '', stagedCards: [], barged: '', canRetry: false, clarify: null }); this.armAmbient(); }, delay || 2600);
+  }
+
+  static WA_CARD = { kind: 'whatsapp', to: 'Omar Adel', label: 'WHATSAPP →', body: 'الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟', rtl: true };
+
+  route(text) {
+    const t = text.toLowerCase();
+    if (/fail/.test(t) || /النت/.test(text)) {
+      this.setA('thinking', { phase: 'doing' });
+      this.runSteps([{ label: 'connecting whatsapp bridge…', skill: 'whatsapp', ms: 1400 }], () => {
+        const seq = this.state.steps.map((s) => ({ ...s, state: 'failed' }));
+        // P1.2 — failed step waits for retry/skip; no auto-dismiss
+        this.setA('error', { phase: 'error', errorText: 'WHATSAPP BRIDGE TIMED OUT — NOTHING WAS SENT.', steps: seq, canRetry: true });
+        this.cue('error');
+      });
+      return;
+    }
+    const isHealth = /macro|health|protein|weight|بروتين|وزن/.test(t);
+    const isMail = /mail|inbox|email|إيميل|بريد/.test(t) && !/ahmed|send/.test(t);
+    const isEmpty = /anything (else|left)|shutdown|كله تمام|فاضي/.test(t);
+    const isAmbiguous = /(tell|call|message)\s+ali|بلّغ علي/.test(t);
+    const isAction = /omar|عمر|send|ابعت/.test(t) || /ابعت/.test(text);
+    const isMulti = /and|و /.test(t) && isAction;
+    // P6: ambiguous request — clarify instead of guessing (no steps, no action)
+    if (isAmbiguous) {
+      this.setA('speaking', { phase: 'answering', dataMoment: '', clarify: true });
+      this.stream('Which Ali — you know two.', (p) => this.setState({ answer: p }));
+      return;
+    }
+    this.setA('thinking', { phase: 'doing' });
+    const steps = isMulti
+      ? [{ label: 'reading calendar', skill: 'calendar', ms: 800 }, { label: 'moving meeting → Thu 3:00 PM', skill: 'calendar', ms: 1100 }, { label: 'drafting email → Ahmed', skill: 'gmail', ms: 1200 }, { label: 'drafting whatsapp → Omar', skill: 'whatsapp', ms: 1000 }]
+      : isAction
+        ? [{ label: 'reading calendar', skill: 'calendar', ms: 800 }, { label: 'drafting whatsapp → Omar', skill: 'whatsapp', ms: 1200 }]
+        : isHealth
+          ? [{ label: 'reading health log', skill: 'todoist', ms: 900 }]
+          : isMail
+            ? [{ label: 'reading gmail', skill: 'gmail', ms: 1000 }]
+            : isEmpty
+              ? [{ label: 'checking inbox + tasks', skill: 'todoist', ms: 900 }]
+              : [{ label: 'reading calendar', skill: 'calendar', ms: 700 }, { label: 'checking todoist', skill: 'todoist', ms: 700 }, { label: 'reading health log', skill: 'todoist', ms: 600 }];
+    this.runSteps(steps, () => {
+      if (isMulti) {
+        // P1.4 — two actions staged at once, queued side by side
+        this.setA('speaking', { phase: 'staged', barged: '', stagedCards: [
+          { kind: 'gmail', to: 'Ahmed', label: 'EMAIL →', body: 'Moved the API review to Thu 3:00 PM — calendar updated. Auth notes attached.', rtl: false },
+          { kind: 'whatsapp', to: 'Omar Adel', label: 'WHATSAPP →', body: 'الميتنج اتأجل للخميس الساعة ٣ — تمام معاك؟', rtl: true }
+        ] });
+        this.stream('Two things staged — confirm each.', (p) => this.setState({ answer: p }), () => this.setA('idle'));
+        this.cue('armed');
+      } else if (isAction) {
+        this.setA('speaking', { phase: 'staged', barged: '', stagedCards: [Component.WA_CARD] });
+        this.stream('Staged — look it over before it goes.', (p) => this.setState({ answer: p }), () => this.setA('idle'));
+        this.cue('armed');
+      } else if (isHealth) {
+        this.setA('speaking', { phase: 'answering', dataMoment: 'health', barged: '' });
+        this.stream("Protein's 32 grams behind — carbs and fat on track. Weight's trending down, 81.2 kilos.", (p) => this.setState({ answer: p }), () => this.endExchange(3400));
+      } else if (isMail) {
+        this.setA('speaking', { phase: 'answering', dataMoment: 'mail', barged: '' });
+        this.stream('One needs you — Stripe. Ahmed moved the review; the rest can wait.', (p) => this.setState({ answer: p }), () => this.endExchange(3400));
+      } else if (isEmpty) {
+        this.setA('speaking', { phase: 'answering', dataMoment: 'empty', barged: '' });
+        this.stream("You're clear — inbox zero, nothing due, nothing needs you. Go home.", (p) => this.setState({ answer: p }), () => this.endExchange(3000));
+      } else {
+        this.setA('speaking', { phase: 'answering', dataMoment: 'brief', barged: '' });
+        this.stream("Clear after the 3pm review. Deep work till 5, gym at 7 — protein's 32g behind.", (p) => this.setState({ answer: p }), () => this.endExchange(3400));
+      }
+    });
+  }
+
+  // P1.2 — retry re-runs the failed step, then stages the pending action
+  retryStep() {
+    const seq = this.state.steps.map((s) => (s.state === 'failed' ? { ...s, state: 'active' } : s));
+    this.setA('thinking', { phase: 'doing', errorText: '', steps: seq, canRetry: false });
+    this.wait(() => {
+      const done = this.state.steps.map((s) => ({ ...s, state: 'done' }));
+      this.setA('speaking', { phase: 'staged', steps: done, stagedCards: [Component.WA_CARD] });
+      this.cue('armed');
+      this.stream('Bridge is back — staged it for you.', (p) => this.setState({ answer: p }), () => this.setA('idle'));
+    }, 1500);
+  }
+  resolveClarify(name) {
+    this.clearTimers();
+    this.cue('armed');
+    this.setA('speaking', { clarify: null, phase: 'staged', stagedCards: [{ kind: 'whatsapp', to: name, label: 'WHATSAPP →', body: 'Running 15 late — start without me.', rtl: false }] });
+    this.stream('Got it — ' + name + '. Staged.', (p) => this.setState({ answer: p }), () => this.setA('idle'));
+  }
+  skipStep() {
+    this.clearTimers();
+    this.setA('listening', { phase: 'empty', heard: '', errorText: '', steps: [], canRetry: false });
+    this.armAmbient();
+  }
+
+  // P7 — batch confirm all queued cards at once
+  confirmAll() {
+    this.clearTimers();
+    this.cue('sent');
+    const cards = this.state.stagedCards || [];
+    const receipts = [...cards.map((c) => ({ text: c.kind + ' → ' + c.to.split(' ')[0] + ' · sent', time: this.now() })).reverse(), ...this.state.receipts].slice(0, 3);
+    this.setA('speaking', { receipts, stagedCards: [], phase: 'answering', answer: '', undo: { n: cards.length } });
+    if (this.undoT) clearTimeout(this.undoT);
+    this.undoT = setTimeout(() => this.setState({ undo: null }), 6000);
+    this.stream('Both sent — تمام.', (p) => this.setState({ answer: p }), () => this.endExchange(1800), 40);
+  }
+  undoSend() {
+    if (this.undoT) clearTimeout(this.undoT);
+    this.clearTimers();
+    this.setA('listening', { phase: 'empty', heard: '', answer: '', undo: null, receipts: this.state.receipts.slice(this.state.undo.n) });
+    this.armAmbient();
+  }
+
+  // P1.4 — confirm/cancel per queued card
+  confirmCard(card) {
+    this.clearTimers();
+    const rest = (this.state.stagedCards || []).filter((c) => c !== card);
+    const receipts = [{ text: card.kind + ' → ' + card.to.split(' ')[0] + ' · sent', time: this.now() }, ...this.state.receipts].slice(0, 3);
+    if (rest.length) { this.cue('sent'); this.setState({ stagedCards: rest, receipts }); return; }
+    this.cue('sent');
+    this.setA('speaking', { receipts, stagedCards: [], phase: 'answering', answer: '', undo: { n: 1 } });
+    if (this.undoT) clearTimeout(this.undoT);
+    this.undoT = setTimeout(() => this.setState({ undo: null }), 6000);
+    this.stream('تمام — اتبعتت.', (p) => this.setState({ answer: p }), () => this.endExchange(1600), 45);
+  }
+  cancelCard(card) {
+    const rest = (this.state.stagedCards || []).filter((c) => c !== card);
+    if (rest.length) { this.setState({ stagedCards: rest }); return; }
+    this.clearTimers();
+    this.setA('listening', { phase: 'empty', heard: '', answer: '', steps: [], stagedCards: [] });
+    this.armAmbient();
+  }
+
+  micDemo() {
+    if (this.state.aState === 'thinking' || this.state.phase === 'staged' || this.state.phase === 'hearing') return;
+    this.cue('summon');
+    const scripts = ['إيه شكل بعد الضهر النهارده؟', 'how are my macros looking?', "what's in my inbox?", 'tell Ali I am running late', 'move the meeting to Thursday and tell Ahmed and Omar', 'anything left today?', 'ابعت رسالة بس النت فاصل — fail'];
+    const line = scripts[this.state.demoIdx % scripts.length];
+    this.setState({ demoIdx: this.state.demoIdx + 1 });
+    this.beginExchange(line, true);
+  }
+
+  renderVals() {
+    const S = this.state.aState, P = this.state.phase;
+    const colors = { idle: '#7E8AA3', listening: '#38E0FF', thinking: '#F09950', speaking: '#FFD782', error: '#FF5042' };
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'WORKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const labelsAr = { idle: 'ساكن', listening: 'سامعك', thinking: 'شغّال', speaking: 'بتكلم', error: 'في مشكلة' };
+    const d = new Date();
+    const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const demoLabels = ['ASK THE BRIEF', 'ASK HEALTH', 'ASK MAIL', 'AMBIGUOUS', 'TWO ACTIONS', 'ALL CLEAR', 'TRY A FAILURE'];
+    const hexDim = { idle: 'rgba(126,138,163,0.3)', listening: 'rgba(56,224,255,0.3)', thinking: 'rgba(240,153,80,0.3)', speaking: 'rgba(255,215,130,0.3)', error: 'rgba(255,80,66,0.3)' };
+    return {
+      orbRef: this.orbRef,
+      clock: this.state.clock,
+      dateStr: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()],
+      stateColor: colors[S],
+      stateDim: hexDim[S],
+      stateLabel: labels[S],
+      stateLabelAr: labelsAr[S],
+      showHeardBig: P === 'hearing',
+      // hidden while staged — the cards own that band
+      showHeardSmall: !!this.state.heard && !this.state.dataMoment && (P === 'doing' || P === 'answering' || P === 'error'),
+      heard: this.state.heard,
+      isThinking: P === 'doing',
+      hasSteps: this.state.steps.length > 0 && (P === 'doing' || P === 'error'),
+      steps: this.state.steps.map((s) => ({
+        label: s.label,
+        dot: s.state === 'done' ? '#56C99C' : s.state === 'failed' ? '#FF5042' : ({ whatsapp: '#25D366', gmail: '#EA6C5A', todoist: '#E8746A', calendar: '#5B8DEF', browser: '#38E0FF' })[s.skill] || '#F09950',
+        txtColor: s.state === 'active' ? '#F09950' : s.state === 'failed' ? '#FF5042' : s.state === 'done' ? '#5F7183' : '#3A4A5C',
+        anim: s.state === 'active' ? 'fgrShimmer 1.4s ease-in-out infinite' : 'none',
+        mark: s.state === 'done' ? '✓' : ''
+      })),
+      // readouts yield the stage: hidden in ambient, dimmed to near-invisible during an exchange
+      ambientOpacity: this.state.ambient ? '0' : (P !== 'empty' ? '0.12' : '1'),
+      arLabelOpacity: P === 'empty' || P === 'hearing' ? '1' : '0',
+      showDataBrief: this.state.dataMoment === 'brief',
+      showDataHealth: this.state.dataMoment === 'health',
+      showDataMail: this.state.dataMoment === 'mail',
+      showDataEmpty: this.state.dataMoment === 'empty',
+      showClarify: !!this.state.clarify && P === 'answering',
+      clarifyOptions: [
+        { name: 'Ali Hassan', hint: 'WHATSAPP · work', pick: () => this.resolveClarify('Ali Hassan') },
+        { name: 'Ali (brother)', hint: 'WHATSAPP · family', pick: () => this.resolveClarify('Ali — brother') }
+      ],
+      showBarged: !!this.state.barged && P === 'hearing',
+      barged: this.state.barged,
+      showRetry: !!this.state.canRetry && P === 'error',
+      retryStep: () => this.retryStep(),
+      skipStep: () => this.skipStep(),
+      // label shows only while empty/hearing; when it yields, words reclaim its band
+      wordsTop: (P === 'empty' || P === 'hearing') ? 'calc(50% + min(108px,13vh) + 52px)' : 'calc(50% + min(108px,13vh))',
+      // Arabic-first: when the exchange is Arabic, the Arabic label leads
+      enLabelSize: /[\u0600-\u06FF]/.test(this.state.heard) ? '11px' : '14px',
+      arLabelSize: /[\u0600-\u06FF]/.test(this.state.heard) ? '19px' : '15px',
+      enLabelOpacity: (P === 'empty' || P === 'hearing') ? (/[\u0600-\u06FF]/.test(this.state.heard) ? '0.55' : '0.9') : '0',
+      showAnswer: !!this.state.answer && P !== 'staged',
+      answer: this.state.answer,
+      answerCaret: S === 'speaking' ? '1' : '0',
+      showError: P === 'error',
+      errorText: this.state.errorText,
+      showStaged: P === 'staged' && (this.state.stagedCards || []).length > 0,
+      stagedCards: (this.state.stagedCards || []).map((c, i, arr) => ({
+        label: c.label, to: c.to, body: c.body,
+        dir: c.rtl ? 'rtl' : 'ltr',
+        initial: c.to.charAt(0),
+        queue: arr.length > 1 ? (i + 1) + ' OF ' + arr.length : '',
+        confirm: () => this.confirmCard(c),
+        cancel: () => this.cancelCard(c)
+      })),
+      receipts: this.state.receipts,
+      hasReceipts: this.state.receipts.length > 0,
+      typedMode: this.state.typedMode,
+      voiceMode: !this.state.typedMode,
+      typed: this.state.typed,
+      inputRef: this.inputRef,
+      demoLabel: demoLabels[this.state.demoIdx % 7],
+      hasMultiple: (this.state.stagedCards || []).length > 1,
+      confirmAll: () => this.confirmAll(),
+      kbdHelp: this.state.kbdHelp,
+      toggleHelp: () => this.setState({ kbdHelp: !this.state.kbdHelp }),
+      hasUndo: !!this.state.undo,
+      undoText: this.state.undo ? (this.state.undo.n > 1 ? this.state.undo.n + ' messages sent' : 'Message sent') : '',
+      undoSend: () => this.undoSend(),
+      onType: (e) => this.setState({ typed: e.target.value }),
+      onKeyDown: (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && this.state.typed.trim()) { const t = this.state.typed.trim(); this.setState({ typed: '' }); this.beginExchange(t, false); }
+      },
+      toggleTyped: () => {
+        const on = !this.state.typedMode;
+        this.setState({ typedMode: on });
+        if (on) this.wait(() => { if (this.inputRef.current) this.inputRef.current.focus(); }, 60);
+      },
+      wake: () => this.wake(),
+      micDemo: () => this.micDemo()
+    };
+  }
+}
+</script>
+</body>
+</html>

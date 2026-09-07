@@ -22,7 +22,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
-from core import atomic
 
 _MACROS_FILE = Path("data/macros.json")
 _STATS_FILE  = Path("data/macro_stats.json")
@@ -82,7 +81,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "get_all_headlines", "args": {"n": 2}},
             {"tool": "hue_wake_up",       "args": {"light": "all", "duration_minutes": 15}},
             {"tool": "set_system_volume", "args": {"level": 40}},
-            {"tool": "play_music",        "args": {"query": "morning chill arabic"}},
+            {"tool": "play_music",        "args": {"query": "morning chill"}},
         ],
     },
     # ── Night ─────────────────────────────────────────────────────────────────
@@ -229,7 +228,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "hue_scene",         "args": {"scene_name": "energize", "light": "all"}},
             {"tool": "hue_brightness",    "args": {"level": 100, "light": "all"}},
             {"tool": "set_system_volume", "args": {"level": 80}},
-            {"tool": "play_music",        "args": {"query": "workout hype arabic"}},
+            {"tool": "play_music",        "args": {"query": "workout hype"}},
         ],
     },
     # ── Prayer ────────────────────────────────────────────────────────────────
@@ -362,7 +361,7 @@ _BUILTIN_MACROS: list[dict] = [
             {"tool": "get_next_prayer",   "args": {}},
             {"tool": "get_all_headlines", "args": {"n": 3}},
             {"tool": "set_system_volume", "args": {"level": 70}},
-            {"tool": "play_music",        "args": {"query": "podcast learning arabic"}},
+            {"tool": "play_music",        "args": {"query": "podcast learning"}},
         ],
     },
 ]
@@ -395,7 +394,7 @@ def _load_macros() -> list[dict]:
 
 def _save_macros(data: list[dict]) -> None:
     _MACROS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write(_MACROS_FILE,
+    _MACROS_FILE.write_text(
         json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
@@ -411,7 +410,7 @@ def _load_stats() -> dict:
 
 def _save_stats(stats: dict) -> None:
     _STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic.write(_STATS_FILE,
+    _STATS_FILE.write_text(
         json.dumps(stats, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 

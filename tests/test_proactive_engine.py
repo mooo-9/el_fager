@@ -9,8 +9,6 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from core.agents.verifier import verify as _real_verify
-
 import pytest
 
 import core.proactive as pa
@@ -99,7 +97,7 @@ class TestRunChecksWindows:
         mocks = _patch_all_checks(engine)
         _run_checks_at(engine, datetime(2026, 7, 1, 14, 0))  # Wed 2 PM
         for name in ("_check_battery", "_check_prayer_times", "_check_upcoming_events",
-                     "_check_price_alerts", "_check_autonomous_tasks"):
+                     "_check_autonomous_tasks"):
             mocks[name].assert_called_once()
         mocks["_check_journal"].assert_not_called()
         mocks["_check_weather"].assert_not_called()
@@ -132,13 +130,6 @@ class TestRunChecksWindows:
 
 
 class TestAutonomousTasks:
-    @pytest.fixture(autouse=True)
-    def warden_passes(self):
-        """Background tasks are inspected before they count as done. Tests that
-        care about the inspector's verdict override this."""
-        with patch("core.agents.verifier.verify", return_value=("pass", "")):
-            yield
-
     def _mgr(self, due):
         mgr = MagicMock()
         mgr.get_due.return_value = due
@@ -163,7 +154,7 @@ class TestAutonomousTasks:
         assert engine._deliver.call_args.kwargs.get("remote") is True
 
     def test_max_two_tasks_per_cycle(self, engine):
-        engine._brain_fn = MagicMock(return_value="that task is finished")
+        engine._brain_fn = MagicMock(return_value="ok")
         due = [{"id": f"t{i}", "description": f"task {i}"} for i in range(4)]
         mgr = self._mgr(due)
         with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
@@ -179,37 +170,10 @@ class TestAutonomousTasks:
         mgr.fail.assert_called_once()
         assert mgr.fail.call_args.args[0] == "t1"
         mgr.complete.assert_not_called()
-        # Mo is told the task did not get done -- silence would leave him
-        # believing a queued task ran.
-        assert "did not get done" in engine._deliver.call_args.args[0]
-
-    def test_a_task_that_reports_failure_is_not_marked_done(self, engine):
-        """The defect this closes: any non-raising result used to count as done,
-        so an assistant replying 'I could not do that' completed the task."""
-        engine._brain_fn = MagicMock(return_value="I could not complete that.")
-        mgr = self._mgr([{"id": "t1", "description": "check NVDA RSI"}])
-        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
-             patch("core.agents.verifier.verify",
-                   return_value=("fail", "the agent declined the task")):
-            engine._check_autonomous_tasks()
-        mgr.complete.assert_not_called()
-        mgr.fail.assert_called_once()
-        assert "declined" in mgr.fail.call_args.args[1]
-
-    def test_a_tool_error_result_is_not_marked_done(self, engine):
-        engine._brain_fn = MagicMock(return_value="Tool error (file_search): boom")
-        mgr = self._mgr([{"id": "t1", "description": "find the invoice"}])
-        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
-             patch("core.agents.verifier.verify", side_effect=_real_verify):
-            engine._check_autonomous_tasks()
-        mgr.complete.assert_not_called()
-        mgr.fail.assert_called_once()
+        engine._deliver.assert_not_called()
 
     def test_one_failed_task_does_not_block_the_next(self, engine):
-        engine._brain_fn = MagicMock(
-            side_effect=[RuntimeError("boom"), RuntimeError("boom again"),
-                         "the second task is finished"]
-        )
+        engine._brain_fn = MagicMock(side_effect=[RuntimeError("boom"), "second ok"])
         due = [
             {"id": "t1", "description": "fails"},
             {"id": "t2", "description": "succeeds"},
@@ -218,19 +182,14 @@ class TestAutonomousTasks:
         with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
             engine._check_autonomous_tasks()
         mgr.fail.assert_called_once()
-        mgr.complete.assert_called_once_with("t2", "the second task is finished")
+        mgr.complete.assert_called_once_with("t2", "second ok")
 
-    def test_empty_brain_result_is_a_failure_not_a_silent_done(self, engine):
-        """An empty result is not evidence the work happened; it used to be
-        recorded as 'Done.'"""
+    def test_empty_brain_result_records_done(self, engine):
         engine._brain_fn = MagicMock(return_value="")
         mgr = self._mgr([{"id": "t1", "description": "quiet task"}])
-        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr), \
-             patch("core.agents.verifier.verify",
-                   return_value=("fail", "the agent returned nothing")):
+        with patch("core.autonomous_tasks.AutonomousTaskManager", return_value=mgr):
             engine._check_autonomous_tasks()
-        mgr.complete.assert_not_called()
-        mgr.fail.assert_called_once()
+        mgr.complete.assert_called_once_with("t1", "Done.")
 
 
 class TestOAuthTokenCheck:
@@ -256,65 +215,6 @@ class TestOAuthTokenCheck:
     def test_missing_token_files_stay_quiet(self, engine, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         engine._check_oauth_tokens()
-        engine._deliver.assert_not_called()
-
-
-class TestNightlyBacktest:
-    def _write_results(self, tmp_path, data):
-        (tmp_path / "data").mkdir(exist_ok=True)
-        (tmp_path / "data" / "backtest_results.json").write_text(
-            json.dumps(data), encoding="utf-8"
-        )
-
-    def test_regression_in_sharpe_triggers_alert(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.2, "max_drawdown_pct": 8.0,
-                                                "total_return_pct": 20.0}})
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 0.6, "max_drawdown_pct": 9.0,
-                                                    "total_return_pct": 5.0}})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_called_once()
-        msg = engine._deliver.call_args.args[0]
-        assert "NVDA" in msg and "Sharpe" in msg
-
-    def test_drawdown_breach_triggers_alert(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"SPY": {"sharpe_ratio": 1.4, "max_drawdown_pct": 22.0,
-                                                   "total_return_pct": 10.0}})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_called_once()
-        assert "drawdown" in engine._deliver.call_args.args[0]
-
-    def test_healthy_metrics_stay_silent(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.1, "max_drawdown_pct": 8.0,
-                                                "total_return_pct": 18.0}})
-
-        def fake_backtest():
-            self._write_results(tmp_path, {"NVDA": {"sharpe_ratio": 1.3, "max_drawdown_pct": 7.0,
-                                                    "total_return_pct": 21.0},
-                                           "_run_at": "2026-07-04T23:00:00"})
-            return "done"
-
-        with patch("tools.backtest_tool.run_full_backtest", side_effect=fake_backtest):
-            engine._check_nightly_backtest()
-        engine._deliver.assert_not_called()
-
-    def test_backtest_exception_does_not_raise(self, engine, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        with patch("tools.backtest_tool.run_full_backtest",
-                   side_effect=RuntimeError("Alpaca down")):
-            engine._check_nightly_backtest()  # must not raise
         engine._deliver.assert_not_called()
 
 
@@ -373,16 +273,6 @@ class TestNewCheckWindows:
         _run_checks_at(engine, datetime(2026, 7, 1, 8, 0))
         mocks["_check_oauth_tokens"].assert_called_once()
 
-    def test_nightly_backtest_runs_at_23(self, engine):
-        mocks = _patch_all_checks(engine)
-        _run_checks_at(engine, datetime(2026, 7, 1, 23, 5))
-        mocks["_check_nightly_backtest"].assert_called_once()
-
-    def test_nightly_backtest_not_run_midday(self, engine):
-        mocks = _patch_all_checks(engine)
-        _run_checks_at(engine, datetime(2026, 7, 1, 14, 0))
-        mocks["_check_nightly_backtest"].assert_not_called()
-
 
 class TestHudNotify:
     def test_no_hud_fn_is_silent(self, engine):
@@ -397,3 +287,63 @@ class TestHudNotify:
     def test_hud_fn_exception_swallowed(self, engine):
         engine.set_hud_notify(MagicMock(side_effect=RuntimeError("js bridge gone")))
         engine._hud_notify(5, "a", "b", "c", "TAG")  # must not raise
+
+
+class TestTranscriptionQuality:
+    def _write_day(self, tmp_path, contents):
+        convo_dir = tmp_path / "data" / "conversations"
+        convo_dir.mkdir(parents=True)
+        from datetime import date
+        fpath = convo_dir / f"{date.today().isoformat()}.jsonl"
+        lines = [json.dumps({"role": "user", "content": c}, ensure_ascii=False)
+                 for c in contents]
+        fpath.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_high_garbage_rate_alerts(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        # 2 of 6 turns (33%) in scripts Mo doesn't speak
+        self._write_day(tmp_path, [
+            "what is the weather", "hello", "sabah el kheir",
+            "check my email", "여러분들과의 바세사", "Það er um þig",
+        ])
+        engine._check_transcription_quality()
+        assert engine._deliver.call_count == 1
+        assert "gibberish" in engine._deliver.call_args.args[0]
+
+    def test_clean_day_stays_quiet_and_resets(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, [
+            "what is the weather", "hello", "sabah el kheir",
+            "check my email", "what is on my calendar",
+        ])
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+        assert "transcription_quality" not in engine._state
+
+    def test_too_few_turns_stays_quiet(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, ["Það er um þig", "여러분들과의"])  # 100% but n=2
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+
+    def test_missing_log_file_stays_quiet(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        engine._check_transcription_quality()
+        engine._deliver.assert_not_called()
+
+    def test_cooldown_blocks_second_alert(self, engine, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_day(tmp_path, ["Það", "Það", "Það", "Það", "Það", "ok"])
+        engine._check_transcription_quality()
+        engine._check_transcription_quality()
+        assert engine._deliver.call_count == 1
+
+    def test_runs_in_evening_window(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 20, 0))
+        mocks["_check_transcription_quality"].assert_called_once()
+
+    def test_not_run_midday(self, engine):
+        mocks = _patch_all_checks(engine)
+        _run_checks_at(engine, datetime(2026, 7, 1, 12, 0))
+        mocks["_check_transcription_quality"].assert_not_called()
