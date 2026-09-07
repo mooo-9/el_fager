@@ -9,6 +9,15 @@ A second launch now signals a named event that the running instance waits on,
 and that instance brings its overlay forward. The second process still exits;
 the difference is that it hands off first.
 """
+import os
+import pytest
+
+# Exercises ctypes.windll, which exists only on Windows.
+# allow_module_level: the import below reaches Windows-only modules, so
+# the skip has to happen before collection walks any further.
+if os.name != "nt":
+    pytest.skip("Windows-only API (ctypes.windll)", allow_module_level=True)
+
 import ctypes
 import threading
 import time

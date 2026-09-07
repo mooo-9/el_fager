@@ -9,6 +9,11 @@ import json
 
 import pytest
 
+# The listening-window cases reach core.pipeline, which imports PyQt6.
+# requirements-dev deliberately carries no Qt; the ui job covers those.
+_pipeline = pytest.importorskip(
+    "core.pipeline", reason="needs PyQt6 (runtime dep, not in requirements-dev)")
+
 
 @pytest.fixture(autouse=True)
 def log(tmp_path, monkeypatch):

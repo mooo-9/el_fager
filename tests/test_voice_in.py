@@ -4,6 +4,13 @@ Tests for voice_in hallucination guards: English-only decode + no-speech filter.
 No audio hardware or Whisper models needed — _join_speech_segments is pure,
 and the backend calls are exercised with fake models.
 """
+import pytest
+
+# core.voice_in imports sounddevice, which needs the PortAudio system
+# library. requirements-dev deliberately carries no system deps.
+pytest.importorskip("sounddevice",
+                    reason="needs PortAudio (system library)")
+
 import numpy as np
 import pytest
 

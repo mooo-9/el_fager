@@ -14,3 +14,6 @@ anthropic>=0.109.1      # core/brain.py
 cryptography>=41.0      # core/vault.py
 python-dotenv>=1.2.2    # tools/backtest_tool.py and others
 httpx>=0.27.0           # tests/test_dispatch_retry.py
+groq>=0.18.0            # core/groq_client.py, shared-client tests
+numpy>=1.24.0,<3.0.0    # core/voice_in.py, and the audio tests
+pygame-ce>=2.5.7        # core/voice_out.py imports pygame.mixer at module scope

@@ -14,3 +14,4 @@
 PyQt6>=6.11.0
 PyQt6-WebEngine>=6.11.0   # tests/ui/conftest.py imports QWebEngineWidgets
 psutil>=5.9.0             # ui/overlay.py imports it at module scope
+sounddevice>=0.5.5        # core/pipeline -> core/voice_in; needs libportaudio2

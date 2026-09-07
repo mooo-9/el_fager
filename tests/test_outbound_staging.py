@@ -9,6 +9,15 @@ Everything below stubs the transport, so nothing is ever actually sent. What
 is under test is the promise the design makes: composing arms an action and
 sends nothing; only an explicit confirm sends; expiry and cancel both disarm.
 """
+import os
+import pytest
+
+# Exercises os.startfile, which exists only on Windows.
+# allow_module_level: the import below reaches Windows-only modules, so
+# the skip has to happen before collection walks any further.
+if os.name != "nt":
+    pytest.skip("Windows-only API (os.startfile)", allow_module_level=True)
+
 from datetime import datetime, timedelta
 
 import pytest
