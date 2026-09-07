@@ -7,9 +7,9 @@ Supports Arabic, English, French, and 60+ other languages.
 import httpx
 
 _LANG_ALIASES = {
-    "arabic": "ar", "عربي": "ar", "عربية": "ar",
-    "english": "en", "إنجليزي": "en",
-    "french": "fr", "français": "fr", "فرنسي": "fr",
+    "arabic": "ar",
+    "english": "en",
+    "french": "fr", "français": "fr",
     "german": "de", "spanish": "es", "italian": "it",
     "turkish": "tr", "chinese": "zh", "japanese": "ja",
     "russian": "ru", "portuguese": "pt", "hindi": "hi",

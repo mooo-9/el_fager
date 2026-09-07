@@ -14,7 +14,7 @@ Checks implemented:
   • Evening expense nudge (nothing logged today)
   • Weekly review prompt (Friday / Saturday evening)
   • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
-  • Nightly backtest after US market close, alert only on metric regression
+  • Transcription-quality alert when too many of today's turns are gibberish
 """
 
 import json
@@ -24,6 +24,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
+from core import atomic
 
 _STATE_FILE = Path("data/proactive_state.json")
 
@@ -90,7 +91,7 @@ class ProactiveEngine:
 
     def _save_state(self) -> None:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_FILE.write_text(
+        atomic.write(_STATE_FILE,
             json.dumps(self._state, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -167,7 +168,6 @@ class ProactiveEngine:
         self._check_battery()               # all hours
         self._check_prayer_times()          # all waking hours
         self._check_upcoming_events()       # all waking hours
-        self._check_price_alerts()          # all waking hours
         self._check_autonomous_tasks()      # all waking hours
         self._check_missions()              # all waking hours
 
@@ -179,14 +179,12 @@ class ProactiveEngine:
             self._check_oauth_tokens()
             self._check_skill_proposals()
 
-        if hour == 23:
-            self._check_nightly_backtest()
-
         if 19 <= hour <= 22:
             self._check_journal()
             self._check_expenses()
             self._check_budget_exceeded()
             self._check_api_budget()
+            self._check_transcription_quality()
 
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
             self._check_weekly_review()
@@ -274,8 +272,12 @@ class ProactiveEngine:
     def _check_upcoming_events(self) -> None:
         """Remind Mo of a calendar event starting in 5–20 minutes."""
         try:
-            from tools.calendar_tool import list_calendar_events
-            text  = list_calendar_events("today")
+            # The function is list_events; list_calendar_events is the brain's
+            # tool name for it, not an importable symbol. This raised
+            # ImportError into the swallow below on every cycle since the
+            # initial commit, so this check has never once run.
+            from tools.calendar_tool import list_events
+            text  = list_events("today")
             now   = datetime.now()
             today = date.today().isoformat()
             # Match time formats: "10:30 AM", "14:30", "10:30am"
@@ -284,7 +286,9 @@ class ProactiveEngine:
                 h    = int(m.group(1))
                 mins = int(m.group(2))
                 ampm = (m.group(3) or "").upper()
-                title = m.group(4).strip()
+                # _format_event appends a duration — "Standup (30 min)" —
+                # which does not belong in a spoken reminder.
+                title = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(4).strip())
                 if ampm == "PM" and h != 12:
                     h += 12
                 elif ampm == "AM" and h == 12:
@@ -296,8 +300,10 @@ class ProactiveEngine:
                     if not self._cooldown(key, 2):
                         self._deliver(f"Mo, '{title}' starts in {int(delta_min)} minutes.")
                         self._hud_notify(7, f"'{title}' in ", f"{int(delta_min)} min", "", "CALENDAR")
-        except Exception:
-            pass
+        except Exception as e:
+            # Reported, not swallowed: a silent except is what let a broken
+            # import hide here for two months.
+            print(f"[Proactive] event check error: {e}")
 
     def _check_deadlines(self) -> None:
         """Alert when a memorised deadline is today or tomorrow."""
@@ -410,18 +416,6 @@ class ProactiveEngine:
             "Mo, good time for your weekly review. Ask me for a 'weekly report' when ready."
         )
 
-    def _check_price_alerts(self) -> None:
-        """Check stock price alerts every cycle — deliver immediately when triggered."""
-        try:
-            from tools.stocks_tool import check_price_alerts
-            messages = check_price_alerts()
-            for msg in messages:
-                self._deliver(msg, remote=True)
-                # Show in HUD Stocks scene banner (whole message as highlight)
-                self._hud_notify(5, "", msg, "", "MARKET")
-        except Exception:
-            pass
-
     def _check_overdue_invoices(self) -> None:
         """Morning sweep — alert if any sent invoices are past due date."""
         if self._cooldown("overdue_invoices", 24):
@@ -459,14 +453,31 @@ class ProactiveEngine:
             due = mgr.get_due()
             if not due:
                 return
+            from core.agents.supervisor import assign
             for task in due[:2]:
                 mgr.mark_running(task["id"])
                 try:
-                    result = self._brain_fn(task["description"])
-                    short = (result or "Done.")[:200]
-                    mgr.complete(task["id"], short)
-                    announcement = f"Background task done: {task['description'][:50]}. {short[:100]}"
-                    self._deliver(announcement, remote=True)
+                    # Mo is not watching, so the result is inspected before it
+                    # counts as done -- a task that reported failure used to be
+                    # marked complete.
+                    report = assign("", task["description"], verify=True,
+                                    source=f"task:{task['id']}",
+                                    executor=self._brain_fn)
+                    if report.ok:
+                        short = (report.result or "Done.")[:200]
+                        mgr.complete(task["id"], short)
+                        self._deliver(
+                            f"Background task done: {task['description'][:50]}. "
+                            f"{short[:100]}",
+                            remote=True,
+                        )
+                    else:
+                        mgr.fail(task["id"], report.reason or "did not complete")
+                        self._deliver(
+                            f"Mo, the background task '{task['description'][:50]}' "
+                            f"did not get done. {report.reason[:120]}",
+                            remote=True,
+                        )
                 except Exception as e:
                     mgr.fail(task["id"], str(e))
         except Exception as e:
@@ -474,51 +485,150 @@ class ProactiveEngine:
 
     _MAX_STEPS_PER_CYCLE = 3
 
-    def _check_missions(self) -> None:
-        """Execute the current group's pending steps (up to 3 per cycle) via
-        brain.chat(). Same-group steps are independent; groups run in order.
-        Completion and blockage are announced; step results become context
-        for later groups (MissionManager.step_context)."""
-        if self._brain_fn is None:
+    @staticmethod
+    def _is_parallelisable(steps: list[dict]) -> bool:
+        """True when every step in the group names a DISTINCT registry agent.
+
+        Those agents build their own API client and share no state, so they are
+        safe to run at once. A group containing an unassigned step is not: those
+        run through brain.chat, which mutates conversation history and the
+        live-trading state machine. Two steps naming the same agent are also
+        left sequential -- an agent may hold a per-run resource (a browser, the
+        mouse), and nothing guarantees two of it can run side by side.
+        """
+        if len(steps) < 2:
+            return False
+        agents = [s.get("agent") for s in steps]
+        if not all(agents):
+            return False
+        return len(set(agents)) == len(agents)
+
+    def _run_group_in_parallel(self, mgr, active: dict, context: str,
+                               steps: list[dict]) -> None:
+        """Execute an all-agent group at once, then apply bookkeeping in step
+        order on this thread -- MissionManager rewrites the whole file on every
+        write, so concurrent bookkeeping would lose updates."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        from core.agents.supervisor import assign
+
+        def run(step: dict):
+            return assign(
+                step["agent"],
+                f"{context}\n\nYour task: {step['description']}",
+                acceptance=step.get("acceptance"),
+                source=f"mission:{active['id']}",
+                max_attempts=1,
+            )
+
+        with ThreadPoolExecutor(max_workers=len(steps)) as pool:
+            reports = list(pool.map(run, steps))
+
+        for step, report in zip(steps, reports):
+            if report.ok:
+                mgr.complete_step(active["id"], step["n"], report.result or "Done.")
+                continue
+            mgr.fail_step(active["id"], step["n"], report.reason)
+            refreshed = mgr.last_finished()
+            if refreshed and refreshed["id"] == active["id"] \
+                    and refreshed["status"] == "blocked":
+                self._announce_blocked(active, step, report)
             return
+
+        if mgr.get_active() is None:
+            self._announce_complete(mgr)
+
+    def _announce_blocked(self, active: dict, step: dict, report) -> None:
+        why = (report.reason or "").strip()[:120]
+        if why:
+            why = why[0].upper() + why[1:]
+            why = why if why.endswith(".") else why + "."
+            why += " "
+        self._deliver(
+            f"Mo, mission '{active['goal']}' is stuck at step "
+            f"{step['n']} ({step['description'][:60]}). "
+            f"{report.callsign} tried twice. {why}"
+            f"Tell me how to proceed.",
+            remote=True,
+        )
+
+    def _announce_complete(self, mgr) -> None:
+        finished = mgr.last_finished()
+        if finished and finished["status"] == "done":
+            last_result = (finished["steps"][-1].get("result") or "")[:150]
+            self._deliver(
+                f"Mission complete: {finished['goal']}. {last_result}",
+                remote=True,
+            )
+
+    def _check_missions(self) -> None:
+        """Execute the current group's pending steps (up to 3 per cycle)
+        through the supervisor: a step naming an agent goes to that agent, the
+        rest run via brain.chat(). Warden inspects every result, so a step only
+        advances when the work actually passed. Same-group steps are
+        independent; groups run in order. Completion and blockage are announced;
+        step results become context for later groups
+        (MissionManager.step_context)."""
         try:
             from core.missions import MissionManager
             mgr = MissionManager()
             steps = mgr.next_steps()[: self._MAX_STEPS_PER_CYCLE]
             if not steps:
                 return
+            # Only unassigned steps need the brain; a mission whose steps are
+            # all assigned to agents runs without one.
+            if self._brain_fn is None and not all(s.get("agent") for s in steps):
+                return
             active = mgr.get_active()
             context = mgr.step_context()
+            from core.agents.supervisor import assign
+
+            if self._is_parallelisable(steps):
+                self._run_group_in_parallel(mgr, active, context, steps)
+                return
+
             for step in steps:
-                prompt = (
-                    f"{context}\n\n"
-                    f"You are executing step {step['n']} of this mission. "
-                    f"Do it now using your tools and report the outcome concisely:\n"
-                    f"{step['description']}"
-                )
-                try:
-                    result = self._brain_fn(prompt)
-                    mgr.complete_step(active["id"], step["n"], result or "Done.")
-                except Exception as e:
-                    mgr.fail_step(active["id"], step["n"], str(e))
-                    refreshed = mgr.last_finished()
-                    if refreshed and refreshed["id"] == active["id"] \
-                            and refreshed["status"] == "blocked":
-                        self._deliver(
-                            f"Mo, mission '{active['goal']}' is stuck at step "
-                            f"{step['n']} ({step['description'][:60]}). "
-                            f"I tried twice. Tell me how to proceed.",
-                            remote=True,
-                        )
-                    return
-            if mgr.get_active() is None:
-                finished = mgr.last_finished()
-                if finished and finished["status"] == "done":
-                    last_result = (finished["steps"][-1].get("result") or "")[:150]
-                    self._deliver(
-                        f"Mission complete: {finished['goal']}. {last_result}",
-                        remote=True,
+                agent = step.get("agent")
+                if agent:
+                    # An assigned step goes to that agent verbatim; the agent
+                    # has no conversation history, so it carries its own context.
+                    report = assign(
+                        agent,
+                        f"{context}\n\nYour task: {step['description']}",
+                        acceptance=step.get("acceptance"),
+                        source=f"mission:{active['id']}",
+                        # MissionManager owns the retry: a failed step is
+                        # requeued for the next cycle, then blocks.
+                        max_attempts=1,
                     )
+                else:
+                    prompt = (
+                        f"{context}\n\n"
+                        f"You are executing step {step['n']} of this mission. "
+                        f"Do it now using your tools and report the outcome concisely:\n"
+                        f"{step['description']}"
+                    )
+                    report = assign("", prompt,
+                                    acceptance=step.get("acceptance"),
+                                    source=f"mission:{active['id']}",
+                                    executor=self._brain_fn,
+                                    max_attempts=1)
+
+                if report.ok:
+                    mgr.complete_step(active["id"], step["n"],
+                                      report.result or "Done.")
+                    continue
+
+                # Warden rejected it, or the agent failed outright. The step is
+                # NOT done -- fail_step retries it next cycle, then blocks.
+                mgr.fail_step(active["id"], step["n"], report.reason)
+                refreshed = mgr.last_finished()
+                if refreshed and refreshed["id"] == active["id"] \
+                        and refreshed["status"] == "blocked":
+                    self._announce_blocked(active, step, report)
+                return
+            if mgr.get_active() is None:
+                self._announce_complete(mgr)
         except Exception as e:
             print(f"[Proactive] mission check error: {e}")
 
@@ -697,53 +807,51 @@ class ProactiveEngine:
         except Exception as e:
             print(f"[Proactive] skill proposal check error: {e}")
 
-    _GATE_MIN_SHARPE = 1.0
-    _GATE_MAX_DRAWDOWN = 15.0
+    # Scripts Mo never speaks (Hangul, Hebrew, Cyrillic, CJK, Thai) plus the
+    # Icelandic eth/thorn Whisper hallucinates on silence.
+    _GARBAGE_RE = re.compile(r"[가-힯֐-׿Ѐ-ӿ一-鿿฀-๿ðþÞÐ]")
+    _GARBAGE_MAX_PCT = 10.0
+    _GARBAGE_MIN_TURNS = 5
 
-    def _check_nightly_backtest(self) -> None:
-        """Nightly (11 PM Cairo, after US close): re-run the full backtest and
-        speak up only when a symbol's gate metric regressed."""
-        if self._cooldown("nightly_backtest", 20):
+    def _check_transcription_quality(self) -> None:
+        """Evening: warn when too many of today's user turns contain scripts
+        Mo doesn't speak — the biggest silent failure (mic/VAD/Whisper) made
+        visible."""
+        if self._cooldown("transcription_quality", 20):
             return
         try:
-            results_path = Path("data/backtest_results.json")
-            previous: dict = {}
-            if results_path.exists():
-                try:
-                    previous = json.loads(results_path.read_text(encoding="utf-8"))
-                except Exception:
-                    previous = {}
-
-            from tools.backtest_tool import run_full_backtest
-            run_full_backtest()  # refreshes data/backtest_results.json
-
-            if not results_path.exists():
+            fpath = Path("data/conversations") / f"{date.today().isoformat()}.jsonl"
+            if not fpath.exists():
+                self._reset_cooldown("transcription_quality")
                 return
-            current = json.loads(results_path.read_text(encoding="utf-8"))
-
-            regressions = []
-            for symbol, stats in current.items():
-                if symbol.startswith("_") or not isinstance(stats, dict):
+            turns = garbage = 0
+            for line in fpath.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
                     continue
-                sharpe = stats.get("sharpe_ratio", 0)
-                drawdown = stats.get("max_drawdown_pct", 0)
-                ret = stats.get("total_return_pct", 0)
-                prev = previous.get(symbol) or {}
-                if drawdown > self._GATE_MAX_DRAWDOWN:
-                    regressions.append(f"{symbol} drawdown {drawdown:.1f}%")
-                elif prev.get("sharpe_ratio", 0) >= self._GATE_MIN_SHARPE > sharpe:
-                    regressions.append(f"{symbol} Sharpe fell to {sharpe:.2f}")
-                elif prev.get("total_return_pct", 0) > 0 > ret:
-                    regressions.append(f"{symbol} return went negative ({ret:.1f}%)")
-
-            if regressions:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if entry.get("role") != "user":
+                    continue
+                turns += 1
+                if self._GARBAGE_RE.search(entry.get("content", "")):
+                    garbage += 1
+            if turns < self._GARBAGE_MIN_TURNS:
+                self._reset_cooldown("transcription_quality")
+                return
+            pct = 100 * garbage / turns
+            if pct > self._GARBAGE_MAX_PCT:
                 self._deliver(
-                    "Nightly backtest warning -- " + " | ".join(regressions[:3])
-                    + ". Review before the next trading session.",
-                    remote=True,
+                    f"Mo, {garbage} of your {turns} voice messages today "
+                    f"({pct:.0f}%) came through as gibberish. Check the mic or "
+                    f"say a test sentence — Whisper may be mishearing you."
                 )
-        except Exception as e:
-            print(f"[Proactive] nightly backtest error: {e}")
+            else:
+                self._reset_cooldown("transcription_quality")
+        except Exception:
+            pass
 
     def _check_rest_day(self) -> None:
         """Suggest rest after 4 consecutive training days."""

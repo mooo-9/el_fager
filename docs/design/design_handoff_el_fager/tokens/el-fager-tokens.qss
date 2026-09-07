@@ -1,0 +1,122 @@
+/* ============================================================
+   EL FAGER — BASE QSS (Qt Style Sheets)
+   QSS has no variables: values are inlined. The source of truth
+   for every literal is el_fager_tokens.py — generate or sync.
+   Fonts are bundled and registered via QFontDatabase at boot:
+   SpaceGrotesk[wght].ttf, Alexandria[wght].ttf, SplineSansMono[wght].ttf
+   ============================================================ */
+
+/* ---- base ---- */
+QWidget {
+    background: #0D1017;                /* surface.0 */
+    color: #F2EDE6;                     /* text.hi */
+    font-family: "Space Grotesk", "Alexandria";
+    font-size: 15px;                    /* body */
+    selection-background-color: rgba(240,153,80,0.33); /* accent.wash x2 */
+    selection-color: #F2EDE6;
+}
+
+QLabel[class="mid"]  { color: #9BA3B5; }
+QLabel[class="low"]  { color: #5C6478; }
+QLabel[class="data"] { font-family: "Spline Sans Mono"; font-size: 12px; color: #5C6478; }
+QLabel[class="kicker"] {
+    font-family: "Spline Sans Mono"; font-size: 11px;
+    color: #5C6478; /* letter-spacing via QFont::setLetterSpacing(PercentageSpacing, 118) */
+}
+
+/* ---- card ---- */
+QFrame[class="card"] {
+    background: #131722;                /* surface.1 */
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;                /* r-3 */
+}
+QFrame[class="card"]:hover { background: #161B28; border-color: rgba(255,255,255,0.12); }
+
+/* ---- buttons ---- */
+QPushButton[class="primary"] {
+    background: #F09950; color: #1A0F06;
+    border: none; border-radius: 10px;  /* r-2 */
+    padding: 9px 18px; font-size: 13px; font-weight: 500;
+}
+QPushButton[class="primary"]:hover   { background: #FFBE7E; }
+QPushButton[class="primary"]:pressed { background: #D07E35; padding-top: 10px; padding-bottom: 8px; }
+QPushButton[class="primary"]:disabled{ background: #131722; color: #5C6478; }
+
+QPushButton[class="secondary"] {
+    background: #1A2030; color: #F2EDE6;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 8px 18px; font-size: 13px; font-weight: 500;
+}
+QPushButton[class="secondary"]:hover { background: #222A3D; }
+
+QPushButton[class="ghost"] {
+    background: transparent; color: #9BA3B5;
+    border: none; border-radius: 10px; padding: 9px 14px; font-size: 13px;
+}
+QPushButton[class="ghost"]:hover { color: #F2EDE6; background: rgba(255,255,255,0.05); }
+
+QPushButton[class="destructive"] {
+    background: transparent; color: #F2604F;
+    border: 1px solid rgba(242,96,79,0.35);
+    border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+}
+QPushButton[class="destructive"]:hover { background: rgba(242,96,79,0.10); }
+
+/* ---- input / command bar ---- */
+QLineEdit {
+    background: #131722; color: #F2EDE6;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 999px; padding: 10px 18px; font-size: 13.5px;
+}
+QLineEdit:focus { border-color: rgba(240,153,80,0.45); }
+QLineEdit[live="true"] { border-color: rgba(240,153,80,0.45); } /* glow drawn in paintEvent */
+
+/* ---- chips ---- */
+QLabel[class="chip"] {
+    background: #1A2030; color: #F2EDE6;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 999px; padding: 5px 12px; font-size: 12px;
+}
+QLabel[class="chip-accent"] {
+    background: rgba(240,153,80,0.12); color: #FFBE7E;
+    border: 1px solid rgba(240,153,80,0.30);
+    border-radius: 999px; padding: 5px 12px; font-size: 12px;
+}
+QLabel[class="kbd"] {
+    font-family: "Spline Sans Mono"; font-size: 10.5px; color: #5C6478;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 3px 7px;
+}
+
+/* ---- scrollbar ---- */
+QScrollBar:vertical { background: transparent; width: 6px; margin: 0; }
+QScrollBar::handle:vertical { background: rgba(255,255,255,0.14); border-radius: 3px; min-height: 32px; }
+QScrollBar::handle:vertical:hover { background: rgba(255,255,255,0.22); }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+/* ---- dialogs / menus ---- */
+QDialog { background: #131722; border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; }
+QMenu {
+    background: #1A2030; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 6px;
+}
+QMenu::item { padding: 7px 14px; border-radius: 6px; color: #F2EDE6; font-size: 13px; }
+QMenu::item:selected { background: rgba(240,153,80,0.13); color: #FFBE7E; }
+
+/* ---- COCKPIT MODE (v4) — full-screen QWebEngine surface ----
+   The cockpit is web-rendered (canvas orb), NOT QSS widgets, but any Qt chrome
+   around it uses these literals. Colder grounds + cyan state palette.
+   grounds: void #02040A, panel #050B18, card #081120, chip #0D1B2E, hairline #16283E
+   text:    hi #EAF2F7, mid #9FB1C2, low #5F7183, faint #3A4A5C
+   states:  idle #7E8AA3 · listening #38E0FF (cyan) · working #F09950 (orange)
+            · speaking #FFD782 (gold) · error #FF5042
+   skill dots (captions/receipts only): whatsapp #25D366, gmail #EA6C5A,
+            todoist #E8746A, calendar #5B8DEF, browser #38E0FF */
+
+/* NOT expressible in QSS — hand-paint with QPainter (small regions only):
+   - state dot / amplitude bars (60fps QTimer, repaint <= 32px rect)
+   - calorie ring, macro bars, sparklines (static; animate first show only)
+   - ember glow (e-glow): QGraphicsDropShadowEffect or painted radial
+   - summon fade: QPropertyAnimation on windowOpacity, 140ms, OutCubic
+   - cockpit orb + rings + waveform + wake bloom: QWebEngine canvas @60fps
+     (port tick() from mocks/El Fager Cockpit v2.dc.html verbatim) */

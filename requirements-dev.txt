@@ -1,0 +1,19 @@
+# Test-only dependencies — what CI installs to run the headless suite.
+#
+# This is deliberately NOT the full requirements.txt: the suite runs without
+# Whisper, PyQt6, torch, or any of the heavy runtime deps. Tests covering an
+# optional dependency (playwright, pyautogui, yfinance, alpaca, pdfplumber,
+# python-docx, duckduckgo-search) skip via tests/_optional.py rather than fail.
+#
+# Verified: `pytest tests/ --ignore=tests/ui` -> 480 passed, 20 skipped.
+
+pytest>=8.0
+
+# Imported at module scope by code the tests exercise.
+anthropic>=0.109.1      # core/brain.py
+cryptography>=41.0      # core/vault.py
+python-dotenv>=1.2.2    # tools/backtest_tool.py and others
+httpx>=0.27.0           # tests/test_dispatch_retry.py
+groq>=0.18.0            # core/groq_client.py, shared-client tests
+numpy>=1.24.0,<3.0.0    # core/voice_in.py, and the audio tests
+pygame-ce>=2.5.7        # core/voice_out.py imports pygame.mixer at module scope

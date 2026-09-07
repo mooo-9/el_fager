@@ -21,6 +21,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from core import atomic
 
 CONTACTS_PATH = Path("data/contacts.json")
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
@@ -71,7 +72,7 @@ def _load_contacts() -> dict:
 
 def _save_contacts(contacts: dict) -> None:
     CONTACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONTACTS_PATH.write_text(
+    atomic.write(CONTACTS_PATH,
         json.dumps(contacts, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
@@ -128,13 +129,24 @@ def _find_contact(name: str) -> tuple[str, str] | tuple[None, None]:
 
 def _stage_pending(display_name: str, phone: str, message: str) -> str:
     """Stage a message and return the preview string."""
+    from core import staging
+
     _pending.clear()
     _pending.update({
         "name": display_name,
         "phone": phone,
         "message": message,
-        "expires_at": datetime.now(CAIRO_TZ) + timedelta(seconds=60),
+        "expires_at": datetime.now(CAIRO_TZ) + timedelta(seconds=300),
     })
+    # Announce it so the surfaces can show what is armed and confirm it.
+    staging.stage(
+        medium="whatsapp",
+        target=display_name,
+        body=message,
+        expires_at=_pending["expires_at"],
+        confirm=confirm_whatsapp_send,
+        cancel=_pending.clear,
+    )
     preview = message if len(message) <= 80 else message[:77] + "..."
     return (
         f"Ready to send to {display_name} ({phone}):\n"
@@ -197,12 +209,15 @@ def confirm_whatsapp_send() -> str:
     Opens WhatsApp Desktop via whatsapp:// URI, waits for it to focus,
     then presses Enter to send.
     """
+    from core import staging
+
     if not _pending:
         return "No pending WhatsApp message to confirm."
 
     expires_at = _pending.get("expires_at")
     if expires_at and datetime.now(CAIRO_TZ) > expires_at:
         _pending.clear()
+        staging.resolve("expired")
         return "WhatsApp send expired — say your message again to retry."
 
     name = _pending["name"]
@@ -236,13 +251,18 @@ def confirm_whatsapp_send() -> str:
         import keyboard
         keyboard.press_and_release("enter")
         if focused:
+            # Only here did the message actually leave — anything below is a
+            # hand-off to Mo, so it clears the stage without writing a receipt.
+            staging.resolve("sent", f"whatsapp → {name} · sent")
             return f"Sent to {name}"
         else:
+            staging.resolve("handoff")
             return (
                 f"WhatsApp opened with message to {name} — "
                 "press Enter to send (took longer than expected to load)."
             )
     except Exception as e:
+        staging.resolve("handoff")
         return (
             f"WhatsApp opened with the message to {name} — "
             f"press Enter in WhatsApp to send. ({e})"

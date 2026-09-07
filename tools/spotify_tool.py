@@ -46,7 +46,6 @@ MOODS: dict = {
     "study":   "lofi study music playlist",
     "hype":    "hype energy playlist",
     "workout": "workout motivation gym playlist",
-    "arabic":  "arabic music hits playlist",
     "sleep":   "sleep ambient music playlist",
 }
 
@@ -322,7 +321,7 @@ def play_music(query: str, arabic: bool = False) -> str:
             return (f"بشغّل: {_fmt_track(tracks[0])}" if arabic
                     else f"Playing: {_fmt_track(tracks[0])}")
 
-        playlists = results.get("playlists", {}).get("items", [])
+        playlists = [p for p in results.get("playlists", {}).get("items", []) if p]
         if playlists:
             pl = playlists[0]
             _start_playback(sp, dev, context_uri=pl["uri"])

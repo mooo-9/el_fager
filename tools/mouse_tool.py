@@ -72,10 +72,10 @@ def mouse_scroll(amount: int, x: int = None, y: int = None) -> str:
 
 
 def type_text(text: str, interval: float = 0.03) -> str:
-    """Type text into the focused field. Uses clipboard-paste for Arabic/Unicode, keystrokes for ASCII."""
+    """Type text into the focused field. Uses clipboard-paste for non-ASCII text, keystrokes for ASCII."""
     try:
         # pyautogui.write() only supports ASCII keyboard scancodes.
-        # For Arabic or any non-ASCII text, copy to clipboard then paste.
+        # For any non-ASCII text, copy to clipboard then paste.
         is_ascii = all(ord(c) < 128 for c in text)
         if is_ascii:
             pyautogui.write(text, interval=interval)

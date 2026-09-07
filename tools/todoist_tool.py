@@ -25,6 +25,18 @@ _NOT_SET_UP = (
 
 _PRIORITY_LABELS = {4: "urgent", 3: "high", 2: "medium", 1: "normal"}
 
+_INVALID_TOKEN = (
+    "[Todoist token invalid or expired — get a new one from "
+    "todoist.com/app/settings/integrations → Developer → API token, "
+    "then update TODOIST_TOKEN in .env.]"
+)
+
+
+def _fmt_error(e: Exception) -> str:
+    if "401" in str(e):
+        return _INVALID_TOKEN
+    return f"[Todoist error: {e}]"
+
 
 def _get_api():
     if not TODOIST_AVAILABLE:
@@ -45,10 +57,19 @@ def _fmt_task(task) -> str:
     return f"[{priority}] {task.content}{due}"
 
 
+def _collect(pages) -> list:
+    """todoist-api-python v4 returns an iterator of pages (each a list of
+    tasks) from get_tasks()/filter_tasks(); flatten it into one list."""
+    out = []
+    for page in pages:
+        out.extend(page)
+    return out
+
+
 def _find_task(api, search_term: str):
     """Find first task whose content contains search_term (case-insensitive)."""
     try:
-        tasks = api.get_tasks()
+        tasks = _collect(api.get_tasks())
         term = search_term.lower()
         return next((t for t in tasks if term in t.content.lower()), None)
     except Exception:
@@ -65,14 +86,17 @@ def list_tasks(filter: str = "today") -> str:
     if api is None:
         return "[Todoist auth failed — check TODOIST_TOKEN in .env]"
     try:
-        tasks = api.get_tasks(filter=filter)
+        if filter:
+            tasks = _collect(api.filter_tasks(query=filter))
+        else:
+            tasks = _collect(api.get_tasks())
         if not tasks:
             return f"No tasks found for filter '{filter}'"
         lines = [f"{i+1}. {_fmt_task(t)}" for i, t in enumerate(tasks)]
         label = filter if filter else "all"
         return f"Tasks ({label}):\n" + "\n".join(lines)
     except Exception as e:
-        return f"[Todoist error: {e}]"
+        return _fmt_error(e)
 
 
 def add_task(content: str, due_string: str = None, priority: int = 1) -> str:
@@ -95,7 +119,7 @@ def add_task(content: str, due_string: str = None, priority: int = 1) -> str:
         due_part = f" — due {due_string}" if due_string else ""
         return f"Added [{label}]: {content}{due_part}"
     except Exception as e:
-        return f"[Todoist error: {e}]"
+        return _fmt_error(e)
 
 
 def complete_task(search_term: str) -> str:
@@ -109,10 +133,10 @@ def complete_task(search_term: str) -> str:
         task = _find_task(api, search_term)
         if task is None:
             return f"No task found matching '{search_term}'"
-        api.close_task(task_id=task.id)
+        api.complete_task(task_id=task.id)
         return f"Done: {task.content}"
     except Exception as e:
-        return f"[Todoist error: {e}]"
+        return _fmt_error(e)
 
 
 def delete_task(search_term: str) -> str:
@@ -129,4 +153,4 @@ def delete_task(search_term: str) -> str:
         api.delete_task(task_id=task.id)
         return f"Deleted: {task.content}"
     except Exception as e:
-        return f"[Todoist error: {e}]"
+        return _fmt_error(e)

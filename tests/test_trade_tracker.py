@@ -3,6 +3,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
+from tests._optional import requires
 
 
 def _write_trades(path: Path, trades: list) -> None:
@@ -41,6 +42,7 @@ class TestTradeTrackerFetchSells:
         t = TradeTracker()
         assert t._fetch_closed_sells("key", "secret", True) == []
 
+    @requires("alpaca")
     def test_fetch_returns_empty_list_when_api_raises(self, monkeypatch):
         from core.trade_tracker import TradeTracker
 

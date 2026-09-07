@@ -2,7 +2,8 @@
 SkillForge instant-lane tools.
 
 learn_skill / list_skills / run_skill / delete_skill /
-schedule_skill / unschedule_skill / skill_proposals / dismiss_skill_proposal
+schedule_skill / unschedule_skill / skill_proposals / dismiss_skill_proposal /
+import_routines / sync_skills_to_claude
 
 run_skill returns the skill's instructions INTO the tool loop -- Claude
 executes them right there with the tools it already has. Scheduling reuses
@@ -10,13 +11,16 @@ AutonomousTaskManager (ProactiveEngine executes due tasks via brain.chat).
 
 All return strings are cp1252-safe (spoken by TTS).
 """
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from core import atomic
 
 _SKILLS_PATH = Path("data/skills.json")
 _SEEDS_PATH = None  # None -> SkillStore default (core/skills/seeds.json)
 _PROPOSALS_PATH = Path("data/skill_proposals.json")
 _CONVERSATIONS_DIR = Path("data/conversations")
+_CLAUDE_SKILLS_DIR = Path(".claude/skills")
 
 _AUTOMATION_HINT_AFTER_RUNS = 3
 
@@ -34,13 +38,9 @@ def _miner():
 
 def learn_skill(name: str, instructions: str, trigger_phrases: str = "") -> str:
     """Save a new skill. trigger_phrases: comma-separated optional phrases."""
-    from core.skills.store import ForbiddenSkillError
     phrases = [p.strip() for p in trigger_phrases.split(",") if p.strip()]
     try:
         _store().add(name, instructions, trigger_phrases=phrases)
-    except ForbiddenSkillError:
-        return ("I cannot learn that skill -- it includes live-trading "
-                "confirmation steps, which stay manual by design.")
     except ValueError as e:
         return str(e)
     return (f"Learned skill '{name}'. Mo can run it by name"
@@ -155,7 +155,102 @@ def skill_proposals() -> str:
             + "\nSay 'make it a skill' to save one, or dismiss it.")
 
 
+def accept_skill_proposal(proposal_id: str) -> str:
+    """Turn a mined proposal into a real skill and stop proposing it.
+
+    The counterpart to dismiss_skill_proposal: saying yes has to actually save
+    the skill, not just retire the proposal.
+    """
+    miner = _miner()
+    match = next((p for p in miner.pending() if p["id"] == proposal_id), None)
+    if match is None:
+        return f"No pending proposal with id {proposal_id}."
+    example = match["example"].strip()
+    name = example[:40].rstrip(" .,?!") or f"Routine {proposal_id}"
+    result = learn_skill(name, example)
+    miner.set_status(proposal_id, "accepted")
+    return result
+
+
 def dismiss_skill_proposal(proposal_id: str) -> str:
     if _miner().set_status(proposal_id, "dismissed"):
         return f"Proposal {proposal_id} dismissed. I will not suggest it again."
     return f"No proposal with id {proposal_id}."
+
+
+def import_routines() -> str:
+    """Scan Mo's calendar and gym program for recurring commitments; turn each
+    into a skill and schedule it. Existing skill names are left untouched."""
+    from core.skills.importer import RoutineImporter
+    store = _store()
+    candidates = RoutineImporter().find_candidates()
+    if not candidates:
+        return ("No recurring routines found to import -- calendar shows no "
+                "repeated events in the next 2 weeks and no gym program is set.")
+    created, skipped = [], []
+    for c in candidates:
+        if store.get(c["name"]) is not None:
+            skipped.append(c["name"])
+            continue
+        store.add(c["name"], c["instructions"],
+                  trigger_phrases=c["trigger_phrases"], source="imported")
+        schedule_skill(c["name"], every_hours=c["every_hours"],
+                       at_time=c["at_time"])
+        cadence = "daily" if c["every_hours"] == 24 else "weekly"
+        created.append(f"- {c['name']} ({cadence} at {c['at_time']}, from {c['origin']})")
+    parts = []
+    if created:
+        parts.append(f"Imported and scheduled {len(created)} routines:\n"
+                     + "\n".join(created))
+    if skipped:
+        parts.append("Already existed (untouched): " + ", ".join(skipped))
+    parts.append("Say 'unschedule <name>' or 'delete skill <name>' to undo any of these.")
+    return "\n".join(parts)
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", name.lower())).strip("-")
+
+
+def sync_skills_to_claude() -> str:
+    """Export every skill as a Claude Code skill (.claude/skills/fager-<slug>/)
+    so the same routines run from Claude Code sessions in this repo. Stale
+    fager-<slug> exports for deleted skills are removed."""
+    skills = _store().list_all()
+    _CLAUDE_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    wanted = {}
+    for s in skills:
+        slug = f"fager-{_slug(s['name'])}"
+        wanted[slug] = s
+    # Remove stale exports (only dirs we manage: fager-<slug>, never 'fager' itself)
+    removed = 0
+    for d in _CLAUDE_SKILLS_DIR.glob("fager-*"):
+        if d.is_dir() and d.name not in wanted:
+            skill_md = d / "SKILL.md"
+            if skill_md.exists():
+                skill_md.unlink()
+            try:
+                d.rmdir()
+                removed += 1
+            except OSError:
+                pass
+    for slug, s in wanted.items():
+        d = _CLAUDE_SKILLS_DIR / slug
+        d.mkdir(exist_ok=True)
+        triggers = ", ".join(s.get("trigger_phrases", [])) or "the skill name"
+        atomic.write(d / "SKILL.md",
+            "---\n"
+            f"name: {slug}\n"
+            f"description: El Fager skill '{s['name']}' -- use when Mo says {triggers}.\n"
+            "---\n\n"
+            f"# {s['name']} (El Fager skill)\n\n"
+            "Preferred: send this to the running El Fager via the `fager` bridge "
+            f"skill with the command: run my skill '{s['name']}'\n\n"
+            "If El Fager is not running, execute the steps yourself with your "
+            "own tools where possible:\n\n"
+            f"{s['instructions']}\n",
+            encoding="utf-8",
+        )
+    return (f"Synced {len(wanted)} skills to Claude Code at {_CLAUDE_SKILLS_DIR}\\fager-*"
+            + (f" (removed {removed} stale)" if removed else "")
+            + ". They are available in Claude Code sessions in this repo.")

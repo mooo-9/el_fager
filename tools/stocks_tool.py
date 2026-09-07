@@ -7,6 +7,7 @@ Data: data/watchlist.json, data/portfolio.json, data/price_alerts.json
 import json
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 _WATCHLIST_PATH   = Path("data/watchlist.json")
 _PORTFOLIO_PATH   = Path("data/portfolio.json")
@@ -37,7 +38,7 @@ def _load(path: Path, default) -> dict | list:
 
 def _save(path: Path, data) -> None:
     path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(path, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # ── yfinance helpers ──────────────────────────────────────────────────────────

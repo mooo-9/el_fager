@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#07080C}
+a{color:#F09950;text-decoration:none}
+a:hover{color:#FFBE7E}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22)}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(1.1);opacity:.85}}
+@keyframes fgrBar{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes fgrOrbit{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fgrRipple{0%{transform:scale(.45);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+@keyframes fgrFlash{0%,4%,9%{opacity:1}2%,6.5%{opacity:.12}14%,100%{opacity:.55}}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+</style>
+</helmet>
+<section data-screen-label="V6 Canon and Specs" style="display:flex;flex-direction:column;gap:40px;align-items:flex-start;padding:72px 72px 40px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="8a" style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#04121A;background:#38E0FF;border-radius:6px;padding:3px 8px;letter-spacing:.08em">8a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">V6 — READ FIRST · WHAT IS CANON + NEW-COMPONENT SPEC SHEET + ACCESSIBILITY</div></div>
+
+<!-- CANON BANNER -->
+<div data-screen-label="Canon" style="width:1500px;box-sizing:border-box;background:linear-gradient(180deg,#081120 0%,#0D1017 60%);border:1px solid rgba(56,224,255,0.25);border-radius:24px;padding:56px;position:relative;overflow:hidden">
+  <div style="position:absolute;inset:0;background:radial-gradient(700px 300px at 80% 0%,rgba(56,224,255,0.08),transparent 60%);pointer-events:none"></div>
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">CANON — THE PRODUCT TODAY</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#EAF2F7;margin:12px 0 8px;letter-spacing:-.01em">The Cockpit is El Fager</div>
+  <div style="font:400 15px/1.7 'Space Grotesk',sans-serif;color:#9FB1C2;max-width:940px;text-wrap:pretty">This document is written newest-first. The <span style="color:#EAF2F7">full-screen Cockpit (v4, board <a href="#4a">4a</a>)</span> is the primary surface and the <span style="color:#EAF2F7">cyan/orange/gold state palette</span> is canonical. Boards <a href="#1a">1a</a>–<a href="#2a">2a</a> (the warm "dawn" palette) remain the reference for the compact overlay and Command Center only — they are earlier layers, not the current face. When boards disagree, the higher letter wins (8a &gt; 5a &gt; 4a &gt; 3a &gt; 2a &gt; 1a).</div>
+  <div style="display:flex;gap:16px;margin-top:28px;flex-wrap:wrap">
+    <div style="flex:1;min-width:260px;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5F7183">SURFACE MAP</div><div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9FB1C2;margin-top:10px">Cockpit — cyan palette, orb, full-screen<br>Overlay — dawn palette, horizon header<br>Command Center — dawn palette, day-arc<br>Settings / Onboarding — cockpit cyan</div></div>
+    <div style="flex:1;min-width:260px;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5F7183">STATE PALETTE (COCKPIT)</div><div style="display:flex;gap:8px;margin-top:12px">
+      <div style="text-align:center"><div style="width:38px;height:38px;border-radius:8px;background:#7E8AA3"></div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183;margin-top:5px">IDLE</div></div>
+      <div style="text-align:center"><div style="width:38px;height:38px;border-radius:8px;background:#38E0FF;box-shadow:0 0 16px rgba(56,224,255,.4)"></div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183;margin-top:5px">LISTEN</div></div>
+      <div style="text-align:center"><div style="width:38px;height:38px;border-radius:8px;background:#F09950"></div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183;margin-top:5px">WORK</div></div>
+      <div style="text-align:center"><div style="width:38px;height:38px;border-radius:8px;background:#FFD782"></div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183;margin-top:5px">SPEAK</div></div>
+      <div style="text-align:center"><div style="width:38px;height:38px;border-radius:8px;background:#FF5042"></div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183;margin-top:5px">ERROR</div></div>
+    </div></div>
+    <div style="flex:1;min-width:260px;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5F7183">PROTOTYPE INDEX</div><div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9FB1C2;margin-top:10px">Cockpit v2 · Command Center · Settings<br>Onboarding · HUD · Voice/Orb overlays<br>See <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#8FF0FF">El Fager - Index</span></div></div>
+  </div>
+</div>
+
+<!-- NEW-COMPONENT SPEC SHEET -->
+<div data-screen-label="Cockpit Component Sheet" style="width:1500px;box-sizing:border-box;background:#050B18;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">COCKPIT COMPONENT SHEET</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#EAF2F7;margin:12px 0 28px;letter-spacing:-.01em">Anatomy of the new pieces</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">STEP LEDGER</div>
+      <div style="background:#050B18;border-radius:12px;padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:9px"><div style="width:6px;height:6px;border-radius:50%;background:#56C99C"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5F7183">reading calendar <span style="color:#56C99C">✓</span></div></div>
+        <div style="display:flex;align-items:center;gap:9px"><div style="width:6px;height:6px;border-radius:50%;background:#5B8DEF;box-shadow:0 0 8px #5B8DEF;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#F09950">drafting email → Ahmed</div></div>
+        <div style="display:flex;align-items:center;gap:9px"><div style="width:6px;height:6px;border-radius:50%;background:#3A4A5C"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#3A4A5C">drafting whatsapp → Omar</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">Rows appear as tools fire. Dot: skill-tint while active (shimmer), green ✓ done, red failed. Text: orange active / faint pending / ash done. Vertical, left-aligned under the orb.</div>
+    </div>
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">STAGED CARD</div>
+      <div style="background:#050B18;border:1px solid rgba(56,224,255,0.35);border-radius:12px;padding:13px;margin-top:12px;box-shadow:0 0 20px rgba(56,224,255,0.1)">
+        <div style="display:flex;align-items:center;gap:7px"><div style="font:400 9px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#8FF0FF">WHATSAPP →</div><div style="font:400 10.5px 'Space Grotesk',sans-serif;color:#EAF2F7;background:#0D1B2E;border-radius:99px;padding:2px 9px">Omar</div><div style="margin-left:auto;font:400 8.5px 'Spline Sans Mono',monospace;color:#5F7183">1 OF 2</div></div>
+        <div dir="rtl" style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:8px 11px;margin-top:9px;font:300 12px/1.7 'Alexandria',sans-serif;color:#EAF2F7">الميتنج اتأجل لبكرة</div>
+        <div style="display:flex;gap:6px;margin-top:10px"><div style="font:500 11px 'Space Grotesk',sans-serif;color:#04121A;background:#38E0FF;border-radius:8px;padding:5px 12px">Send</div><div style="font:500 11px 'Space Grotesk',sans-serif;color:#9FB1C2;padding:5px 8px">Cancel</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">Cyan glow border = armed. Kicker (channel) + recipient chip + queue badge · body in target-medium shape · Send (cyan) / Cancel / voice hint. Multiple → wrap + Send-all.</div>
+    </div>
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">DATA MOMENT</div>
+      <div style="background:#050B18;border-radius:12px;padding:16px;margin-top:12px;display:flex;gap:12px;align-items:center">
+        <svg width="76" height="46" viewBox="0 0 76 46"><line x1="2" y1="40" x2="74" y2="40" stroke="rgba(255,255,255,0.1)"></line><path d="M 10 40 A 28 28 0 0 1 66 40" fill="none" stroke="#16283E" stroke-width="4" stroke-linecap="round"></path><path d="M 10 40 A 28 28 0 0 1 66 40" fill="none" stroke="#38E0FF" stroke-width="4" stroke-linecap="round" stroke-dasharray="68 88"></path><circle cx="54" cy="15" r="2.5" fill="#FFD782"></circle></svg>
+        <div style="font:400 9px/1.5 'Spline Sans Mono',monospace;color:#5F7183">1,840<br>/2,400</div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">Transient viz beside the spoken answer (day-arc, macro bars, timeline, mail rows). Appears with the answer, fades with the exchange. Data as light — never a persistent card.</div>
+    </div>
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">TOGGLE</div>
+      <div style="background:#050B18;border-radius:12px;padding:16px;margin-top:12px;display:flex;gap:16px;align-items:center">
+        <div style="width:40px;height:22px;border-radius:99px;background:rgba(56,224,255,0.8);position:relative"><div style="position:absolute;top:2px;left:20px;width:18px;height:18px;border-radius:50%;background:#EAF2F7"></div></div>
+        <div style="width:40px;height:22px;border-radius:99px;background:rgba(255,255,255,0.12);position:relative"><div style="position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#EAF2F7"></div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">40×22 track, 18px knob, 2px inset. ON cyan @80%, OFF white @12%. 140ms slide. Whole row is the hit target; flipping echoes a receipt.</div>
+    </div>
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">RECEIPT</div>
+      <div style="background:#050B18;border-radius:12px;padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:4px;height:4px;border-radius:50%;background:#56C99C"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5F7183">whatsapp → Omar · sent · 2:36 PM</div></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:4px;height:4px;border-radius:50%;background:#56C99C"></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5F7183">meal logged · 620 kcal · 2:10 PM</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">One green-dot mono line per completed action, in the corner ledger. The whole exchange collapses to this. Max 3 kept; the rest live in the archive.</div>
+    </div>
+
+    <div style="background:#02040A;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">UNDO TOAST</div>
+      <div style="background:#050B18;border-radius:12px;padding:16px;margin-top:12px;display:grid;place-items:center">
+        <div style="display:flex;align-items:center;gap:12px;background:#02040A;border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:6px 8px 6px 14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C"></div><div style="font:400 11px 'Space Grotesk',sans-serif;color:#9FB1C2">Message sent</div></div><div style="font:500 11px 'Space Grotesk',sans-serif;color:#38E0FF;background:#0D1B2E;border-radius:99px;padding:4px 12px">Undo</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:12px;text-wrap:pretty">6-second grace after any send (single or "N messages sent"). Undo pulls the receipts back and returns to listening. Batch sends share one toast.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ACCESSIBILITY -->
+<div data-screen-label="Accessibility" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">ACCESSIBILITY</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#EAF2F7;margin:12px 0 28px;letter-spacing:-.01em">Legible, calm, optional</div>
+  <div style="display:flex;gap:20px;align-items:stretch">
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:26px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">CONTRAST (ON #02040A)</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="font:500 15px 'Space Grotesk',sans-serif;color:#EAF2F7">Text hi #EAF2F7</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#56C99C">16.8:1 · AAA</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="font:500 15px 'Space Grotesk',sans-serif;color:#9FB1C2">Text mid #9FB1C2</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#56C99C">8.1:1 · AAA</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="font:500 15px 'Space Grotesk',sans-serif;color:#5F7183">Text low #5F7183</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#EFC868">3.6:1 · AA large / meta only</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="font:500 15px 'Space Grotesk',sans-serif;color:#38E0FF">Cyan #38E0FF</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#56C99C">10.2:1 · AAA</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5F7183;margin-top:14px;text-wrap:pretty">Rule: #5F7183 only for ≥16px meta or non-essential labels; anything a user must read is mid or hi. State color is never the sole signal — always paired with motion + a text label.</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:26px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">REDUCED MOTION</div>
+      <div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9FB1C2;margin-top:12px;text-wrap:pretty">Honors OS <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#EAF2F7">prefers-reduced-motion</span>. The orb stops rotating/particle-drifting and becomes a still core whose <span style="color:#EAF2F7">color</span> + a single slow opacity breath carry state. Waveform bars → a static level meter. Emitted rings, radar sweep, wake bloom, scanlines all off. Streaming text appears in one paint instead of typing. State is still fully legible — hue + label never depended on motion.</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:26px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183">VOICE-ONLY PARITY &amp; A11Y TREE</div>
+      <div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9FB1C2;margin-top:12px;text-wrap:pretty">Everything visual has a spoken equivalent: the assistant narrates state changes and staged previews ("staged a WhatsApp to Omar — say send or cancel"), so the cockpit is fully operable eyes-free. For screen readers on the web panels: the orb is <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:#EAF2F7">aria-live</span> region announcing state; staged cards are dialogs with labelled Send/Cancel; ledger steps announce on completion. Min hit target 44px; focus ring 2px cyan @60%, 2px offset.</div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<section data-screen-label="V5 System Depth" style="display:flex;flex-direction:column;gap:40px;align-items:flex-start;padding:72px 72px 40px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="5a" style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#04121A;background:#38E0FF;border-radius:6px;padding:3px 8px;letter-spacing:.08em">5a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">V5 — SYSTEM DEPTH · PROACTIVE BEHAVIOR + EDGE STATES (SETTINGS &amp; ONBOARDING SHIP AS PROTOTYPES)</div></div>
+
+<div data-screen-label="V5 Proactive and Edge States" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">V5 — PROACTIVE &amp; EDGE STATES</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">When it speaks first, and when it can't</div>
+
+  <div style="display:flex;gap:20px;margin-top:32px;align-items:stretch">
+    <div style="flex:1.2;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">PROACTIVE — THE KNOCK RULE</div>
+      <div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty">El Fager never barges into the room. Every proactive moment follows <span style="color:#F2EDE6">knock → wait → enter</span>: the tray sun brightens + one soft chime (the knock), a one-line banner slides from the tray naming what it has ("Morning brief ready — 2 things need you"), and it speaks ONLY if Mo clicks, says "go ahead", or has marked that routine speak-first in Settings. Unanswered knocks fade after 30s into a receipt in the Command Center — never a badge, never a nag.</div>
+      <div style="font:400 13px/1.8 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty"><span style="color:#F2EDE6">Mode choreography.</span> Focus: the cockpit dims to ambient, knocks are held silently and delivered as a digest on exit. Gym: knock on geofence arrival, then voice-only exchanges — big text, no cards except set-logging receipts. Evening shutdown: one knock at the set hour, tomorrow-preview data moment, then the orb visibly "goes to sleep" (600ms decay to ash).</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">EDGE STATES — THE ORB NEVER LIES</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:50%;background:#5F7183;border:1px dashed rgba(255,255,255,0.3);flex:none"></div><div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Offline</span> — orb desaturates to ash, rings stop, label OFFLINE · القطع. Outbound actions queue as amber-dashed cards: "will send when back".</div></div>
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:50%;background:#EFC868;flex:none"></div><div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Mic busy / denied</span> — waveform bars replaced by a static amber strike-through bar; typing path auto-opens. Never pretend to listen.</div></div>
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:50%;background:#38E0FF;opacity:.5;flex:none"></div><div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Updating</span> — orb pulses slow cyan at 50%, tick ring becomes a progress arc; voice stays available for read-only asks.</div></div>
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:50%;background:#7E8AA3;flex:none"></div><div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Low battery (laptop)</span> — ambient kicks in at 15s, particle count halves, canvas drops to 30fps. Cinema yields to endurance silently.</div></div>
+      </div>
+    </div>
+    <div style="width:330px;flex:none;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">SHIPPED AS PROTOTYPES</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty"><span style="color:#F2EDE6">Settings</span> — five sections (Voice, Routines, Skills, Memory, System); every toggle live; memory facts individually forgettable; the no-off-switch staging rule stated where permissions are granted.<br><br><span style="color:#F2EDE6">Onboarding</span> — four steps, the orb present from frame one: name → voice calibration (bilingual line) → skill permissions → wake-word test. It ends with the assistant speaking, not a dashboard tour.</div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<section data-screen-label="V4 Cockpit Mode" style="display:flex;flex-direction:column;gap:40px;align-items:flex-start;padding:72px 72px 40px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="4a" style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#04121A;background:#38E0FF;border-radius:6px;padding:3px 8px;letter-spacing:.08em">4a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">V4 — COCKPIT MODE · THE FULL-SCREEN PRODUCT + CINEMATIC-HUD PALETTE</div></div>
+
+<div data-screen-label="V4 Cockpit Spec" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#38E0FF">V4 — COCKPIT MODE</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">The orb is the product</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:920px;text-wrap:pretty">Direction change by Mo: the full-screen cockpit is the primary surface — the living orb front and center, every exchange happening around it, in a cinematic-HUD register. The arc-reactor form: white-hot core, 60-tick rotating ring, counter-rotating segmented band, blade ring, crosshairs, faint polar grid + scanlines, indigo→teal depth wash. Working prototype: <span style="color:#F2EDE6">El Fager Cockpit v2</span>.</div>
+  <div style="display:flex;gap:14px;margin-top:32px">
+    <div style="width:180px"><div style="height:56px;border-radius:10px;background:#7E8AA3;opacity:.7"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">idle</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#7E8AA3 · dim, slow rotation</div></div>
+    <div style="width:180px"><div style="height:56px;border-radius:10px;background:#38E0FF;box-shadow:0 0 24px rgba(56,224,255,0.35)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">listening</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#38E0FF · 48-bar radial waveform</div></div>
+    <div style="width:180px"><div style="height:56px;border-radius:10px;background:#F09950;box-shadow:0 0 24px rgba(240,153,80,0.3)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">working</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F09950 · 2–3× ring speed + radar sweep</div></div>
+    <div style="width:180px"><div style="height:56px;border-radius:10px;background:#FFD782;box-shadow:0 0 24px rgba(255,215,130,0.3)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">speaking</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#FFD782 · rings emitted ~420ms</div></div>
+    <div style="width:180px"><div style="height:56px;border-radius:10px;background:#FF5042"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">error</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#FF5042 · flicker, rings halt</div></div>
+  </div>
+  <div style="display:flex;gap:20px;margin-top:28px">
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 22px;font:400 13px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Color notes.</span> Cyan returns — by Mo's call — as the listening/base hue of Cockpit Mode; the dawn palette (1a) remains canon for the compact overlay + Command Center. Per-skill micro-tint dots on tool captions/receipts (WhatsApp green, calendar blue, Gmail red). Two-tone lag rings were prototyped and dropped: trailing hue read as latency.</div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 22px;font:400 13px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5"><span style="color:#F2EDE6">Layout.</span> Orb center (offset −56px); state label +108px below center; exchange text constrained between label and bottom bar; staged-action card independently anchored above the bar (never clipped); corner readouts with state-tinted hairline borders; 12-hour AM/PM clock. Exchange model per <a href="#3a">3a</a> unchanged.</div>
+  </div>
+</div>
+</div>
+</section>
+<section data-screen-label="V3 Voice First" style="display:flex;flex-direction:column;gap:40px;align-items:flex-start;padding:72px 72px 40px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="3a" style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#1A0F06;background:#F09950;border-radius:6px;padding:3px 8px;letter-spacing:.08em">3a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">V3 — VOICE FIRST · THE CHAT THREAD IS RETIRED</div></div>
+
+<div data-screen-label="V3 Voice First Spec" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">V3 — VOICE FIRST</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Exchanges, not conversations</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:920px;text-wrap:pretty">Critique of v1–v2: the overlay still looked like a chat app — bubbles, a thread, a text box. But Mo <em>talks</em> to El Fager; a scrollback is a keyboard-era artifact. V3 retires the conversation entirely. The overlay holds <span style="color:#F2EDE6">one live exchange at a time</span> — what it heard, what it's doing, what it answered — then the exchange condenses into a one-line receipt. Memory lives in the assistant, not in a scrollback. Speech is the primary output; everything on screen is captions and receipts for it.</div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:36px">
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#F09950">1 · HEARD</div>
+      <div style="background:#0D1017;border-radius:12px;padding:16px;margin-top:12px;min-height:96px">
+        <div style="display:flex;align-items:center;gap:2.5px;margin-bottom:10px"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+        <div dir="rtl" style="font:400 16px/1.7 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">ابعت لعمر إن الميتنج اتأجل<span style="display:inline-block;width:7px;height:15px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-right:4px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">Your words are the <span style="color:#F2EDE6">loudest thing on screen</span> while you speak — display size, live, raw. Not a bubble: a voice made visible.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#A48BF5">2 · DOING</div>
+      <div style="background:#0D1017;border-radius:12px;padding:16px;margin-top:12px;min-height:96px">
+        <div dir="rtl" style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">ابعت لعمر إن الميتنج اتأجل</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#A48BF5">reading calendar…</div></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:7px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite;animation-delay:.5s"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#A48BF5">drafting whatsapp → Omar…</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">The heard line <span style="color:#F2EDE6">decays to a caption</span> — committed, small, mono. The stage belongs to what the assistant is doing right now.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#FFD9A3">3 · ANSWER</div>
+      <div style="background:#0D1017;border-radius:12px;padding:16px;margin-top:12px;min-height:96px">
+        <div style="display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#FFD9A3,rgba(255,217,163,0));flex:none"></div><div style="font:400 14.5px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">Done — staged it for you. <span dir="rtl" style="font-family:'Alexandria',sans-serif;font-weight:300">بص عليها قبل ما تتبعت</span><span style="display:inline-block;width:6px;height:14px;background:#FFD9A3;border-radius:1px;vertical-align:-2px;margin-left:3px;animation:fgrCaret 1s steps(1) infinite"></span></div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">The answer is <span style="color:#F2EDE6">spoken first, shown second</span> — a caption of the voice, streaming in place under the gold rule. Cards (actions, data) attach below it.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px">
+      <div style="font:400 10.5px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#56C99C">4 · RECEIPT</div>
+      <div style="background:#0D1017;border-radius:12px;padding:16px;margin-top:12px;min-height:96px;display:flex;flex-direction:column;gap:8px;justify-content:center">
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">whatsapp → Omar · sent · 14:36</div></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C;flex:none"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">meal logged · 620 kcal · 14:10</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">The whole exchange collapses to <span style="color:#F2EDE6">one ledger line</span>. The scrollback is a ledger of what happened, never prose. Full history lives in the Command Center archive, summoned by voice.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:20px;margin-top:20px">
+    <div style="flex:1.4;background:rgba(240,153,80,0.07);border:1px solid rgba(240,153,80,0.2);border-radius:12px;padding:16px 24px;display:flex;gap:28px;align-items:center">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#F09950;flex:none">V3 LAWS</div>
+      <div style="font:400 13px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5">1 · Bubbles are retired everywhere — the only "bubble" left is the staged-action preview, because it previews the target medium. &nbsp;2 · One exchange on stage at a time; receipts below, max three. &nbsp;3 · Typing is a fallback behind a key icon — it produces the identical exchange, and the stage treats typed words exactly like heard ones. &nbsp;4 · Speech is the product; the screen is its instrument panel.</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">APPLIED</div>
+      <div style="font:400 13px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:8px">New prototype: <span style="color:#F2EDE6">El Fager Voice Overlay</span> (replaces the chat summon flow). Command Center strip now holds one exchange + receipts. Boards in <a href="#1a">1a</a> showing bubbles are superseded by <a href="#3a">3a</a>.</div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<section data-screen-label="V2 Horizon Pass" style="display:flex;flex-direction:column;gap:40px;align-items:flex-start;padding:72px 72px 40px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="2a" style="display:flex;flex-direction:column;gap:32px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#1A0F06;background:#F09950;border-radius:6px;padding:3px 8px;letter-spacing:.08em">2a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">V2 — THE HORIZON PASS · SELF-CRITIQUE + 2 UPGRADES, APPLIED TO THE LIVE PROTOTYPES</div></div>
+
+<div data-screen-label="V2 Horizon" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">V2 — THE HORIZON PASS</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Every surface gets a horizon</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:900px;text-wrap:pretty">Critique of v1: the overlay was a well-behaved rectangle with no face; the calorie ring was a smartwatch quote; and "dawn" only existed in the HUD. The fix is one signature, not three: <span style="color:#F2EDE6">the horizon line the HUD orb floats over now runs through every surface</span> — and the state dot becomes a <span style="color:#F2EDE6">sun sitting on that line</span>, its light pooling above it only when something is live. Same 4px degradation, but now it's an image, not furniture.</div>
+
+  <div style="display:flex;gap:20px;margin-top:36px;align-items:stretch">
+
+    <!-- V2 overlay -->
+    <div style="width:384px;flex:none">
+      <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+        <div style="position:relative;display:flex;align-items:center;gap:9px;padding:12px 16px 14px">
+          <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap">El Fager</div>
+          <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F09950">LISTENING</div>
+          <div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px">ESC</div>
+          <div style="position:absolute;left:0;bottom:0;width:220px;height:26px;background:radial-gradient(140px 26px at 26px 100%,rgba(240,153,80,0.16),transparent 70%);pointer-events:none"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0,#F09950 18px,rgba(240,153,80,0.35) 42%,rgba(255,255,255,0.06) 75%)"></div>
+          <div style="position:absolute;left:23px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:#F09950;box-shadow:0 0 8px rgba(240,153,80,0.9)"></div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 4px 14px;padding:9px 13px;font:400 13px/1.5 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">Morning brief?</div></div>
+          <div style="display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#F09950,rgba(240,153,80,0));flex:none"></div><div style="font:400 13px/1.55 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">Quiet one. Standup at 11:30, mail is clear except Stripe, and you slept 7h 40m — best this week.</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(240,153,80,0.04)">
+          <div style="display:flex;align-items:center;gap:2.5px;flex:none"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+          <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5">and remind me about the domain<span style="display:inline-block;width:6px;height:13px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-left:3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 14px"><div style="font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Type instead…</div><div style="width:28px;height:28px;border-radius:50%;background:rgba(240,153,80,0.15);border:1px solid rgba(240,153,80,0.4);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#F09950"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#F09950" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#F09950" stroke-width="1.6"></line></svg></div></div>
+        </div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;margin-top:14px;letter-spacing:.14em">V2 OVERLAY — SUN ON THE HORIZON</div>
+    </div>
+
+    <!-- anatomy + before/after -->
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">THE SIGNATURE — ANATOMY</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty"><span style="color:#F2EDE6">Line</span> — 1px gradient in the state hue, solid at the sun and decaying to hairline across the width. It replaces the header's dead separator.<br><span style="color:#F2EDE6">Sun</span> — the 4/5px state dot, moved down to straddle the line. Same dot, same hues, same motion — but now it's <em>somewhere</em>.<br><span style="color:#F2EDE6">Glow</span> — a soft radial pooling above the line, only while live (mic open / action armed / speaking). Idle keeps the line at hairline ash — dawn hasn't happened yet.</div>
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478;margin-top:24px">BEFORE / AFTER</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        <div style="background:#0D1017;border-radius:10px;overflow:hidden;opacity:.55">
+          <div style="display:flex;align-items:center;gap:9px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,0.06)"><div style="width:4px;height:4px;border-radius:50%;background:#F09950"></div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div><div style="font:500 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F09950">LISTENING</div></div>
+        </div>
+        <div style="background:#0D1017;border-radius:10px;overflow:hidden">
+          <div style="position:relative;display:flex;align-items:center;gap:9px;padding:11px 16px 13px"><div style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div><div style="font:500 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F09950">LISTENING</div><div style="position:absolute;left:0;bottom:0;width:200px;height:22px;background:radial-gradient(120px 22px at 24px 100%,rgba(240,153,80,0.16),transparent 70%)"></div><div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0,#F09950 16px,rgba(240,153,80,0.35) 42%,rgba(255,255,255,0.06) 75%)"></div><div style="position:absolute;left:21px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:#F09950;box-shadow:0 0 8px rgba(240,153,80,0.9)"></div></div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.7 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px;text-wrap:pretty">Build cost: zero new machinery — in Qt it's the same QPainter pass that already draws the dot, plus one linear gradient. The glow only paints while live, so the summon path stays untouched.</div>
+    </div>
+
+    <!-- day arc -->
+    <div style="width:430px;flex:none;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">THE DAY ARC — REPLACES THE CALORIE RING</div>
+      <div style="background:#0D1017;border-radius:12px;padding:20px 20px 14px;margin-top:14px;display:grid;place-items:center">
+        <div style="position:relative;width:220px;height:132px">
+          <svg width="220" height="132" viewBox="0 0 220 132">
+            <line x1="2" y1="112" x2="218" y2="112" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+            <path d="M 22 112 A 88 88 0 0 1 198 112" fill="none" stroke="#1A2030" stroke-width="9" stroke-linecap="round"></path>
+            <path d="M 22 112 A 88 88 0 0 1 198 112" fill="none" stroke="#F09950" stroke-width="9" stroke-linecap="round" stroke-dasharray="212 277"></path>
+            <circle cx="175.5" cy="53.2" r="10" fill="rgba(255,217,163,0.22)"></circle>
+            <circle cx="175.5" cy="53.2" r="5" fill="#FFD9A3"></circle>
+          </svg>
+          <div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font:500 24px 'Spline Sans Mono',monospace;color:#F2EDE6">1,840</div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">/ 2,400 KCAL</div></div>
+        </div>
+      </div>
+      <div style="font:400 12.5px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty">A sun crossing the sky over the horizon line: the day fills as you eat, and hitting the target completes the arc. It's the HUD orb's geometry as a data instrument — one product, one image. Overfill past target: the arc holds and the sun turns <span style="color:#EFC868">warn-amber</span>; the number carries the truth.</div>
+      <div style="font:400 11px/1.7 'Spline Sans Mono',monospace;color:#5C6478;margin-top:10px">180° ARC · TRACK surface.2 · FILL ember · SUN 5PX risen-gold + 22% halo · ANIMATES ONLY ON FIRST PAINT (600MS SWEEP, SUN RIDES THE HEAD)</div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;background:rgba(240,153,80,0.07);border:1px solid rgba(240,153,80,0.2);border-radius:12px;padding:16px 24px;display:flex;gap:32px;align-items:center">
+    <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#F09950;flex:none">NOW CANON</div>
+    <div style="font:400 13px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5">The horizon runs on: overlay + Command Center headers (applied to both live prototypes), the HUD (where it was born), and the phone header. The day arc replaces the ring everywhere health appears. Boards <a href="#1a">06–08 in 1a</a> below show v1 for the record; where they differ, <a href="#2a">2a</a> wins.</div>
+  </div>
+</div>
+</div>
+</section>
+<section data-screen-label="El Fager Design Package" style="display:flex;flex-direction:column;gap:56px;align-items:flex-start;padding:72px;background:radial-gradient(1200px 800px at 30% 0%,#0B0E16 0%,#07080C 60%)">
+<div id="1a" style="display:flex;flex-direction:column;gap:56px;align-items:flex-start">
+<div style="display:flex;align-items:center;gap:12px"><div style="font:500 12px 'Spline Sans Mono',monospace;color:#1A0F06;background:#F09950;border-radius:6px;padding:3px 8px;letter-spacing:.08em">1a</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.18em">EL FAGER — DESIGN LANGUAGE V1 · 12 BOARDS</div></div>
+
+<!-- BOARD 00 — COVER -->
+<div data-screen-label="00 Cover" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:64px;position:relative;overflow:hidden">
+  <div style="position:absolute;inset:0;background:radial-gradient(900px 420px at 82% 78%,rgba(240,153,80,0.10) 0%,rgba(240,153,80,0) 60%);pointer-events:none"></div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative">
+    <div style="max-width:880px">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">00 — THE CONCEPT</div>
+      <div style="display:flex;align-items:baseline;gap:28px;margin-top:22px">
+        <div style="font:600 84px/1 'Space Grotesk',sans-serif;color:#F2EDE6;letter-spacing:-.02em">EL FAGER</div>
+        <div style="font:300 72px/1 'Alexandria',sans-serif;color:#9BA3B5">الفجر</div>
+      </div>
+      <div style="font:400 26px/1.4 'Space Grotesk',sans-serif;color:#FFBE7E;margin-top:22px">First light in a dark room.</div>
+      <div style="font:400 16px/1.7 'Space Grotesk','Alexandria',sans-serif;color:#9BA3B5;margin-top:20px;max-width:760px;text-wrap:pretty">El Fager is the moment before sunrise: a cold, quiet, blue-black world — and one point of warm light that knows you. The machine is the night; everything it says, hears, and does is warm light moving through it. Calm, precise, slightly cinematic. Never busy, never corporate, never a toy. It glows when it listens, and otherwise disappears into the dark.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:32px">
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">01 COLOR</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">02 THE FIVE LIGHTS</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">03 TYPE</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">04 STRUCTURE</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">05 MOTION</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">06 COMPONENTS</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">07 OVERLAY</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">08 COMMAND CENTER</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">09 HUD</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">10 PHONE</div>
+        <div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#9BA3B5;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px">11 BUILD NOTES + RATIONALE</div>
+      </div>
+    </div>
+    <div style="width:280px;height:280px;display:grid;place-items:center;position:relative;flex:none">
+      <div style="position:absolute;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(240,153,80,0.22) 0%,rgba(240,153,80,0) 70%);animation:fgrBreath 3.6s ease-in-out infinite"></div>
+      <div style="width:104px;height:104px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#FFE0B5 0%,#F09950 48%,#B25E1E 100%);box-shadow:0 0 60px rgba(240,153,80,0.45),0 0 140px rgba(240,153,80,0.2)"></div>
+      <div style="position:absolute;width:184px;height:184px;border-radius:50%;border:1px solid rgba(240,153,80,0.3)"></div>
+      <div style="position:absolute;bottom:0;font:400 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">WARM LIGHT · COLD GROUND</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 01 — COLOR -->
+<div data-screen-label="01 Color" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px;position:relative">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">01 — COLOR &amp; LIGHT</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">One soul: cold night, warm light</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:860px;text-wrap:pretty">The rule that resolves everything: <span style="color:#F2EDE6">surfaces are always cold, light is always warm.</span> Grounds are blue-black — real night, not neutral gray. Anything alive — the assistant's voice, actions, focus, selection — is warm. That tension is dawn, and it is the identity.</div>
+
+  <div style="display:flex;gap:20px;margin-top:36px;align-items:stretch">
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#F2604F">COPPER VS. CYAN — VERDICT</div>
+      <div style="display:flex;gap:24px;margin-top:20px;align-items:center">
+        <div style="width:170px">
+          <div style="height:56px;border-radius:10px;background:#38E0FF;position:relative;overflow:hidden;opacity:.85"><div style="position:absolute;left:-12%;top:50%;width:124%;height:2px;background:#0D1017;transform:rotate(-16deg)"></div></div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">JARVIS cyan — retired</div>
+          <div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:2px">#38E0FF · borrowed sci-fi. Every movie HUD owns it; El Fager shouldn't rent its soul.</div>
+        </div>
+        <div style="font:300 26px 'Space Grotesk',sans-serif;color:#5C6478">→</div>
+        <div style="width:170px">
+          <div style="height:56px;border-radius:10px;background:linear-gradient(90deg,#E39660 0%,#F09950 100%)"></div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">Copper — evolved to ember</div>
+          <div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:2px">#E39660 → #F09950 · hotter, more incandescent. The name was the answer: fager = dawn.</div>
+        </div>
+      </div>
+      <div style="font:400 13px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:20px;text-wrap:pretty">Cyan doesn't die uncompensated — its <em>coldness</em> moves into the surfaces. The old overlay's warm gray-brown cards are gone too: night gets colder, light gets hotter, and the contrast does the cinematic work cyan was hired for.</div>
+    </div>
+    <div style="width:420px;background:linear-gradient(180deg,#222A3D 0%,#0D1017 55%,#0D1017 100%);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px;position:relative;overflow:hidden">
+      <div style="position:absolute;left:0;right:0;bottom:0;height:150px;background:radial-gradient(340px 150px at 50% 100%,rgba(240,153,80,0.35) 0%,rgba(240,153,80,0) 70%)"></div>
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#9BA3B5">THE REFERENCE</div>
+      <div style="font:400 14px/1.6 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:12px;text-wrap:pretty">Cairo, 4:50 AM. Indigo sky, sodium light on the horizon, the first call to prayer. That specific gradient — cold above, ember below — is the palette.</div>
+      <div style="position:absolute;bottom:20px;left:28px;font:300 20px 'Alexandria',sans-serif;color:#FFBE7E">الفجر كذب والصبح صادق… بس إحنا بنشتغل من بدري</div>
+    </div>
+  </div>
+
+  <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478;margin-top:40px">NIGHT — GROUNDS</div>
+  <div style="display:flex;gap:14px;margin-top:14px">
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#07080C;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">bg.void</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#07080C · HUD / desktop scrim</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#0D1017;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">surface.0</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#0D1017 · window base</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">surface.1</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#131722 · card</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#1A2030;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">surface.2</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#1A2030 · raised / hover</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#222A3D;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">surface.3</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#222A3D · active / selected</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center"><div style="width:70%;height:1px;background:rgba(255,255,255,0.08)"></div></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">stroke.hairline</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">white @ 8% · strong: 14%</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#0D1017;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center"><div style="font:500 15px 'Space Grotesk',sans-serif;color:#F2EDE6">Aa <span style="color:#9BA3B5">Aa</span> <span style="color:#5C6478">Aa</span></div></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">text.hi / mid / low</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F2EDE6 / #9BA3B5 / #5C6478</div></div>
+  </div>
+
+  <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478;margin-top:32px">WARM LIGHT — THE ONLY ACCENT</div>
+  <div style="display:flex;gap:14px;margin-top:14px">
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#F09950;box-shadow:0 0 28px rgba(240,153,80,0.35)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">accent.ember</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F09950 · actions, focus, live</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#FFBE7E"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">accent.bright</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#FFBE7E · hover, highlights</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#D07E35"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">accent.press</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#D07E35 · pressed</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:rgba(240,153,80,0.13);border:1px solid rgba(240,153,80,0.25)"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">accent.wash</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">ember @ 13% · selection, tint</div></div>
+    <div style="width:172px"><div style="height:64px;border-radius:10px;background:#F09950;display:grid;place-items:center"><div style="font:500 14px 'Space Grotesk',sans-serif;color:#1A0F06">Send now</div></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">text.on-ember</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#1A0F06 · never white on ember</div></div>
+  </div>
+
+  <div style="display:flex;gap:56px;margin-top:32px">
+    <div>
+      <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">THE FIVE LIGHTS — STATE HUES</div>
+      <div style="display:flex;gap:14px;margin-top:14px">
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#7E8AA3;opacity:.85"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">state.idle</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#7E8AA3 · ash</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#F09950;box-shadow:0 0 20px rgba(240,153,80,0.3)"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">state.listening</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F09950 · ember</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#A48BF5"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">state.thinking</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#A48BF5 · twilight</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#FFD9A3"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">state.speaking</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#FFD9A3 · risen gold</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#F2604F"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">state.error</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F2604F · flare</div></div>
+      </div>
+    </div>
+    <div>
+      <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">SEMANTIC</div>
+      <div style="display:flex;gap:14px;margin-top:14px">
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#56C99C"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">sem.ok</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#56C99C</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#EFC868"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">sem.warn</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#EFC868</div></div>
+        <div style="width:130px"><div style="height:52px;border-radius:10px;background:#F2604F"></div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:8px">sem.bad</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">#F2604F · = state.error</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:36px;background:rgba(240,153,80,0.07);border:1px solid rgba(240,153,80,0.2);border-radius:12px;padding:18px 24px;display:flex;gap:32px;align-items:center">
+    <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#F09950;flex:none">LAWS OF LIGHT</div>
+    <div style="font:400 13.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5">1 · Never a warm surface, never a cold accent. &nbsp;&nbsp;2 · Ember is scarce — one glowing thing per view. &nbsp;&nbsp;3 · Glow means <em>live now</em> (mic open, action pending), never decoration. &nbsp;&nbsp;4 · Semantic colors appear only as 4px dots, text, and hairlines — never fills.</div>
+  </div>
+</div>
+
+<!-- BOARD 02 — THE FIVE LIGHTS -->
+<div data-screen-label="02 The Five Lights" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">02 — THE FIVE LIGHTS</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">State is the interface</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">Voice-first means the user is often not looking at a screen — they're glancing. Each state gets a unique <span style="color:#F2EDE6">hue + motion signature</span>, so it reads at 4px in the overlay and at 400px in the HUD. The hues walk the dawn arc: ash night → ember horizon → twilight sky → risen light.</div>
+
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:36px">
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px">
+      <div style="height:110px;display:grid;place-items:center;position:relative">
+        <div style="position:absolute;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle,rgba(126,138,163,0.3) 0%,rgba(126,138,163,0) 70%);animation:fgrBreath 3.6s ease-in-out infinite"></div>
+        <div style="width:12px;height:12px;border-radius:50%;background:#7E8AA3;opacity:.8"></div>
+      </div>
+      <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">idle <span style="font:300 15px 'Alexandria',sans-serif;color:#5C6478">· ساكن</span></div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#7E8AA3;margin-top:4px">#7E8AA3 — ASH</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">Breath: scale 1→1.10, opacity .45→.85, 3600ms sine loop. The only state with no edge — it's soft, defocused, part of the dark.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px">
+      <div style="height:110px;display:flex;align-items:center;justify-content:center;gap:5px">
+        <div style="width:5px;height:34px;border-radius:3px;background:#F09950;transform-origin:center;animation:fgrBar 1s ease-in-out infinite;animation-delay:0s"></div>
+        <div style="width:5px;height:46px;border-radius:3px;background:#F09950;transform-origin:center;animation:fgrBar .8s ease-in-out infinite;animation-delay:.12s"></div>
+        <div style="width:5px;height:58px;border-radius:3px;background:#FFBE7E;transform-origin:center;animation:fgrBar .65s ease-in-out infinite;animation-delay:.05s;box-shadow:0 0 16px rgba(240,153,80,.5)"></div>
+        <div style="width:5px;height:46px;border-radius:3px;background:#F09950;transform-origin:center;animation:fgrBar .9s ease-in-out infinite;animation-delay:.2s"></div>
+        <div style="width:5px;height:34px;border-radius:3px;background:#F09950;transform-origin:center;animation:fgrBar 1.1s ease-in-out infinite;animation-delay:.08s"></div>
+      </div>
+      <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">listening <span style="font:300 15px 'Alexandria',sans-serif;color:#5C6478">· سامعك</span></div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#F09950;margin-top:4px">#F09950 — EMBER</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">The brand moment: mic open = dawn. Form rides mic RMS at 60fps, smoothed 120ms. Glow ON. Silence &gt; 2s → bars settle to a still ember line.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px">
+      <div style="height:110px;display:grid;place-items:center;position:relative">
+        <div style="width:12px;height:12px;border-radius:50%;background:#A48BF5;opacity:.9;animation:fgrShimmer 1.4s ease-in-out infinite"></div>
+        <div style="position:absolute;width:64px;height:64px;animation:fgrOrbit 1.4s linear infinite">
+          <div style="position:absolute;top:-2px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:#A48BF5"></div>
+          <div style="position:absolute;bottom:8px;left:4px;width:4px;height:4px;border-radius:50%;background:#A48BF5;opacity:.7"></div>
+          <div style="position:absolute;bottom:8px;right:4px;width:4px;height:4px;border-radius:50%;background:#A48BF5;opacity:.5"></div>
+        </div>
+      </div>
+      <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">thinking <span style="font:300 15px 'Alexandria',sans-serif;color:#5C6478">· بفكّر</span></div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#A48BF5;margin-top:4px">#A48BF5 — TWILIGHT</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">Three orbiters, 1.4s/rev, core shimmer. Tool calls append a mono caption ("reading gmail…"). The only violet in the system — unmissable.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px">
+      <div style="height:110px;display:grid;place-items:center;position:relative">
+        <div style="position:absolute;width:64px;height:64px;border-radius:50%;border:1.5px solid rgba(255,217,163,0.55);animation:fgrRipple 1.5s ease-out infinite"></div>
+        <div style="position:absolute;width:64px;height:64px;border-radius:50%;border:1.5px solid rgba(255,217,163,0.55);animation:fgrRipple 1.5s ease-out infinite;animation-delay:.5s"></div>
+        <div style="width:14px;height:14px;border-radius:50%;background:#FFD9A3;box-shadow:0 0 20px rgba(255,217,163,.5)"></div>
+      </div>
+      <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">speaking <span style="font:300 15px 'Alexandria',sans-serif;color:#5C6478">· بتكلم</span></div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#FFD9A3;margin-top:4px">#FFD9A3 — RISEN GOLD</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">Light leaves the source: rings emitted on TTS cadence (~420ms nominal, synced to audio envelope). Listening reacts to <em>you</em>; speaking radiates <em>outward</em>.</div>
+    </div>
+    <div style="background:#07080C;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px">
+      <div style="height:110px;display:grid;place-items:center">
+        <div style="width:12px;height:12px;border-radius:50%;background:#F2604F;animation:fgrFlash 4s linear infinite"></div>
+      </div>
+      <div style="font:500 17px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">error <span style="font:300 15px 'Alexandria',sans-serif;color:#5C6478">· في مشكلة</span></div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#F2604F;margin-top:4px">#F2604F — FLARE</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px;text-wrap:pretty">Two 90ms flashes, then steady at 75% — announce once, don't nag. Auto-returns to idle after 4s; the failure text stays in the log.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:20px;margin-top:20px;align-items:stretch">
+    <div style="flex:1.2;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px 28px">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">SCALE STUDY — SAME LANGUAGE AT EVERY SIZE</div>
+      <div style="display:flex;align-items:center;gap:40px;margin-top:18px">
+        <div>
+          <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-bottom:10px">4PX · overlay title row</div>
+          <div style="display:flex;align-items:center;gap:8px;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:9px 14px">
+            <div style="width:4px;height:4px;border-radius:50%;background:#F09950;box-shadow:0 0 6px rgba(240,153,80,.8)"></div>
+            <div style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div>
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">CTRL+SPACE</div>
+          </div>
+        </div>
+        <div>
+          <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-bottom:10px">16PX · state chip</div>
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(240,153,80,0.12);border:1px solid rgba(240,153,80,0.3);border-radius:99px;padding:6px 14px">
+            <div style="display:flex;align-items:center;gap:2.5px"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:12px;border-radius:2px;background:#F09950;animation:fgrBar .65s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.05s"></div></div>
+            <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">LISTENING</div>
+          </div>
+        </div>
+        <div>
+          <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-bottom:10px">400PX · HUD orb</div>
+          <div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5">Full living form — see <a href="#1a">board 09</a>. Same hue, same motion grammar, more particles.</div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px 28px">
+      <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">TRANSITIONS</div>
+      <div style="font:400 12.5px/2 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:14px">idle → listening <span style="color:#F2EDE6">≤100ms snap</span> — summoning must feel instant<br>listening → thinking <span style="color:#F2EDE6">220ms hue crossfade</span>, motion hands off mid-cycle<br>thinking → speaking <span style="color:#F2EDE6">220ms</span>, first ring emits on first syllable<br>any → error <span style="color:#F2EDE6">immediate</span> · error → idle <span style="color:#F2EDE6">auto, 4s</span><br>speaking → idle <span style="color:#F2EDE6">600ms decay</span> — light fades, never blinks off</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 03 — TYPOGRAPHY -->
+<div data-screen-label="03 Typography" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">03 — TYPOGRAPHY</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Two scripts, one voice</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">Mo code-switches mid-sentence, so Arabic can't be a fallback font — it's a co-equal script chosen to match the Latin's geometry. Every text style declares the stack <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:#F2EDE6">Space Grotesk → Alexandria</span> so mixed lines set themselves correctly with no markup.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:36px">
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">LATIN · UI + DISPLAY</div>
+      <div style="font:500 44px/1.1 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:14px">Space Grotesk</div>
+      <div style="font:400 17px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:10px">Draft the reply, then wait for me.</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px;text-wrap:pretty">Technical without being cold-blooded — the quirky ss glyphs give it a face. Weights 400 / 500 / 600. Never below 12px.</div>
+    </div>
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">ARABIC · UI + DISPLAY</div>
+      <div style="font:400 44px/1.25 'Alexandria',sans-serif;color:#F2EDE6;margin-top:8px">أليكساندريا</div>
+      <div style="font:300 17px/1.7 'Alexandria',sans-serif;color:#9BA3B5;margin-top:6px">جهّز الرد واستنّاني أراجعه</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">An Egyptian-named geometric Arabic that matches Grotesk's proportions. Arabic body sits +1px vs Latin (x-height compensation); weight one step lighter (Alexandria runs heavy). Never italicized, never letter-spaced.</div>
+    </div>
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">DATA · MONO</div>
+      <div style="font:500 40px/1.2 'Spline Sans Mono',monospace;color:#F2EDE6;margin-top:12px">21:47:03</div>
+      <div style="font:400 16px/1.5 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:10px">1,840 kcal · 128g · 76%</div>
+      <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px;text-wrap:pretty">Spline Sans Mono: timestamps, live transcripts, tool-call captions, metrics, kbd hints. Tabular by nature — numbers never jitter as they stream.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:20px;margin-top:20px;align-items:stretch">
+    <div style="flex:1.3;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">SCALE — DESKTOP</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:18px">
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">hero · 44/1.1 · 600</div><div style="font:600 44px/1.1 'Space Grotesk',sans-serif;color:#F2EDE6">Good evening, Mo</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">display · 28/1.2 · 500</div><div style="font:500 28px/1.2 'Space Grotesk',sans-serif;color:#F2EDE6">Today at a glance</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">title · 21/1.3 · 500</div><div style="font:500 21px/1.3 'Space Grotesk',sans-serif;color:#F2EDE6">Calendar</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">emphasis · 17/1.45 · 500</div><div style="font:500 17px/1.45 'Space Grotesk',sans-serif;color:#F2EDE6">Standup moved to 11:30</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">body · 15/1.55 · 400</div><div style="font:400 15px/1.55 'Space Grotesk',sans-serif;color:#9BA3B5">Your afternoon is clear after the 3pm review.</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">ui · 13.5/1.4 · 500</div><div style="font:500 13.5px/1.4 'Space Grotesk',sans-serif;color:#9BA3B5">Send now &nbsp; Edit &nbsp; Cancel</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">caption · 12/1.4 · 400</div><div style="font:400 12px/1.4 'Space Grotesk',sans-serif;color:#5C6478">Staged — nothing sends without you</div></div>
+        <div style="display:flex;align-items:baseline;gap:20px"><div style="width:190px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">data · 11–13 mono</div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478">14:00 → 15:30 · GYM · 2,400 KCAL</div></div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:20px">
+      <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">CODE-SWITCHING — ONE LINE, TWO SCRIPTS</div>
+        <div dir="rtl" style="font:300 20px/1.9 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6;margin-top:16px">تمام يا مو — هجهّز الـ<span style="font-family:'Space Grotesk',sans-serif;font-weight:500"> draft </span>دلوقتي وأبعتهولك على<span style="font-family:'Space Grotesk',sans-serif;font-weight:500"> WhatsApp </span>للمراجعة</div>
+        <div style="font:400 12.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px;text-wrap:pretty">Direction follows the sentence's base script (first strong character). Latin islands keep Grotesk inside Arabic lines and vice versa — the stack handles it; no per-word markup.</div>
+      </div>
+      <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">NUMERALS</div>
+        <div style="font:400 13.5px/1.7 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty">Data is always Western digits in mono — <span style="font-family:'Spline Sans Mono',monospace;color:#F2EDE6">19:00 · 128g</span> — even inside Arabic UI, so metrics look identical across both languages. Eastern digits (١٢٣) appear only inside Arabic prose the assistant writes, never in data rows.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 04 — STRUCTURE -->
+<div data-screen-label="04 Structure" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">04 — STRUCTURE</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Machined, not upholstered</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">Dense, precise, hairline-built. Depth comes from a lighter surface + a 1px top edge catching light — like machined metal — not from big soft shadows. Shadows are reserved for things that truly float above the desktop.</div>
+
+  <div style="display:flex;gap:20px;margin-top:36px;align-items:stretch">
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">SPACING — BASE 4</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-1 · 4px</div><div style="width:4px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">icon ↔ dot</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-2 · 8px</div><div style="width:8px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">inside chips, label ↔ value</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-3 · 12px</div><div style="width:12px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">list row gaps, bubble padding-y</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-4 · 16px</div><div style="width:16px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">card padding (overlay), control gaps</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-5 · 20px</div><div style="width:20px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">card padding (command center)</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-6 · 24px</div><div style="width:24px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">card ↔ card gutters</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-7 · 32px</div><div style="width:32px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">section breaks</div></div>
+        <div style="display:flex;align-items:center;gap:16px"><div style="width:120px;font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">s-8 · 48px</div><div style="width:48px;height:12px;background:#F09950;border-radius:2px"></div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5C6478">page margins (command center, HUD)</div></div>
+      </div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">RADII</div>
+      <div style="display:flex;gap:14px;margin-top:18px;align-items:flex-end">
+        <div style="text-align:center"><div style="width:64px;height:64px;border-radius:6px;background:#1A2030;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">r-1 · 6<br>chips, kbd</div></div>
+        <div style="text-align:center"><div style="width:64px;height:64px;border-radius:10px;background:#1A2030;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">r-2 · 10<br>buttons, inputs</div></div>
+        <div style="text-align:center"><div style="width:64px;height:64px;border-radius:16px;background:#1A2030;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">r-3 · 16<br>cards, bubbles</div></div>
+        <div style="text-align:center"><div style="width:64px;height:64px;border-radius:22px;background:#1A2030;border:1px solid rgba(255,255,255,0.1)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">r-4 · 22<br>windows, overlay</div></div>
+        <div style="text-align:center"><div style="width:64px;height:36px;border-radius:99px;background:#1A2030;border:1px solid rgba(255,255,255,0.1);margin-top:28px"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">pill · 999<br>state chips, command bar</div></div>
+      </div>
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478;margin-top:28px">ELEVATION</div>
+      <div style="display:flex;gap:14px;margin-top:16px">
+        <div style="flex:1"><div style="height:58px;border-radius:12px;background:#131722;border:1px solid rgba(255,255,255,0.08);box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)"></div><div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">e-1 card · hairline + inset top edge @6%</div></div>
+        <div style="flex:1"><div style="height:58px;border-radius:12px;background:#1A2030;border:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 8px 24px rgba(0,0,0,0.35)"></div><div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">e-2 raised · hover, menus</div></div>
+        <div style="flex:1"><div style="height:58px;border-radius:12px;background:#131722;border:1px solid rgba(255,255,255,0.1);box-shadow:0 24px 64px rgba(0,0,0,0.55),0 0 0 1px rgba(0,0,0,0.4)"></div><div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">e-3 floating · overlay, dialogs</div></div>
+        <div style="flex:1"><div style="height:58px;border-radius:12px;background:#131722;border:1px solid rgba(240,153,80,0.4);box-shadow:0 0 24px rgba(240,153,80,0.22)"></div><div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478;margin-top:8px">e-glow · live only (mic, pending action)</div></div>
+      </div>
+    </div>
+    <div style="width:360px;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">GRID &amp; DENSITY</div>
+      <div style="font:400 13px/1.75 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty"><span style="color:#F2EDE6">Overlay</span> — fixed 384px column, 16px padding, no grid needed.<br><span style="color:#F2EDE6">Command Center</span> — 12-col / 24px gutter / 48px margin, min window 1100px.<br><span style="color:#F2EDE6">HUD</span> — anchored corners + center stage, no columns.<br><span style="color:#F2EDE6">Phone</span> — single column, 20px margin, 12px card gaps.</div>
+      <div style="font:400 13px/1.75 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty">List rows are <span style="color:#F2EDE6">32px tall</span> (dense but tappable with a pointer); phone rows 48px. Data before decoration: a card never spends more than 20% of its pixels on chrome.</div>
+      <div style="margin-top:18px;background:#0D1017;border-radius:10px;padding:2px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;height:32px;border-bottom:1px solid rgba(255,255,255,0.06)"><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Standup</div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5C6478">11:30</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;height:32px;border-bottom:1px solid rgba(255,255,255,0.06)"><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Deep work — agent memory</div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5C6478">13:00</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;height:32px"><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Gym — push day</div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5C6478">19:00</div></div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:10px;text-align:center">32px row · hairline separators @6%</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 05 — MOTION -->
+<div data-screen-label="05 Motion" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">05 — MOTION</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Instant when summoned, alive when idle</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">Two motion registers. <span style="color:#F2EDE6">Mechanical</span> — UI moving because Mo acted: fast, decisive, done. <span style="color:#F2EDE6">Organic</span> — the assistant being alive: slow sine loops, never linear, never looping faster than 1s. UI never breathes; the assistant never snaps.</div>
+
+  <div style="display:flex;gap:20px;margin-top:36px;align-items:stretch">
+    <div style="flex:1.1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">DURATIONS</div>
+      <div style="font:400 12.5px/2.1 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:14px">t-instant &nbsp;<span style="color:#F2EDE6">80ms</span> &nbsp;— hover, press, toggles<br>t-fast &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#F2EDE6">140ms</span> &nbsp;— overlay summon/dismiss, menus<br>t-standard <span style="color:#F2EDE6">220ms</span> &nbsp;— state hue crossfades, card expand<br>t-gentle &nbsp;&nbsp;<span style="color:#F2EDE6">360ms</span> &nbsp;— dialogs, HUD readout entrances<br>t-decay &nbsp;&nbsp;&nbsp;<span style="color:#F2EDE6">600ms</span> &nbsp;— speaking → idle light fade<br>t-breath &nbsp;&nbsp;<span style="color:#F2EDE6">3600ms</span> — idle loop (organic only)</div>
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478;margin-top:24px">EASING</div>
+      <div style="display:flex;gap:18px;margin-top:14px">
+        <div>
+          <svg width="120" height="80" viewBox="0 0 120 80"><rect x="10" y="8" width="100" height="64" fill="none" stroke="rgba(255,255,255,0.08)"></rect><path d="M10 72 C 32 8, 46 8, 110 8" fill="none" stroke="#F09950" stroke-width="2"></path></svg>
+          <div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478">swift-out<br>cubic-bezier(.22,1,.36,1)<br>every mechanical move</div>
+        </div>
+        <div>
+          <svg width="120" height="80" viewBox="0 0 120 80"><rect x="10" y="8" width="100" height="64" fill="none" stroke="rgba(255,255,255,0.08)"></rect><path d="M10 72 C 47 72, 73 8, 110 8" fill="none" stroke="#A48BF5" stroke-width="2"></path></svg>
+          <div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478">sine-in-out<br>cubic-bezier(.37,0,.63,1)<br>every organic loop</div>
+        </div>
+        <div>
+          <svg width="120" height="80" viewBox="0 0 120 80"><rect x="10" y="8" width="100" height="64" fill="none" stroke="rgba(255,255,255,0.08)"></rect><path d="M10 72 C 26 72, 30 8, 110 8" fill="none" stroke="#FFD9A3" stroke-width="2"></path></svg>
+          <div style="font:400 11px/1.5 'Spline Sans Mono',monospace;color:#5C6478">exit<br>cubic-bezier(.4,0,1,1)<br>dismiss only</div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">THE SUMMON — SACRED PATH</div>
+      <div style="font:400 13.5px/1.8 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty">Ctrl+Space → overlay visible in <span style="color:#F2EDE6">one frame</span> (window pre-created, hidden, warm). Then a single 140ms entrance: opacity 0→1, translateY 6px→0, scale .985→1, swift-out. State snaps straight to listening — the mic is already open before the animation ends.</div>
+      <div style="font:400 13.5px/1.8 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty">Dismiss: 120ms, opacity→0, scale→.99, exit curve. No bounce, no spring, ever — springs read playful; El Fager is precise.</div>
+      <div style="margin-top:18px;background:rgba(240,153,80,0.07);border:1px solid rgba(240,153,80,0.2);border-radius:10px;padding:12px 16px;font:400 12px/1.6 'Spline Sans Mono',monospace;color:#FFBE7E">BUDGET: 0 allocations, 0 layout passes, 0 network on the summon path. If a feature costs summon latency, the feature loses.</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">LAWS OF MOTION</div>
+      <div style="font:400 13.5px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px">1 · One thing moves at a time. Streams of text stream; nothing else animates while they do.<br>2 · Organic loops pause when the window is hidden — zero idle CPU in the tray.<br>3 · Amplitude-reactive motion smooths input over 120ms; raw mic data looks like panic.<br>4 · Text never fades in word-by-word — it streams in place, monospace caret at the head.<br>5 · Every animation is interruptible; new state wins instantly.</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 06 — COMPONENTS -->
+<div data-screen-label="06 Components" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">06 — COMPONENT LIBRARY</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">The kit</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:32px">
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">MESSAGE PAIR</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px">
+        <div style="display:flex;justify-content:flex-end"><div style="max-width:80%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 4px 14px;padding:10px 14px;font:400 13.5px/1.5 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">What's my afternoon look like?</div></div>
+        <div style="display:flex;gap:10px;margin-top:14px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#F09950,rgba(240,153,80,0))"></div><div style="font:400 13.5px/1.55 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;padding-top:1px">Clear after the 3pm review. Deep work block till 5, then gym at 7 — push day.</div></div>
+        <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:10px;padding-left:13px">14:32 · SPOKEN + SHOWN</div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Mo gets a bubble (surface.3, r-3, tail corner 4px). The assistant gets <span style="color:#9BA3B5">no box</span> — its words sit on the night itself, marked by a fading ember rule. The assistant is the room, not a guest in it.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">LIVE TRANSCRIPT + TOOL CAPTION</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px">
+        <div style="font:400 13px/1.6 'Spline Sans Mono',monospace;color:#9BA3B5">ابعت لعمر ان الميتنج اتأجل<span style="color:#5C6478"> لبـ…</span><span style="display:inline-block;width:7px;height:15px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-right:3px;margin-left:3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:16px"><div style="width:5px;height:5px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#A48BF5">reading calendar · 0.4s</div></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><div style="width:5px;height:5px;border-radius:50%;background:#56C99C"></div><div style="font:400 11.5px 'Spline Sans Mono',monospace;color:#5C6478">drafted whatsapp → Omar</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Transcript is always mono, text.mid, ember caret — visibly <em>raw</em>, distinct from committed messages. Tool calls log as one-line captions in state.thinking color, turning ok-green when done.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">COMMAND BAR</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:10px 10px 10px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.05)">
+          <div style="font:400 13.5px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Talk or type — اتكلم أو اكتب</div>
+          <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 7px">CTRL+SPACE</div>
+          <div style="width:34px;height:34px;border-radius:50%;background:#F09950;display:grid;place-items:center;flex:none"><svg width="14" height="14" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#1A0F06"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#1A0F06" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#1A0F06" stroke-width="1.6"></line></svg></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;background:#131722;border:1px solid rgba(240,153,80,0.45);border-radius:99px;padding:10px 10px 10px 18px;box-shadow:0 0 20px rgba(240,153,80,0.18)">
+          <div style="font:400 13.5px 'Spline Sans Mono',monospace;color:#9BA3B5;flex:1">send omar the new time<span style="display:inline-block;width:6px;height:13px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-left:3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+          <div style="display:flex;align-items:center;gap:2.5px;padding-right:8px"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .65s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.05s"></div></div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">One component everywhere: pill, mic at the trailing edge (swaps sides in RTL). Rest state is quiet; live state earns the ember border + glow. Voice and text land in the same brain — the bar makes that visible.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">BUTTONS</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:10px;padding:9px 18px;cursor:pointer" style-hover="background:#FFBE7E" style-active="background:#D07E35">Send now</div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:8px 18px;cursor:pointer" style-hover="background:#222A3D">Edit</div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#9BA3B5;border-radius:10px;padding:9px 14px;cursor:pointer" style-hover="color:#F2EDE6;background:rgba(255,255,255,0.05)">Cancel</div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2604F;border:1px solid rgba(242,96,79,0.35);border-radius:10px;padding:8px 16px;cursor:pointer" style-hover="background:rgba(242,96,79,0.1)">Delete</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#1A0F06;background:#FFBE7E;border-radius:10px;padding:9px 18px">hover</div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#1A0F06;background:#D07E35;border-radius:10px;padding:9px 18px;transform:translateY(1px)">pressed</div>
+          <div style="font:500 13px 'Space Grotesk',sans-serif;color:#5C6478;background:#131722;border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 18px">disabled</div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">One ember-filled button per view, max — it's the "this acts on the world" color. Hover 80ms, press adds 1px translate. Focus ring: 2px ember @40%, 2px offset.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">CHIPS &amp; STATE CHIP</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="display:inline-flex;align-items:center;gap:6px;font:400 12px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px"><div style="width:16px;height:16px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 9px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar Adel</div>
+          <div style="display:inline-flex;align-items:center;gap:6px;font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#1A2030;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px">19:00 → 20:30</div>
+          <div style="font:400 12px 'Space Grotesk',sans-serif;color:#FFBE7E;background:rgba(240,153,80,0.12);border:1px solid rgba(240,153,80,0.3);border-radius:99px;padding:5px 12px">Focus mode</div>
+          <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 7px">ESC</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 13px"><div style="width:7px;height:7px;border-radius:50%;background:#7E8AA3;animation:fgrBreath 3.6s ease-in-out infinite"></div><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#9BA3B5">IDLE</div></div>
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(164,139,245,0.1);border:1px solid rgba(164,139,245,0.3);border-radius:99px;padding:6px 13px"><div style="width:7px;height:7px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#A48BF5">THINKING</div></div>
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,217,163,0.08);border:1px solid rgba(255,217,163,0.3);border-radius:99px;padding:6px 13px"><div style="width:7px;height:7px;border-radius:50%;background:#FFD9A3;box-shadow:0 0 8px rgba(255,217,163,.7)"></div><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFD9A3">SPEAKING</div></div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Entity chips (people, times, files) are how staged actions show their targets. State chip = dot + mono label, tinted wash of its state hue; the dot alone is the 4px degradation.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">DATA CARD ANATOMY</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px">
+        <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)" style-hover="background:#161B28;border:1px solid rgba(255,255,255,0.12)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">MAIL</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#F09950">3 PRIORITY</div></div>
+          <div style="font:500 16px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:10px">Stripe payout failed — action needed</div>
+          <div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:4px">+ 2 more from Ahmed, GitHub</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">12 UNREAD TOTAL</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Draft replies →</div></div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Kicker (mono, spaced) + live count (ember when it needs Mo) · headline · overflow line · hairline footer with one voice-runnable action. Hover raises to surface.2 in 80ms.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">HEALTH — RING · MACROS · TREND</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px;display:flex;gap:20px;align-items:center">
+        <div style="position:relative;width:118px;height:118px;flex:none">
+          <svg width="118" height="118" viewBox="0 0 118 118">
+            <circle cx="59" cy="59" r="50" fill="none" stroke="#1A2030" stroke-width="8"></circle>
+            <circle cx="59" cy="59" r="50" fill="none" stroke="#F09950" stroke-width="8" stroke-linecap="round" stroke-dasharray="241 314" transform="rotate(-90 59 59)"></circle>
+          </svg>
+          <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div style="font:500 20px 'Spline Sans Mono',monospace;color:#F2EDE6">1,840</div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">/ 2,400 KCAL</div></div></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+          <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>PROTEIN</span><span>128 / 160g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:80%;height:5px;border-radius:3px;background:#F09950"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>CARBS</span><span>171 / 240g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:71%;height:5px;border-radius:3px;background:#FFD9A3"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>FAT</span><span>52 / 75g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:69%;height:5px;border-radius:3px;background:#7E8AA3"></div></div></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <svg width="110" height="26" viewBox="0 0 110 26"><polyline points="0,18 14,16 28,19 42,13 56,14 70,10 84,11 98,7" fill="none" stroke="#5C6478" stroke-width="1.5"></polyline><circle cx="106" cy="6" r="2.5" fill="#F09950"></circle></svg>
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">WEIGHT · 8W ↘ 81.2kg</div>
+          </div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Data-viz is monochrome light: ember → gold → ash by priority, never rainbow. Ring animates only on first paint (600ms sweep). Sparklines: ash line, ember dot on "now".</div>
+    </div>
+
+    <div style="grid-column:span 2;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">ACTION CARD — STAGE → PREVIEW → CONFIRM</div>
+      <div style="display:flex;gap:16px;margin-top:14px;align-items:stretch">
+        <div style="flex:1;background:#0D1017;border-radius:12px;padding:16px">
+          <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#A48BF5;letter-spacing:.14em">1 · STAGING</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px"><div style="width:6px;height:6px;border-radius:50%;background:#A48BF5;animation:fgrShimmer 1.4s ease-in-out infinite"></div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5">drafting whatsapp → Omar…</div></div>
+          <div style="font:400 11.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:10px">Thinking-violet caption while the draft builds. Nothing is committed.</div>
+        </div>
+        <div style="flex:2.2;background:#0D1017;border:1px solid rgba(240,153,80,0.35);border-radius:12px;padding:16px;box-shadow:0 0 24px rgba(240,153,80,0.12)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#FFBE7E;letter-spacing:.14em">2 · STAGED — AWAITING YOU</div>
+            <div style="display:flex;gap:6px;align-items:center"><div style="display:inline-flex;align-items:center;gap:5px;font:400 11px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border-radius:99px;padding:3px 10px"><div style="width:13px;height:13px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 8px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">WHATSAPP</div></div>
+          </div>
+          <div dir="rtl" style="background:#131722;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-top:12px;font:300 13.5px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">الميتنج اتأجل لبكرة الساعة ٣ بدل النهارده — تمام معاك؟</div>
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:10px;padding:7px 16px;cursor:pointer" style-hover="background:#FFBE7E">Send now</div>
+            <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px 14px;cursor:pointer">Edit</div>
+            <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:7px 10px;cursor:pointer">Cancel</div>
+            <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:auto">SAY "ابعت" OR "SEND"</div>
+          </div>
+        </div>
+        <div style="flex:1;background:#0D1017;border-radius:12px;padding:16px">
+          <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#56C99C;letter-spacing:.14em">3 · SENT</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px"><div style="width:6px;height:6px;border-radius:50%;background:#56C99C"></div><div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5">whatsapp → Omar · 14:36</div></div>
+          <div style="font:400 11.5px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:10px">Card collapses to a one-line receipt in the log. Glow off. Undo window where the API allows it.</div>
+        </div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:14px;text-wrap:pretty">The trust anchor of the whole product: the <span style="color:#FFBE7E">ember border + glow means "armed"</span> — the only place glow is mandatory. Confirm is voice-or-click; no auto-send timers, ever. The preview renders in the target medium's shape (a WhatsApp-style bubble, an email header block) so Mo reviews what will actually exist.</div>
+    </div>
+
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">DIALOG &amp; SCROLLBAR</div>
+      <div style="background:#0D1017;border-radius:12px;padding:18px;margin-top:14px;display:flex;gap:16px">
+        <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:18px;box-shadow:0 24px 64px rgba(0,0,0,0.55)">
+          <div style="font:500 15px 'Space Grotesk',sans-serif;color:#F2EDE6">Forget this fact?</div>
+          <div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:6px">"Prefers short replies before noon" will be deleted from memory.</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:7px 10px;cursor:pointer">Keep</div><div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#F2604F;border:1px solid rgba(242,96,79,0.35);border-radius:10px;padding:6px 14px;cursor:pointer">Forget</div></div>
+        </div>
+        <div style="width:44px;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:6px;height:110px;border-radius:99px;background:rgba(255,255,255,0.04);position:relative"><div style="position:absolute;top:14px;left:0;width:6px;height:38px;border-radius:99px;background:rgba(255,255,255,0.14)"></div></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;line-height:1.5">6PX<br>THUMB</div></div>
+      </div>
+      <div style="font:400 12px/1.6 'Space Grotesk',sans-serif;color:#5C6478;margin-top:12px;text-wrap:pretty">Dialogs: e-3 float, max 360px, verb-first buttons, destructive is outlined flare — never filled. Scrollbar: 6px overlay thumb @14%, track invisible, hover 22%; no arrows, no gutter.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOARD 07 — OVERLAY -->
+<div data-screen-label="07 The Overlay" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">07 — THE OVERLAY</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">The 50×-a-day surface</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">Fixed 384px column, anchored to the screen edge nearest the cursor. Three zones, always in the same order — <span style="color:#F2EDE6">status · conversation · input</span> — so Mo's eyes never search. Native Qt, zero web content, paints in one frame.</div>
+
+  <div style="display:flex;gap:24px;margin-top:36px;align-items:flex-start;background:radial-gradient(900px 500px at 50% 0%,#0A0D14 0%,#07080C 70%);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:36px">
+
+    <!-- A: listening -->
+    <div style="width:384px;flex:none">
+      <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="width:4px;height:4px;border-radius:50%;background:#F09950;box-shadow:0 0 7px rgba(240,153,80,.9)"></div>
+          <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div>
+          <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F09950;margin-left:2px">LISTENING</div>
+          <div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px">ESC</div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 4px 14px;padding:9px 13px;font:400 13px/1.5 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">Morning brief?</div></div>
+          <div style="display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#F09950,rgba(240,153,80,0));flex:none"></div><div style="font:400 13px/1.55 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">Quiet one. Standup at 11:30, mail is clear except Stripe, and you slept 7h 40m — best this week.</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(240,153,80,0.04)">
+          <div style="display:flex;align-items:center;gap:2.5px;flex:none"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+          <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5">and remind me about the domain<span style="display:inline-block;width:6px;height:13px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-left:3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 14px"><div style="font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Type instead…</div><div style="width:28px;height:28px;border-radius:50%;background:rgba(240,153,80,0.15);border:1px solid rgba(240,153,80,0.4);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#F09950"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#F09950" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#F09950" stroke-width="1.6"></line></svg></div></div>
+        </div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;margin-top:14px;letter-spacing:.14em">A · LISTENING + LIVE TRANSCRIPT</div>
+    </div>
+
+    <!-- B: speaking -->
+    <div style="width:384px;flex:none">
+      <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="width:4px;height:4px;border-radius:50%;background:#FFD9A3;box-shadow:0 0 7px rgba(255,217,163,.9)"></div>
+          <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div>
+          <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFD9A3;margin-left:2px">SPEAKING</div>
+          <div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px">ESC</div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 4px 14px;padding:9px 13px;font:400 13px/1.5 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">What did Ahmed's mail say?</div></div>
+          <div style="display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#FFD9A3,rgba(255,217,163,0));flex:none"></div><div style="font:400 13px/1.55 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6">He pushed the API review to Thursday and asked if you can own the auth section. Short version: he's blocked on you<span style="display:inline-block;width:6px;height:13px;background:#FFD9A3;border-radius:1px;vertical-align:-2px;margin-left:2px;animation:fgrCaret 1s steps(1) infinite"></span></div></div>
+          <div style="display:flex;align-items:center;gap:8px;padding-left:13px"><div style="position:relative;width:16px;height:16px;display:grid;place-items:center"><div style="position:absolute;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,217,163,0.6);animation:fgrRipple 1.5s ease-out infinite"></div><div style="width:5px;height:5px;border-radius:50%;background:#FFD9A3"></div></div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">STREAMING AUDIO · TAP TO MUTE</div></div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 14px"><div style="font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Talk or type…</div><div style="width:28px;height:28px;border-radius:50%;background:#1A2030;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#9BA3B5"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#9BA3B5" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#9BA3B5" stroke-width="1.6"></line></svg></div></div>
+        </div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;margin-top:14px;letter-spacing:.14em">B · ANSWER STREAMING, TTS LIVE</div>
+    </div>
+
+    <!-- C: staged action -->
+    <div style="width:384px;flex:none">
+      <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="width:4px;height:4px;border-radius:50%;background:#A48BF5"></div>
+          <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager</div>
+          <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#A48BF5;margin-left:2px">STAGED</div>
+          <div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px">ESC</div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 4px 14px;padding:9px 13px;font:400 13px/1.7 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6"><span dir="rtl">ابعت لعمر إن الميتنج اتأجل لبكرة</span></div></div>
+          <div style="background:#131722;border:1px solid rgba(240,153,80,0.4);border-radius:14px;padding:13px;box-shadow:0 0 20px rgba(240,153,80,0.12)">
+            <div style="display:flex;align-items:center;gap:8px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFBE7E">WHATSAPP → </div><div style="display:inline-flex;align-items:center;gap:5px;font:400 11px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border-radius:99px;padding:2px 9px"><div style="width:12px;height:12px;border-radius:50%;background:#222A3D;display:grid;place-items:center;font:500 7.5px 'Space Grotesk',sans-serif;color:#9BA3B5">O</div>Omar Adel</div></div>
+            <div dir="rtl" style="background:#0D1017;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:9px 12px;margin-top:10px;font:300 12.5px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟</div>
+            <div style="display:flex;gap:7px;margin-top:11px;align-items:center">
+              <div style="font:500 12px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:9px;padding:6px 14px;cursor:pointer" style-hover="background:#FFBE7E">Send</div>
+              <div style="font:500 12px 'Space Grotesk',sans-serif;color:#F2EDE6;background:#1A2030;border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:5px 12px;cursor:pointer">Edit</div>
+              <div style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5;padding:6px 8px;cursor:pointer">Cancel</div>
+              <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:auto">SAY "ابعت"</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 14px"><div style="font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Talk or type…</div><div style="width:28px;height:28px;border-radius:50%;background:#1A2030;border:1px solid rgba(255,255,255,0.1);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#9BA3B5"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#9BA3B5" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#9BA3B5" stroke-width="1.6"></line></svg></div></div>
+        </div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;margin-top:14px;letter-spacing:.14em">C · ACTION STAGED — ARMED, AWAITING CONFIRM</div>
+    </div>
+
+    <div style="flex:1;min-width:200px;padding-top:8px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">ANATOMY</div>
+      <div style="font:400 12.5px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty"><span style="color:#F09950;font-family:'Spline Sans Mono',monospace;font-size:11px">01</span>&nbsp; Status row — 4px state dot + label. Whole row is the drag handle.<br><span style="color:#F09950;font-family:'Spline Sans Mono',monospace;font-size:11px">02</span>&nbsp; Conversation — last 2–3 turns; older history lives in the Command Center, not here.<br><span style="color:#F09950;font-family:'Spline Sans Mono',monospace;font-size:11px">03</span>&nbsp; Transcript strip — ember-washed, appears only while the mic is open.<br><span style="color:#F09950;font-family:'Spline Sans Mono',monospace;font-size:11px">04</span>&nbsp; Input pill — the fallback path; mic button shows mic state.<br><br>Overlay height is content-driven, capped at 60% of screen. ESC dismisses; answers finish speaking from the tray if dismissed mid-stream.</div>
+    </div>
+  </div>
+
+  <!-- RTL row -->
+  <div style="display:flex;gap:24px;margin-top:24px;align-items:flex-start;background:radial-gradient(900px 500px at 50% 0%,#0A0D14 0%,#07080C 70%);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:36px">
+    <div style="width:384px;flex:none" dir="rtl">
+      <div style="background:#0D1017;border:1px solid rgba(255,255,255,0.14);border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,0.6);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="width:4px;height:4px;border-radius:50%;background:#F09950;box-shadow:0 0 7px rgba(240,153,80,.9)"></div>
+          <div style="font:400 12.5px 'Alexandria',sans-serif;color:#9BA3B5">الفجر</div>
+          <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:#F09950">سامعك</div>
+          <div style="margin-right:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.1);border-radius:5px;padding:2px 6px">ESC</div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:flex-start"><div style="max-width:82%;background:#1A2030;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 14px 4px;padding:9px 13px;font:300 13px/1.8 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">إيه أخبار النهارده؟</div></div>
+          <div style="display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:linear-gradient(180deg,#F09950,rgba(240,153,80,0));flex:none"></div><div style="font:300 13px/1.85 'Alexandria','Space Grotesk',sans-serif;color:#F2EDE6">يوم هادي — عندك <span style="font-family:'Space Grotesk',sans-serif;font-weight:500">standup</span> الساعة ١١:٣٠، والإيميلات نضيفة ما عدا واحد من <span style="font-family:'Space Grotesk',sans-serif;font-weight:500">Stripe</span>، ونمت ٧ ساعات و٤٠ دقيقة.</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(240,153,80,0.04)">
+          <div style="display:flex;align-items:center;gap:2.5px;flex:none"><div style="width:3px;height:8px;border-radius:2px;background:#F09950;animation:fgrBar .8s ease-in-out infinite"></div><div style="width:3px;height:13px;border-radius:2px;background:#F09950;animation:fgrBar .6s ease-in-out infinite;animation-delay:.1s"></div><div style="width:3px;height:9px;border-radius:2px;background:#F09950;animation:fgrBar .9s ease-in-out infinite;animation-delay:.04s"></div></div>
+          <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5">وفكرني بموضوع الدومين<span style="display:inline-block;width:6px;height:13px;background:#F09950;border-radius:1px;vertical-align:-2px;margin-right:3px;animation:fgrCaret 1s steps(1) infinite"></span></div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
+          <div style="display:flex;align-items:center;gap:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:8px 8px 8px 8px;padding-inline-start:14px"><div style="font:300 12px 'Alexandria','Space Grotesk',sans-serif;color:#5C6478;flex:1">اكتب بدل الكلام…</div><div style="width:28px;height:28px;border-radius:50%;background:rgba(240,153,80,0.15);border:1px solid rgba(240,153,80,0.4);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#F09950"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#F09950" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#F09950" stroke-width="1.6"></line></svg></div></div>
+        </div>
+      </div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;text-align:center;margin-top:14px;letter-spacing:.14em">D · RTL ARABIC — SAME COMPONENT, MIRRORED</div>
+    </div>
+    <div style="flex:1;padding-top:8px;max-width:640px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">RTL RULES</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty">The layout mirrors per <span style="color:#F2EDE6">conversation language</span>, not OS locale — Mo flips mid-day. Mirrored: alignment, bubble tails, mic position, chevrons, dot-before-label order. <span style="color:#F2EDE6">Not mirrored:</span> state colors, the kbd hint (physical keys), clock times, sparkline time axes (time always flows left→right), and media controls.</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty">Arabic UI labels are written in Egyptian register, not MSA — <span style="font-family:'Alexandria',sans-serif;color:#F2EDE6">سامعك</span> not <span style="font-family:'Alexandria',sans-serif">جارٍ الاستماع</span>. The assistant should sound like it's from Cairo in both languages.</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 08 — COMMAND CENTER -->
+<div data-screen-label="08 Command Center" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">08 — COMMAND CENTER</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Today at a glance</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">The briefing room. One screen, no scroll at 1280×800+, every card answering one question. The bottom bar is the same brain as the overlay — the room just got bigger. The "it's learning me" row makes memory visible and governable: every fact has a forget button, every proposed automation needs a yes.</div>
+
+  <div style="margin-top:32px;background:#07080C;border:1px solid rgba(255,255,255,0.12);border-radius:22px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-bottom:1px solid rgba(255,255,255,0.06)">
+      <div style="width:4px;height:4px;border-radius:50%;background:#7E8AA3;animation:fgrBreath 3.6s ease-in-out infinite"></div>
+      <div style="font:500 12.5px 'Space Grotesk',sans-serif;color:#9BA3B5">El Fager — Command Center</div>
+      <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5C6478">IDLE</div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:16px">
+        <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478">TUE 14 JUL · CAIRO 34°</div>
+        <div style="font:500 13px 'Spline Sans Mono',monospace;color:#F2EDE6">21:47</div>
+      </div>
+    </div>
+    <div style="padding:28px 24px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end">
+        <div>
+          <div style="font:600 34px/1.1 'Space Grotesk',sans-serif;color:#F2EDE6;letter-spacing:-.01em">Good evening, Mo</div>
+          <div style="font:400 14px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#9BA3B5;margin-top:8px;max-width:720px">Two things left today: Stripe needs a card update, and Omar is waiting on your reply. Gym in 73 minutes — protein is 32g behind. <span style="font-family:'Alexandria',sans-serif;font-weight:300">عايز أظبطلك وجبة قبل الجيم؟</span></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="font:400 12px 'Space Grotesk',sans-serif;color:#FFBE7E;background:rgba(240,153,80,0.12);border:1px solid rgba(240,153,80,0.3);border-radius:99px;padding:5px 13px;cursor:pointer">Evening shutdown</div>
+          <div style="font:400 12px 'Space Grotesk',sans-serif;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 13px;cursor:pointer">Focus mode</div>
+          <div style="font:400 12px 'Space Grotesk',sans-serif;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 13px;cursor:pointer">Gym mode</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:24px">
+        <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">CALENDAR</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">1 LEFT TODAY</div></div>
+          <div style="display:flex;flex-direction:column;margin-top:8px">
+            <div style="display:flex;align-items:center;gap:12px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05);opacity:.45"><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;width:44px">11:30</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6;text-decoration:line-through">Standup</div></div>
+            <div style="display:flex;align-items:center;gap:12px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05);opacity:.45"><div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;width:44px">13:00</div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6;text-decoration:line-through">Deep work — agent memory</div></div>
+            <div style="display:flex;align-items:center;gap:12px;height:34px"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#F09950;width:44px">19:00</div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Gym — push day</div><div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:#FFBE7E">IN 1H 13M</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">TOMORROW: 4 EVENTS</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Plan tomorrow →</div></div>
+        </div>
+
+        <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">TASKS</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#F09950">2 DUE TODAY</div></div>
+          <div style="display:flex;flex-direction:column;margin-top:8px">
+            <div style="display:flex;align-items:center;gap:10px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:13px;height:13px;border-radius:4px;border:1.5px solid rgba(240,153,80,0.6);flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Reply to Omar — meeting move</div><div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:#F2604F">TODAY</div></div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:13px;height:13px;border-radius:4px;border:1.5px solid rgba(240,153,80,0.6);flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#F2EDE6">Fix Stripe payment method</div><div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:#F2604F">TODAY</div></div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px"><div style="width:13px;height:13px;border-radius:4px;border:1.5px solid rgba(255,255,255,0.2);flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5">Renew elfager.app domain</div><div style="margin-left:auto;font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">FRI</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">9 IN BACKLOG</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Triage by voice →</div></div>
+        </div>
+
+        <div style="grid-column:span 4;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">MAIL</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#F09950">1 PRIORITY</div></div>
+          <div style="display:flex;flex-direction:column;margin-top:8px">
+            <div style="display:flex;align-items:center;gap:10px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:4px;height:4px;border-radius:50%;background:#F2604F;flex:none"></div><div style="font:500 13px 'Space Grotesk',sans-serif;color:#F2EDE6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stripe — payout failed, update card</div></div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="width:4px;height:4px;border-radius:50%;background:#5C6478;flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ahmed — API review → Thursday</div></div>
+            <div style="display:flex;align-items:center;gap:10px;height:34px"><div style="width:4px;height:4px;border-radius:50%;background:#5C6478;flex:none"></div><div style="font:400 13px 'Space Grotesk',sans-serif;color:#9BA3B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">GitHub — 2 PRs approved</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">12 UNREAD · 0 URGENT AFTER THESE</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Draft replies →</div></div>
+        </div>
+
+        <div style="grid-column:span 7;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">HEALTH</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#FFBE7E">PROTEIN BEHIND — 32G</div></div>
+          <div style="display:flex;gap:24px;align-items:center;margin-top:12px">
+            <div style="position:relative;width:128px;height:128px;flex:none">
+              <svg width="128" height="128" viewBox="0 0 128 128">
+                <circle cx="64" cy="64" r="55" fill="none" stroke="#1A2030" stroke-width="9"></circle>
+                <circle cx="64" cy="64" r="55" fill="none" stroke="#F09950" stroke-width="9" stroke-linecap="round" stroke-dasharray="265 346" transform="rotate(-90 64 64)"></circle>
+              </svg>
+              <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div style="font:500 23px 'Spline Sans Mono',monospace;color:#F2EDE6">1,840</div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">/ 2,400 KCAL</div></div></div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:11px">
+              <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>PROTEIN</span><span style="color:#FFBE7E">128 / 160g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:80%;height:5px;border-radius:3px;background:#F09950"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>CARBS</span><span>171 / 240g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:71%;height:5px;border-radius:3px;background:#FFD9A3"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>FAT</span><span>52 / 75g</span></div><div style="height:5px;border-radius:3px;background:#1A2030;margin-top:5px"><div style="width:69%;height:5px;border-radius:3px;background:#7E8AA3"></div></div></div>
+            </div>
+            <div style="width:210px;flex:none;display:flex;flex-direction:column;gap:12px">
+              <div><div style="display:flex;justify-content:space-between;font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478"><span>WEIGHT 8W</span><span style="color:#9BA3B5">81.2 kg ↘</span></div><svg width="210" height="30" viewBox="0 0 210 30" style="margin-top:4px"><polyline points="0,20 26,18 52,22 78,15 104,16 130,12 156,13 182,8" fill="none" stroke="#5C6478" stroke-width="1.5"></polyline><circle cx="202" cy="7" r="2.5" fill="#F09950"></circle></svg></div>
+              <div><div style="display:flex;justify-content:space-between;font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478"><span>SLEEP 8W</span><span style="color:#9BA3B5">7h40 ↗</span></div><svg width="210" height="30" viewBox="0 0 210 30" style="margin-top:4px"><polyline points="0,22 26,20 52,24 78,18 104,20 130,14 156,16 182,9" fill="none" stroke="#5C6478" stroke-width="1.5"></polyline><circle cx="202" cy="8" r="2.5" fill="#F09950"></circle></svg></div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">LAST LOGGED: LUNCH · 14:10</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Log a meal by voice →</div></div>
+        </div>
+
+        <div style="grid-column:span 5;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#5C6478">NEWS — YOUR BRIEF</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">3 MIN READ</div></div>
+          <div style="display:flex;flex-direction:column;gap:2px;margin-top:8px">
+            <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#F09950;flex:none">AI</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#F2EDE6">Anthropic ships computer-use API v2 — relevant to your agent work</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;flex:none">EGY</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#9BA3B5">EGP steady; fuel prices unchanged this quarter</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0"><div style="font:400 10px 'Spline Sans Mono',monospace;color:#5C6478;flex:none">DEV</div><div style="font:400 12.5px/1.45 'Space Grotesk',sans-serif;color:#9BA3B5">Qt 6.8 LTS adds native color-mix in QSS</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,0.06)"><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">SOURCES YOU CHOSE · 6</div><div style="font:500 12px 'Space Grotesk',sans-serif;color:#FFBE7E;cursor:pointer">Read it to me →</div></div>
+        </div>
+
+        <div style="grid-column:span 12;background:rgba(240,153,80,0.05);border:1px solid rgba(240,153,80,0.18);border-radius:16px;padding:18px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#F09950">IT'S GETTING TO KNOW YOU</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478">MEMORY IS YOURS — EVERYTHING HERE CAN BE FORGOTTEN</div></div>
+          <div style="display:flex;gap:16px;margin-top:14px">
+            <div style="flex:1.2">
+              <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">LEARNED FACTS · 47</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                <div style="display:inline-flex;align-items:center;gap:7px;font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px">Short replies before noon <span style="color:#5C6478;cursor:pointer">✕</span></div>
+                <div style="display:inline-flex;align-items:center;gap:7px;font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px">Push/pull/legs split <span style="color:#5C6478;cursor:pointer">✕</span></div>
+                <div style="display:inline-flex;align-items:center;gap:7px;font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#F2EDE6;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:5px 12px">قهوة سادة، من غير سكر <span style="color:#5C6478;cursor:pointer">✕</span></div>
+                <div style="font:400 12px 'Space Grotesk',sans-serif;color:#5C6478;padding:5px 6px;cursor:pointer">+44 more</div>
+              </div>
+            </div>
+            <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+            <div style="flex:1">
+              <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">ACTIVE SKILLS · 12</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">gmail</div>
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">whatsapp</div>
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">todoist</div>
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">browser</div>
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#9BA3B5;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:5px 10px">screen</div>
+                <div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;padding:5px 4px;cursor:pointer">+7</div>
+              </div>
+            </div>
+            <div style="width:1px;background:rgba(255,255,255,0.07)"></div>
+            <div style="flex:1.4">
+              <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.14em">PROPOSED AUTOMATION</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:10px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:11px 14px">
+                <div style="font:400 12.5px/1.5 'Space Grotesk',sans-serif;color:#F2EDE6;flex:1">You silence notifications every day around 13:00. Make it automatic on deep-work blocks?</div>
+                <div style="font:500 12px 'Space Grotesk',sans-serif;color:#1A0F06;background:#F09950;border-radius:9px;padding:6px 13px;cursor:pointer;flex:none" style-hover="background:#FFBE7E">Yes</div>
+                <div style="font:500 12px 'Space Grotesk',sans-serif;color:#9BA3B5;cursor:pointer;flex:none">Not now</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 24px 22px">
+      <div style="display:flex;align-items:center;gap:12px;background:#131722;border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:12px 12px 12px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.05)">
+        <div style="font:400 14px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Talk or type — اتكلم أو اكتب</div>
+        <div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5C6478;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:3px 8px">CTRL+SPACE</div>
+        <div style="width:38px;height:38px;border-radius:50%;background:#F09950;display:grid;place-items:center;flex:none;cursor:pointer;box-shadow:0 0 20px rgba(240,153,80,0.3)" style-hover="background:#FFBE7E"><svg width="15" height="15" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#1A0F06"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#1A0F06" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#1A0F06" stroke-width="1.6"></line></svg></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:40px;margin-top:20px;font:400 12.5px/1.7 'Space Grotesk',sans-serif;color:#5C6478;max-width:1200px">
+    <div style="flex:1"><span style="color:#9BA3B5">Hierarchy:</span> greeting → briefing prose (the assistant's synthesis, not raw data) → cards for verification → memory row → command bar. The briefing is the product; cards are its receipts.</div>
+    <div style="flex:1"><span style="color:#9BA3B5">Every card footer action is voice-runnable</span> — clicking it types the phrase into the command bar so Mo learns the vocabulary by using the mouse.</div>
+  </div>
+</div>
+
+<!-- BOARD 09 — HUD -->
+<div data-screen-label="09 The HUD" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">09 — THE HUD · LIVE</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">The Ember — a living form, not a mascot</div>
+  <div style="font:400 15px/1.65 'Space Grotesk',sans-serif;color:#9BA3B5;max-width:880px;text-wrap:pretty">El Fager's face is a point of light over a horizon: a molten core, a particle ring that rides the audio, and rings of light it emits when it speaks. No eyes, no face, no waveform cliché — a presence. <span style="color:#F2EDE6">This one is real — click the states below and watch it change.</span></div>
+
+  <div style="margin-top:28px;background:#040508;border:1px solid rgba(255,255,255,0.1);border-radius:22px;position:relative;overflow:hidden">
+    <canvas ref="{{ hudRef }}" style="display:block;width:100%;height:620px"></canvas>
+    <div style="position:absolute;top:28px;left:32px">
+      <div style="font:500 30px 'Spline Sans Mono',monospace;color:#F2EDE6">21:47</div>
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em;margin-top:4px">TUE 14 JUL · CAIRO 34°</div>
+    </div>
+    <div style="position:absolute;top:28px;right:32px;text-align:right">
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">NEXT</div>
+      <div style="font:500 16px 'Space Grotesk',sans-serif;color:#F2EDE6;margin-top:4px">Gym — push day</div>
+      <div style="font:400 12px 'Spline Sans Mono',monospace;color:#F09950;margin-top:2px">19:00 · IN 1H 13M</div>
+    </div>
+    <div style="position:absolute;bottom:28px;left:32px">
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">TODAY</div>
+      <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:6px">2 TASKS OPEN · 1,840 / 2,400 KCAL<br>MAIL CLEAR EXCEPT STRIPE</div>
+    </div>
+    <div style="position:absolute;bottom:28px;right:32px;text-align:right">
+      <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5C6478;letter-spacing:.16em">SKILLS ONLINE</div>
+      <div style="font:400 13px/1.7 'Spline Sans Mono',monospace;color:#9BA3B5;margin-top:6px">GMAIL · WHATSAPP · TODOIST<br>BROWSER · SCREEN · +7</div>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:96px;text-align:center;pointer-events:none">
+      <div style="font:500 13px 'Spline Sans Mono',monospace;letter-spacing:.3em;color:#F2EDE6;opacity:.9">{{ hudLabel }}</div>
+      <div style="font:300 15px 'Alexandria',sans-serif;color:#9BA3B5;margin-top:4px">{{ hudLabelAr }}</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-top:20px">
+    <div onClick="{{ setIdle }}" style="cursor:pointer;padding:9px 18px 7px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)" style-hover="background:#1A2030"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#7E8AA3">IDLE</div><div style="height:2px;border-radius:2px;margin-top:6px;background:{{ barIdle }}"></div></div>
+    <div onClick="{{ setListening }}" style="cursor:pointer;padding:9px 18px 7px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)" style-hover="background:#1A2030"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F09950">LISTENING</div><div style="height:2px;border-radius:2px;margin-top:6px;background:{{ barListening }}"></div></div>
+    <div onClick="{{ setThinking }}" style="cursor:pointer;padding:9px 18px 7px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)" style-hover="background:#1A2030"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#A48BF5">THINKING</div><div style="height:2px;border-radius:2px;margin-top:6px;background:{{ barThinking }}"></div></div>
+    <div onClick="{{ setSpeaking }}" style="cursor:pointer;padding:9px 18px 7px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)" style-hover="background:#1A2030"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#FFD9A3">SPEAKING</div><div style="height:2px;border-radius:2px;margin-top:6px;background:{{ barSpeaking }}"></div></div>
+    <div onClick="{{ setError }}" style="cursor:pointer;padding:9px 18px 7px;border-radius:10px;background:#131722;border:1px solid rgba(255,255,255,0.1)" style-hover="background:#1A2030"><div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#F2604F">ERROR</div><div style="height:2px;border-radius:2px;margin-top:6px;background:{{ barError }}"></div></div>
+    <div style="font:400 12.5px 'Spline Sans Mono',monospace;color:#5C6478;margin-left:14px">{{ hudDesc }}</div>
+  </div>
+
+  <div style="display:flex;gap:40px;margin-top:24px;font:400 12.5px/1.7 'Space Grotesk',sans-serif;color:#5C6478;max-width:1300px">
+    <div style="flex:1"><span style="color:#9BA3B5">Build spec:</span> one QWebEngine canvas, ~110 ring particles + core gradient + emitted rings, 60fps on integrated GPU. Color is a single lerped RGB driving every element — state changes are one variable. Amplitude in = mic RMS (listening) or TTS envelope (speaking), smoothed 120ms.</div>
+    <div style="flex:1"><span style="color:#9BA3B5">Entrances:</span> HUD readouts fade in at t-gentle staggered 60ms after the orb is already alive — the being arrives first, the instruments second. Summoned by voice ("hey Fager, cockpit") or from the tray; it is never on the Ctrl+Space path.</div>
+  </div>
+</div>
+
+<!-- BOARD 10 — PHONE -->
+<div data-screen-label="10 Phone Dashboard" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">10 — PHONE DASHBOARD</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">The same night, pocket-sized</div>
+  <div style="display:flex;gap:48px;margin-top:32px;align-items:flex-start">
+    <div style="width:390px;flex:none;background:#07080C;border:1px solid rgba(255,255,255,0.14);border-radius:36px;padding:10px;box-shadow:0 24px 64px rgba(0,0,0,0.55)">
+      <div style="background:#0A0C12;border-radius:28px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px"><div style="font:500 13px 'Spline Sans Mono',monospace;color:#F2EDE6">21:47</div><div style="width:80px;height:22px;border-radius:12px;background:#000"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#9BA3B5">5G ▮▮▮</div></div>
+        <div style="padding:18px 20px 20px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font:600 24px/1.1 'Space Grotesk',sans-serif;color:#F2EDE6">Evening, Mo</div>
+              <div style="font:400 12px 'Spline Sans Mono',monospace;color:#5C6478;margin-top:4px;letter-spacing:.1em">TUE 14 JUL · ALL SYNCED</div>
+            </div>
+            <div style="display:inline-flex;align-items:center;gap:7px;background:#131722;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 12px"><div style="width:6px;height:6px;border-radius:50%;background:#7E8AA3;animation:fgrBreath 3.6s ease-in-out infinite"></div><div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#9BA3B5">IDLE</div></div>
+          </div>
+          <div style="font:400 13px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#9BA3B5;margin-top:12px">Two things left: Stripe card, and Omar's reply. Gym in 1h 13m — protein 32g behind.</div>
+
+          <div style="display:flex;gap:12px;margin-top:16px;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:14px;align-items:center">
+            <div style="position:relative;width:84px;height:84px;flex:none">
+              <svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="35" fill="none" stroke="#1A2030" stroke-width="7"></circle><circle cx="42" cy="42" r="35" fill="none" stroke="#F09950" stroke-width="7" stroke-linecap="round" stroke-dasharray="169 220" transform="rotate(-90 42 42)"></circle></svg>
+              <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center"><div><div style="font:500 15px 'Spline Sans Mono',monospace;color:#F2EDE6">1,840</div><div style="font:400 8.5px 'Spline Sans Mono',monospace;color:#5C6478">/ 2,400</div></div></div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+              <div><div style="display:flex;justify-content:space-between;font:400 10px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>PRO</span><span>128/160</span></div><div style="height:4px;border-radius:2px;background:#1A2030;margin-top:3px"><div style="width:80%;height:4px;border-radius:2px;background:#F09950"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font:400 10px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>CARB</span><span>171/240</span></div><div style="height:4px;border-radius:2px;background:#1A2030;margin-top:3px"><div style="width:71%;height:4px;border-radius:2px;background:#FFD9A3"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between;font:400 10px 'Spline Sans Mono',monospace;color:#9BA3B5"><span>FAT</span><span>52/75</span></div><div style="height:4px;border-radius:2px;background:#1A2030;margin-top:3px"><div style="width:69%;height:4px;border-radius:2px;background:#7E8AA3"></div></div></div>
+            </div>
+          </div>
+
+          <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:4px 14px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:10px;height:48px;border-bottom:1px solid rgba(255,255,255,0.05)"><div style="font:500 11px 'Spline Sans Mono',monospace;color:#F09950;width:40px">19:00</div><div style="font:500 13.5px 'Space Grotesk',sans-serif;color:#F2EDE6">Gym — push day</div><div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#FFBE7E">1H 13M</div></div>
+            <div style="display:flex;align-items:center;gap:10px;height:48px"><div style="width:13px;height:13px;border-radius:4px;border:1.5px solid rgba(240,153,80,0.6)"></div><div style="font:400 13.5px 'Space Grotesk',sans-serif;color:#F2EDE6">Reply to Omar</div><div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#F2604F">TODAY</div></div>
+          </div>
+
+          <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:4px 14px;margin-top:12px">
+            <div style="display:flex;align-items:center;gap:10px;height:48px"><div style="width:4px;height:4px;border-radius:50%;background:#F2604F"></div><div style="font:400 13.5px 'Space Grotesk',sans-serif;color:#F2EDE6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Stripe — payout failed</div><div style="margin-left:auto;font:400 10px 'Spline Sans Mono',monospace;color:#5C6478">+11</div></div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:16px;background:#131722;border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:8px 8px 8px 18px">
+            <div style="font:400 13px 'Space Grotesk','Alexandria',sans-serif;color:#5C6478;flex:1">Talk to Fager…</div>
+            <div style="width:44px;height:44px;border-radius:50%;background:#F09950;display:grid;place-items:center;flex:none;box-shadow:0 0 20px rgba(240,153,80,0.35)"><svg width="17" height="17" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#1A0F06"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#1A0F06" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#1A0F06" stroke-width="1.6"></line></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;max-width:640px;padding-top:12px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">MOBILE RULES</div>
+      <div style="font:400 13.5px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty">Single column, priority order rewritten for the pocket context: <span style="color:#F2EDE6">briefing → health (it's gym-time when he checks) → next event + urgent tasks → mail count</span>. News is a pull-down, not a card — nobody reads news standing up between sets.</div>
+      <div style="font:400 13.5px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:14px;text-wrap:pretty">All touch targets ≥44px; rows grow to 48px. The mic button is the largest element on screen — same brain, same voice, from the phone. State chip pinned top-right, same 4px-dot grammar. Serves as a PWA; it's the identical HTML/CSS the desktop QWebEngine panels use, so the design system ships once.</div>
+      <div style="margin-top:18px;background:rgba(240,153,80,0.07);border:1px solid rgba(240,153,80,0.2);border-radius:12px;padding:14px 18px;font:400 12.5px/1.7 'Space Grotesk',sans-serif;color:#FFBE7E">Actions staged from the phone use the identical confirm card — trust rules don't relax on mobile.</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD 11 — BUILD NOTES + RATIONALE -->
+<div data-screen-label="11 Build Notes and Rationale" style="width:1500px;box-sizing:border-box;background:#0D1017;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:56px">
+  <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.24em;color:#F09950">11 — BUILDABILITY + RATIONALE</div>
+  <div style="font:500 34px 'Space Grotesk',sans-serif;color:#F2EDE6;margin:12px 0 8px;letter-spacing:-.01em">Where the pixels live, and why</div>
+
+  <div style="display:flex;gap:20px;margin-top:32px;align-items:stretch">
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#56C99C">CHEAP — QSS NATIVE</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px">Every color, border, radius, padding token · text styles · buttons, chips, inputs, cards, list rows · QScrollBar restyle · hover/pressed via QSS pseudo-states.<br><br><span style="color:#F2EDE6">The entire overlay and 90% of the Command Center are this tier.</span> Ship fonts bundled (Space Grotesk, Alexandria, Spline Sans Mono — all OFL), never fetch.</div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#EFC868">MODERATE — QPAINTER</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px">State dot + amplitude bars (one 60fps QTimer, repaint a ≤32px rect — negligible) · calorie ring, macro bars, sparklines (static paints, animate only on first show) · the 140ms summon fade (QPropertyAnimation on windowOpacity).<br><br><span style="color:#F2EDE6">Rule: QPainter may animate small regions, never full windows.</span></div>
+    </div>
+    <div style="flex:1;background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#F2604F">EXPENSIVE — QWEBENGINE ONLY</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px">The HUD orb (canvas, particles, glow) · rich news reader · any future charts. Lazy-loaded, killed on hide, hard-capped to one live instance.<br><br><span style="color:#F2EDE6">Nothing web-rendered may ever sit on the Ctrl+Space path.</span> The overlay window is pre-created at boot and only ever shown/hidden.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">THE BIG CALLS</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty"><span style="color:#F2EDE6">Ember over cyan</span> — cyan is genre wallpaper; warmth is what makes a personal assistant feel <em>personal</em>. The sci-fi feeling survives in the cold surfaces and mono data type, so we keep the cinema and lose the cliché.<br><br><span style="color:#F2EDE6">Assistant gets no bubble</span> — a boxed assistant is a chat app. Words on the night with an ember rule make it the environment, which is what an operating layer is.<br><br><span style="color:#F2EDE6">Violet thinking</span> — the one cold-adjacent state hue. Deliberate: thinking is the assistant off in its own sky; the warm hues are reserved for the moments it touches Mo (hearing him, answering him).<br><br><span style="color:#F2EDE6">Glow = armed</span> — glow is a promise, not a garnish. If it glows, either a mic is open or an action is staged. This single rule is most of the product's trustworthiness.</div>
+    </div>
+    <div style="background:#131722;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5C6478">LIGHT THEME · FLUENT · TRADEOFFS</div>
+      <div style="font:400 13px/1.9 'Space Grotesk',sans-serif;color:#9BA3B5;margin-top:12px;text-wrap:pretty"><span style="color:#F2EDE6">No light theme.</span> The identity <em>is</em> light against dark — invert it and the five lights lose their legibility and the glow grammar dies. The honest daytime concession is a brightness axis, not a theme: at high ambient light, raise text contrast and surface values one step (surface.0→1). Cheap in QSS, identity intact.<br><br><span style="color:#F2EDE6">Alongside Windows, not of it.</span> No Mica, no acrylic, no Fluent corners. El Fager is a place you summon, not a window you manage — visual sovereignty is the point. Concessions: Segoe-free but DPI-aware, snap-layout friendly, honors the OS reduced-motion flag (organic loops drop to slow opacity breathing).<br><br><span style="color:#F2EDE6">Tradeoff owned:</span> ember + violet + gold is a warmer, softer face than a classic HUD — it will read "calm" before "powerful." Chosen deliberately: Mo lives with this thing 50× a day; awe wears off, calm doesn't.</div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;hudDefaultState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;listening&quot;,&quot;thinking&quot;,&quot;speaking&quot;,&quot;error&quot;],&quot;default&quot;:&quot;listening&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;HUD&quot;},&quot;orbIntensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.5,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;HUD&quot;}}">
+class Component extends DCLogic {
+  state = { hud: this.props.hudDefaultState ?? 'listening', changedAt: 0 };
+  hudRef = React.createRef();
+  cur = { r: 240, g: 153, b: 80 };
+  pulses = [];
+  lastPulse = 0;
+
+  componentDidMount() {
+    const c = this.hudRef.current;
+    if (c) {
+      const dpr = window.devicePixelRatio || 1;
+      c.width = c.clientWidth * dpr;
+      c.height = c.clientHeight * dpr;
+    }
+    this.raf = requestAnimationFrame(this.tick);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this.raf); }
+
+  setHud(s) {
+    this.pulses = [];
+    this.setState({ hud: s, changedAt: performance.now() });
+  }
+
+  tick = (now) => {
+    this.raf = requestAnimationFrame(this.tick);
+    const c = this.hudRef.current;
+    if (!c || !c.width) return;
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const W = c.width / dpr, H = c.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const t = now / 1000;
+    const S = this.state.hud;
+    const I = Math.max(0.3, Math.min(2, this.props.orbIntensity ?? 1));
+
+    const COLORS = { idle: [126,138,163], listening: [240,153,80], thinking: [164,139,245], speaking: [255,217,163], error: [242,96,79] };
+    const tg = COLORS[S] || COLORS.idle;
+    this.cur.r += (tg[0] - this.cur.r) * 0.07;
+    this.cur.g += (tg[1] - this.cur.g) * 0.07;
+    this.cur.b += (tg[2] - this.cur.b) * 0.07;
+    const col = (a) => 'rgba(' + (this.cur.r|0) + ',' + (this.cur.g|0) + ',' + (this.cur.b|0) + ',' + a + ')';
+
+    const cx = W / 2, cy = H / 2;
+
+    // amplitude model per state
+    let amp = 0;
+    if (S === 'idle') amp = 0.12 + 0.1 * Math.sin(t * 2 * Math.PI / 3.6);
+    if (S === 'listening') amp = 0.28 + 0.5 * Math.abs(Math.sin(t * 3.1) * 0.6 + Math.sin(t * 7.7) * 0.4);
+    if (S === 'thinking') amp = 0.22 + 0.08 * Math.sin(t * 2.2);
+    if (S === 'speaking') amp = 0.25 + 0.55 * Math.max(0, Math.sin(t * 5.3)) * (0.65 + 0.35 * Math.sin(t * 0.9));
+    if (S === 'error') amp = 0.15;
+
+    // error flicker on entry
+    let master = 1;
+    if (S === 'error') {
+      const dt = now - this.state.changedAt;
+      if (dt < 380) master = (Math.floor(dt / 95) % 2) ? 0.15 : 1;
+      else master = 0.75;
+    }
+    ctx.globalAlpha = master;
+
+    const R = (54 + amp * 30 * I);
+
+    // outer atmosphere
+    let g = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 4.2);
+    g.addColorStop(0, col(0.16 * I));
+    g.addColorStop(1, col(0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 4.2, 0, 7); ctx.fill();
+
+    // core
+    g = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,236,210,0.95)');
+    g.addColorStop(0.45, col(0.9));
+    g.addColorStop(1, col(0.05));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+
+    // particle ring
+    const N = 110;
+    const speed = { idle: 0.05, listening: 0.14, thinking: 0.55, speaking: 0.2, error: 0.02 }[S] || 0.05;
+    const jit = { idle: 3, listening: 16, thinking: 7, speaking: 7, error: 2 }[S] || 3;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + t * speed * Math.PI * 2;
+      let wob = Math.sin(ang * 5 + t * 2.4) * jit * (S === 'listening' ? (0.4 + amp) : 1);
+      if (S === 'thinking') wob += Math.sin(ang * 2 - t * 4.4) * 9;
+      const rad = R + 44 + wob;
+      const px = cx + Math.cos(ang) * rad;
+      const py = cy + Math.sin(ang) * rad * 0.98;
+      ctx.fillStyle = col(0.28 + 0.3 * Math.abs(Math.sin(ang * 3 + t)));
+      ctx.beginPath(); ctx.arc(px, py, 1.5, 0, 7); ctx.fill();
+    }
+
+    // thinking: three orbiters
+    if (S === 'thinking') {
+      for (let k = 0; k < 3; k++) {
+        const ang = t * 2.6 + k * (Math.PI * 2 / 3);
+        const px = cx + Math.cos(ang) * (R + 24);
+        const py = cy + Math.sin(ang) * (R + 24) * 0.55;
+        ctx.fillStyle = col(0.9);
+        ctx.beginPath(); ctx.arc(px, py, 3.2, 0, 7); ctx.fill();
+      }
+    }
+
+    // speaking: emitted rings
+    if (S === 'speaking' && now - this.lastPulse > 420) {
+      this.lastPulse = now;
+      this.pulses.push(now);
+    }
+    this.pulses = this.pulses.filter((p) => now - p < 1500);
+    for (const p of this.pulses) {
+      const k = (now - p) / 1500;
+      ctx.strokeStyle = col(0.35 * (1 - k));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, R + 36 + k * 190, 0, 7); ctx.stroke();
+    }
+
+    // horizon line
+    ctx.globalAlpha = master * 0.5;
+    const hg = ctx.createLinearGradient(cx - 300, 0, cx + 300, 0);
+    hg.addColorStop(0, col(0));
+    hg.addColorStop(0.5, col(0.5));
+    hg.addColorStop(1, col(0));
+    ctx.fillStyle = hg;
+    ctx.fillRect(cx - 300, cy + R + 92, 600, 1);
+    ctx.globalAlpha = 1;
+  };
+
+  renderVals() {
+    const S = this.state.hud;
+    const labels = { idle: 'IDLE', listening: 'LISTENING', thinking: 'THINKING', speaking: 'SPEAKING', error: 'ERROR' };
+    const labelsAr = { idle: 'ساكن', listening: 'سامعك', thinking: 'بفكّر', speaking: 'بتكلم', error: 'في مشكلة' };
+    const desc = {
+      idle: 'Breathing at 3.6s. Barely there.',
+      listening: 'Ring rides your voice amplitude, 60fps.',
+      thinking: 'Three orbiters + fast particle drift.',
+      speaking: 'Rings emitted on speech cadence, ~420ms.',
+      error: 'Two 90ms flashes, then steady at 75%.'
+    };
+    const bar = (s) => (S === s ? '#F2EDE6' : 'rgba(255,255,255,0)');
+    return {
+      hudRef: this.hudRef,
+      hudLabel: labels[S],
+      hudLabelAr: labelsAr[S],
+      hudDesc: desc[S],
+      setIdle: () => this.setHud('idle'),
+      setListening: () => this.setHud('listening'),
+      setThinking: () => this.setHud('thinking'),
+      setSpeaking: () => this.setHud('speaking'),
+      setError: () => this.setHud('error'),
+      barIdle: bar('idle'),
+      barListening: bar('listening'),
+      barThinking: bar('thinking'),
+      barSpeaking: bar('speaking'),
+      barError: bar('error')
+    };
+  }
+}
+</script>
+</body>
+</html>

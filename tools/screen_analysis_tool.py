@@ -44,7 +44,7 @@ def analyze_screen(question: str = "What do you see on screen?") -> str:
 
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-sonnet-5",
             max_tokens=1024,
             messages=[{
                 "role": "user",

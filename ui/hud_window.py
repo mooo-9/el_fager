@@ -1,19 +1,19 @@
 """
-El Fager — Full-screen JARVIS HUD window.
+El Fager — Full-screen JARVIS HUD window (optional rich surface).
 
-This is the primary window.  The old small-card OverlayWindow stays alive
-for "compact mode" (tray → Compact) but the HUD is what Ctrl+Space opens.
+The native OverlayWindow is the primary surface (Ctrl+Space). This window
+is constructed lazily by main.py the first time it's requested from the
+tray — QWebEngine/Chromium never spins up at startup.
 
 Lifecycle
 ---------
   Boot scene (3.8 s auto-advance) → Standby scene (idle)
-  Ctrl+Space / tray → show + go to Voice scene + start pipeline
+  Tray → "Open JARVIS HUD" → show + go to Voice scene + start pipeline
   Escape          → hide (go back to tray)
   Pipeline done   → show contextual data scene for 6 s → Standby
 
 Scene routing (mirrors the DC component's route() method)
 ---------------------------------------------------------
-  Voice query about stocks/markets   → Stocks scene (5)
   Voice query about screen/code      → Vision scene (3)
   Voice query about email/messages   → Inbox scene (6)
   Voice query about calendar/tasks   → Agenda scene (7)
@@ -26,13 +26,15 @@ Scene routing (mirrors the DC component's route() method)
 Real data wired
 ---------------
   Telemetry (CPU/RAM/Net) — every 2 s via psutil
-  Market prices + portfolio — every 60 s via yfinance + Alpaca
   Proactive banner — event-driven from ProactiveEngine
 """
 
 from __future__ import annotations
 
 import psutil
+
+_SHUTDOWN_GRACE_MS = 3000   # a fetcher parked in a network call
+_TERMINATE_GRACE_MS = 1000
 from PyQt6.QtCore import QPropertyAnimation, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
@@ -40,7 +42,7 @@ from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
 from ui.hud_web import (
     HudWebView,
     SCENE_BOOT, SCENE_STANDBY, SCENE_VOICE, SCENE_VISION,
-    SCENE_DEVICES, SCENE_STOCKS, SCENE_INBOX, SCENE_AGENDA,
+    SCENE_DEVICES, SCENE_INBOX, SCENE_AGENDA,
     SCENE_MEMORY, SCENE_BRIEFING, SCENE_FOOD, SCENE_GYM,
 )
 
@@ -69,6 +71,12 @@ class HudWindow(QWidget):
         self._setup_window()
         self._build_ui()
         self._setup_timers()
+        # Nothing else ever interrupts the two background fetchers, so without
+        # this Qt destroys them mid-run at teardown and the process aborts —
+        # which watchdog.classify_exit() reads as a crash and restarts.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self.shutdown)
 
         # Wire the thread-safe proactive channel
         self._proactive_signal.connect(self._apply_proactive)
@@ -97,18 +105,30 @@ class HudWindow(QWidget):
         self._hud.ready.connect(self._on_hud_ready)
         layout.addWidget(self._hud)
 
+    def shutdown(self) -> None:
+        """Stop the background fetchers so the process can exit with code 0.
+
+        Both loops poll isInterruptionRequested() once a second, so the usual
+        case returns almost at once; the grace period covers a thread parked in
+        a network fetch. Terminating after that is safe — both are read-only
+        fetchers — and beats the abort that destroying a running QThread causes.
+        """
+        for thread in (getattr(self, "_market_updater", None),
+                       getattr(self, "_scene_hub", None)):
+            if thread is None or not thread.isRunning():
+                continue
+            thread.requestInterruption()
+            if thread.wait(_SHUTDOWN_GRACE_MS):
+                continue
+            thread.terminate()
+            thread.wait(_TERMINATE_GRACE_MS)
+
     def _setup_timers(self):
         # 2-second telemetry push
         self._telemetry_timer = QTimer(self)
         self._telemetry_timer.setInterval(2000)
         self._telemetry_timer.timeout.connect(self._push_telemetry)
         self._telemetry_timer.start()
-
-        # 60-second market data updater (background thread)
-        from ui.hud_market_updater import MarketUpdater
-        self._market_updater = MarketUpdater(self)
-        self._market_updater.market_ready.connect(self._on_market_ready)
-        self._market_updater.start()
 
         # 30-second devices banner refresh (system health changes quickly)
         self._devices_timer = QTimer(self)
@@ -175,26 +195,10 @@ class HudWindow(QWidget):
     def _on_nutrition_data(
         self,
         kcal: int, protein: int, carbs: int, fat: int,
-        logged_kcal: int, logged_protein: int, logged_carbs: int, logged_fat: int,
-    ):
+        logged_kcal: int, logged_protein: int, logged_carbs: int, logged_fat: int):
         self._hud.push_nutrition(
             kcal, protein, carbs, fat,
             logged_kcal, logged_protein, logged_carbs, logged_fat,
-        )
-
-    @pyqtSlot(list, float, float, float)
-    def _on_market_ready(self, stocks: list, pv: float, day_pl: float, day_pct: float):
-        """Receive real market data from MarketUpdater and push to HUD."""
-        self._hud.push_market_data(stocks, pv, day_pl, day_pct)
-        # Drive the Stocks scene proactive banner with real P&L
-        arrow = "▲" if day_pl >= 0 else "▼"
-        sign  = "+" if day_pct >= 0 else ""
-        self._hud.push_proactive(
-            SCENE_STOCKS,
-            "Portfolio ",
-            f"{arrow} {sign}{day_pct:.1f}% today",
-            f"  ·  ${abs(round(day_pl)):,} P&L",
-            "MARKET",
         )
 
     # ------------------------------------------------------------------ #
@@ -230,21 +234,22 @@ class HudWindow(QWidget):
             self._open_hud()
 
     def _open_hud(self):
-        if self._worker and self._worker.isRunning():
-            return
         self.setWindowOpacity(0.0)
         self.show()
         self._fade(1.0)
         self._hud.goto_scene(SCENE_VOICE)
-        if not self._mic_muted:
+        # A worker from a previous open may still be unwinding - show the HUD
+        # anyway, just don't stack a second pipeline on top of it.
+        if not self._mic_muted and not (self._worker and self._worker.isRunning()):
             self._start_pipeline()
 
     def _close_hud(self):
         if self._worker and self._worker.isRunning():
+            # PipelineWorker overrides run(), so quit() has no event loop to
+            # exit and wait() would freeze the Qt main thread for its full
+            # timeout. Signal the worker and let it unwind in the background.
             self.voice_in.stop_recording()
             self.voice_out.stop()
-            self._worker.quit()
-            self._worker.wait(2000)
         self._fade(0.0, then_hide=True)
         self._current_state = "idle"
 
@@ -336,37 +341,25 @@ class HudWindow(QWidget):
         q = query.lower()
         has = lambda *ws: any(w in q for w in ws)
 
-        if has("stock", "nvda", "aapl", "tsla", "msft", "spy", "qqq",
-               "portfolio", "market", "price", "trade", "invest",
-               "سهم", "بورصة", "محفظة", "سعر"):
-            return SCENE_STOCKS
-
-        if has("screen", "code", "error", "bug", "screenshot", "analyze",
-               "شاشة", "شوف", "صورة", "analyze"):
+        if has("screen", "code", "error", "bug", "screenshot", "analyze"):
             return SCENE_VISION
 
-        if has("email", "mail", "gmail", "whatsapp", "inbox", "message",
-               "رسالة", "ايميل", "إيميل", "واتس", "بريد"):
+        if has("email", "mail", "gmail", "whatsapp", "inbox", "message"):
             return SCENE_INBOX
 
-        if has("remind", "calendar", "agenda", "task", "todo", "event", "schedule",
-               "موعد", "مهمة", "نبهني", "فكّر", "فكر"):
+        if has("remind", "calendar", "agenda", "task", "todo", "event", "schedule"):
             return SCENE_AGENDA
 
-        if has("journal", "memory", "remember", "know about", "you know",
-               "يوميات", "فاكر", "افتكر", "تعرف"):
+        if has("journal", "memory", "remember", "know about", "you know"):
             return SCENE_MEMORY
 
-        if has("brief", "morning", "summary", "weather", "prayer", "news",
-               "صباح", "ملخص", "أخبار", "اخبار", "جو"):
+        if has("brief", "morning", "summary", "weather", "prayer", "news"):
             return SCENE_BRIEFING
 
-        if has("eat", "food", "calorie", "macro", "protein", "meal", "diet", "water",
-               "اكل", "أكل", "سعرات", "بروتين", "وجبة", "مية", "ماء"):
+        if has("eat", "food", "calorie", "macro", "protein", "meal", "diet", "water"):
             return SCENE_FOOD
 
-        if has("workout", "gym", "train", "lift", "bench", "squat", "exercise", "reps",
-               "تمرين", "جيم", "تمرن", "حديد"):
+        if has("workout", "gym", "train", "lift", "bench", "squat", "exercise", "reps"):
             return SCENE_GYM
 
         return SCENE_VOICE

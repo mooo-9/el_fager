@@ -11,11 +11,13 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 from zoneinfo import ZoneInfo
+from core import atomic
 
 logger = logging.getLogger(__name__)
 
 _TRADES_PATH = Path("data/trades.json")
 _CONFIG_PATH = Path("data/trading_config.json")
+_STATUS_PATH = Path("data/trading_status.json")
 _ET = ZoneInfo("America/New_York")
 
 
@@ -120,7 +122,7 @@ class TradingEngine:
                 trades = []
         trades.append(trade)
         _TRADES_PATH.parent.mkdir(exist_ok=True)
-        _TRADES_PATH.write_text(
+        atomic.write(_TRADES_PATH,
             json.dumps(trades, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
@@ -180,6 +182,26 @@ class TradingEngine:
 
     # ── Main cycle ─────────────────────────────────────────────────────────────
 
+    def _write_status_snapshot(
+        self,
+        portfolio_value: float,
+        cash: float,
+        positions: list[dict],
+        signals: list[dict],
+    ) -> None:
+        """Snapshot the last cycle for the Trading Terminal and the HUD strip."""
+        snapshot = {
+            "updated_at": datetime.now().isoformat(),
+            "portfolio_value": portfolio_value,
+            "cash": cash,
+            "positions": positions,
+            "signals": signals,
+        }
+        _STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        atomic.write(_STATUS_PATH,
+            json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
     def _run_cycle(self) -> None:
         from core.agents.market_analyst import MarketAnalyst
         from core.agents.strategy_engine import StrategyEngine
@@ -221,10 +243,16 @@ class TradingEngine:
         analyst = MarketAnalyst()
         strategy = StrategyEngine()
 
+        signal_rows: list[dict] = []
+
         for symbol in symbols:
             if self._stop_event.is_set():
                 break
+            row = {"symbol": symbol, "direction": "HOLD",
+                   "conviction": 0.0, "status": "WATCHING"}
             if symbol in held_symbols:
+                row["status"] = "HELD"
+                signal_rows.append(row)
                 continue
 
             try:
@@ -237,16 +265,26 @@ class TradingEngine:
                 except Exception:
                     adjusted = analysis.conviction
 
+                row["direction"] = analysis.direction
+                row["conviction"] = round(adjusted, 1)
+
                 if analysis.direction == "SELL" or adjusted < threshold:
+                    row["status"] = ("SELL_SIGNAL" if analysis.direction == "SELL"
+                                     else "BELOW_THRESHOLD")
+                    signal_rows.append(row)
                     continue
 
                 allowed, _ = can_open_position(open_count)
                 if not allowed:
+                    row["status"] = "MAX_POSITIONS"
+                    signal_rows.append(row)
                     continue
 
                 current_price = closes[-1]
                 qty = calc_position_size(portfolio_value, current_price)
                 if qty < 1:
+                    row["status"] = "SIZE_TOO_SMALL"
+                    signal_rows.append(row)
                     continue
 
                 sl_price = get_stop_loss_price(current_price)
@@ -259,9 +297,29 @@ class TradingEngine:
                 )
                 open_count += 1
                 held_symbols.add(symbol)
+                row["status"] = "EXECUTED"
+                signal_rows.append(row)
 
             except Exception as e:
                 logger.warning(f"[Trading] Cycle error for {symbol}: {e}")
+                row["status"] = "ERROR"
+                signal_rows.append(row)
+
+        position_rows = [
+            {
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "avg_entry_price": float(p.avg_entry_price),
+                "unrealized_pl": float(p.unrealized_pl or 0.0),
+                "unrealized_plpc": float(p.unrealized_plpc or 0.0) * 100,
+            }
+            for p in positions
+        ]
+        try:
+            self._write_status_snapshot(
+                portfolio_value, float(account.cash), position_rows, signal_rows)
+        except Exception as e:
+            logger.warning(f"[Trading] Status snapshot failed: {e}")
 
     # ── Loop ───────────────────────────────────────────────────────────────────
 

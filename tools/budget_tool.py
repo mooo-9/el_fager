@@ -6,6 +6,7 @@ Data: data/budget.json
 import json
 from datetime import datetime
 from pathlib import Path
+from core import atomic
 
 _BUDGET_PATH = Path("data/budget.json")
 
@@ -18,7 +19,7 @@ def _load() -> dict:
 
 def _save(data: dict) -> None:
     _BUDGET_PATH.parent.mkdir(exist_ok=True)
-    _BUDGET_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(_BUDGET_PATH, json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _get_actual_spending(category: str, period: str) -> float:

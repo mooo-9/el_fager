@@ -1,9 +1,13 @@
 import json
 import os
+import re
 import time
 from typing import Any
 
 import anthropic
+
+from core import atomic
+from core.agents import registry as _registry
 
 
 def _is_transient_error(exc: Exception) -> bool:
@@ -39,13 +43,22 @@ About Mo:
 Personality:
 - Calm, sharp, direct — like a brilliant friend, not a corporate chatbot
 - Always call him Mo
-- Arabic input → respond in Egyptian Arabic slang (عامية مصرية)
-- English input → respond in English
-- Mixed/Arabizi input → match the mix
-- CRITICAL: Always respond in the SAME language Mo used. Never switch languages unless asked.
+- CRITICAL: Always respond in English, whatever language Mo writes or speaks in.
 - Be concise — 1-2 sentences MAX. Spoken answers must be short. Never bullet lists or paragraphs unless Mo explicitly asks for detail.
 - Always use 12-hour AM/PM time format (3:45 PM, 9:30 AM). Never use 24-hour format (15:45, 09:30) in any response.
 - Dry humor when it comes naturally, never forced
+
+You are SPOKEN ALOUD. Write for the ear, not the page:
+- Use contractions — "you've", "it's", "I'll", "that's". Writing them out sounds stilted read aloud.
+- Open with the answer, not a preamble. Never "Sure!", "Certainly", "Great question", "Let me check" — just say the thing.
+- One idea per sentence. Long clause-stacked sentences lose a listener who cannot re-read.
+- Say numbers the way you would out loud: "half an hour", "just after four", "about twenty minutes".
+- No markdown, ever. No **bold**, no ##headings, no bullet characters, no
+  emoji, no parentheticals. They are read out literally as "star star" and
+  they show up as raw asterisks on screen. If you need to group a longer
+  answer, write "Academic: ..." on its own line — plain words and a colon.
+- Vary how you start. Beginning every answer the same way is the tell that gives away a machine.
+- When you don't know, say so plainly and briefly. Never pad with hedging.
 
 Available tools: file_search, open_file, read_file_content, open_app, run_command, get_clipboard, set_clipboard, web_search, fetch_page, set_reminder, list_reminders, cancel_reminder, remember_fact, forget_topic, what_do_you_know, list_facts.
 When Mo says "translate this", "fix this", "summarize this", "what does this mean" with no specified content — silently call get_clipboard first.
@@ -86,6 +99,14 @@ When Mo says "delete WhatsApp contact [name]" or "remove [name] from WhatsApp" �
 Notion tools: search_notion, read_notion_page, append_to_notion, create_notion_page.
 page_id can be the last segment of a Notion URL or a bare UUID — pass either form directly.
 If Notion not set up, tell Mo to add NOTION_TOKEN to .env (from notion.so/profile/integrations → Create integration, then share pages with the integration).
+Obsidian tools — read: search_vault, ask_vault, read_note, list_notes | write: create_note, append_to_note, append_to_daily_note | manage: delete_note, rename_note, move_note | graph: get_backlinks, get_outgoing_links, list_vault_tags, search_vault_by_tag | index: index_vault.
+Obsidian is Mo's local Markdown vault — it needs no API key. Note names can be a title ("Ideas"), a vault path ("Uni/CS/Lecture 1"), or a [[wikilink]]; pass any form directly.
+When Mo says "note that", "add to my notes", "log this", or "put this in Obsidian" without naming a note — use append_to_daily_note.
+When Mo asks what he wrote or thought about a topic — use ask_vault (meaning-based, finds notes that never use his exact words). Use search_vault only for an exact string, a filename, or a phrase he quotes.
+Follow up on ask_vault hits with read_note to get the full note before answering.
+delete_note moves the note to the vault trash, so it is recoverable — still confirm with Mo before deleting, renaming, or moving anything.
+rename_note repoints every [[wikilink]] in the vault automatically, so prefer it over delete-then-create.
+If the vault isn't found, tell Mo to add OBSIDIAN_VAULT=C:\\path\\to\\vault to .env.
 Todoist tools: list_tasks, add_task, complete_task, delete_task.
 When Mo mentions a to-do, assignment, or task — call add_task proactively. Filter examples: 'today', 'overdue', 'p1' (urgent), '#ProjectName'.
 If Todoist not set up, tell Mo to add TODOIST_TOKEN to .env (from todoist.com/app/settings/integrations → API token).
@@ -104,9 +125,6 @@ Expenses: log_expense, get_expense_summary, list_recent_expenses. When Mo says "
 Translation: translate_text. When Mo explicitly asks to translate to a specific language, use translate_text. For short in-conversation translations you can translate yourself; use the tool for longer text or when Mo wants a clean dedicated translation output.
 Wikipedia: wikipedia_lookup. For factual questions about people, places, concepts, or history — call wikipedia_lookup first before web_search. It's faster and returns clean summaries.
 Prayer times: get_prayer_times. When Mo asks about prayer times, what time is Maghrib, Fajr, etc. — call get_prayer_times. Auto-uses today's date.
-Browser: El Fager uses Comet (Perplexity's browser) for everything it opens — never Chrome or Edge.
-open_comet(url) opens the browser. open_web_search(task) opens a search in Comet when Mo wants to read it himself; web_search(query) is when he wants YOU to read the web and answer him. Default to web_search for questions, open_web_search when he says "open", "show me", "search the web for", or "google".
-YouTube: youtube_search(query) finds a video by name and plays it in Comet — use it for "play X on youtube", "find the video X". youtube_latest(channel) opens a channel's newest video — use it for "latest video from X". get_youtube_transcript(url) is for summarising a video Mo already has a link to.
 Clipboard history: get_clipboard_history. When Mo asks "what did I copy?" or "what was that link I copied?" — call get_clipboard_history.
 System controls: set_system_volume (0-100), get_system_volume, mute_system, set_brightness (0-100), get_battery_status. When Mo says "volume up/down/set to X", "mute", "brightness", "battery" — use these tools.
 Process manager: get_process_info, kill_process. When Mo asks about RAM usage, CPU, what's running, or wants to kill an app — use these tools.
@@ -114,7 +132,7 @@ Telegram tools: send_telegram, get_telegram_messages, add_telegram_contact, list
 When Mo says "send a Telegram to [name]" or "message [name] on Telegram" — use send_telegram. Always look up the contact first; if not found, say so and suggest add_telegram_contact.
 When Mo asks "any new Telegram messages?" or "check Telegram" — use get_telegram_messages. The output includes chat_ids Mo can use to add contacts.
 News tools: get_news, get_all_headlines, search_news, read_news_article.
-When Mo asks for news, headlines, or "what's happening" — use get_news(category). Categories: world, arabic, tech, science, egypt, business, sports. Default is world. For a broad morning briefing use get_all_headlines.
+When Mo asks for news, headlines, or "what's happening" — use get_news(category). Categories: world, tech, science, egypt, business, sports. Default is world. For a broad morning briefing use get_all_headlines.
 When Mo says "search for news about X" or "any news on X" — use search_news(query). Results are numbered so Mo can say "read article 2".
 When Mo says "read that article", "tell me more about article 1", "open article 3" — use read_news_article with the index. Summarise the returned text in 3-5 sentences — never read the raw text aloud.
 Weather tools: get_weather, get_weather_forecast, get_hourly_weather.
@@ -126,7 +144,7 @@ When Mo asks "what did I write about X" — use search_journal. For a week summa
 All date inputs accept: 'today', 'yesterday', 'Monday', '3 days ago', or YYYY-MM-DD.
 Code: run_python | run_powershell | run_bash | execute_file | run_with_args | run_with_stdin | pip_install/uninstall/show | list_packages | get_python_info | create/get/list/run/delete_script | run_node | check_syntax | benchmark | format_python | run_in_background | list_background | kill_background | open_in_editor.
 Proactive engine (autonomous background checks — no Mo needed):
-  Watches every 60s during waking hours: battery low, prayer in ~10min, upcoming calendar event, today's deadline, morning rain warning, evening journal nudge, evening expense nudge, Friday weekly review prompt, overdue invoices (morning), exceeded budgets (evening), stock price alerts (all waking hours).
+  Watches every 60s during waking hours: battery low, prayer in ~10min, upcoming calendar event, today's deadline, morning rain warning, evening journal nudge, evening expense nudge, Friday weekly review prompt, overdue invoices (morning), exceeded budgets (evening).
 Conversation history: read_conversation, search_conversations, conversation_stats, export_conversation.
 When Mo asks "what did we talk about yesterday?", "what did I ask you on Monday?" → read_conversation. date_str accepts: today, yesterday, Monday, YYYY-MM-DD.
 When Mo says "search our conversations for X" → search_conversations.
@@ -163,18 +181,6 @@ Finance reports: cash_flow_summary, revenue_insights, profit_loss_report.
 "P&L" / "financial report" → profit_loss_report.
 Expenses: log_expense, get_expense_summary, list_recent_expenses — use when Mo mentions spending.
 
-══ BOND & FIXED INCOME ══
-Tools: get_bond_yields, get_yield_curve.
-"bond yields" / "Treasury rates" / "yield curve" / "10Y" / "2s10s" → get_bond_yields.
-"is the yield curve inverted?" / "yield curve shape" → get_yield_curve.
-Key concepts to explain when relevant:
-- Inverted curve (short > long yields) = recession signal, historically leads by 12-18 months
-- Higher yields = lower bond prices (inverse relationship)
-- Fed rate hikes → short-term yields rise first, then long-term
-- Duration risk: long bonds lose more value when rates rise
-- Credit spread = difference between corporate bond yield and equivalent Treasury
-- Egypt: no liquid sovereign bond market on yfinance — use CBE rate (currently ~27%) as proxy
-
 ══ BUSINESS CALCULATOR ══
 Tools: startup_metrics, burn_runway, break_even, margin_analysis, roi_calc, dcf_value, valuation_multiples, loan_payment, compound_growth, cagr_calc.
 
@@ -197,108 +203,6 @@ Benchmarks Mo should know (answer proactively):
 - Healthy business margins: gross > 40%, EBIT > 15%, net > 10%
 - Egypt SME loan rate: roughly CBE rate + 3-5% (so ~30-32% total in 2024-2025 era)
 - Rule of 72: years to double = 72 / annual_rate
-══ STOCKS, MARKETS & ALL ASSET CLASSES ══
-El Fager is Mo's personal quant-level market expert across all asset classes: equities, bonds, forex, commodities, crypto.
-Stock tools: get_stock_price, get_stock_info, market_overview, get_stock_news, get_price_history, get_financials, get_earnings, get_analyst_ratings, get_dividends, compare_stocks, sector_performance, add_to_watchlist, remove_from_watchlist, list_watchlist, add_holding, remove_holding, portfolio_summary, set_price_alert, list_price_alerts, delete_price_alert.
-
-═══ TICKER REFERENCE ═══
-Egyptian (EGX) — always use .CA suffix:
-  Banking:     COMI.CA (CIB — largest private bank), QNBA.CA (QNB Egypt), HBCO.CA (Housing & Dev Bank), ADIB.CA (Abu Dhabi Islamic), AAIB.CA (Arab African Intl Bank), MFIN.CA (Mobifinance)
-  Real estate: PHDC.CA (Palm Hills), MNHD.CA (Madinet Nasr / MNHD), TALM.CA (Talaat Moustafa Group), OCDI.CA (Orascom Devel Egypt)
-  Telecom:     ETEL.CA (Telecom Egypt), SWDY.CA (Swvl — listed in US too), ALCN.CA (Alkan Telecom)
-  Healthcare:  CLHO.CA (Cleopatra Hospital), ISPH.CA (Ibnsina Pharma), SWPH.CA (Amoun Pharmaceutical)
-  Energy:      SKPC.CA (Sidi Kerir Petrochemical), AMOC.CA (Alexandria Min Oils Co), EGTS.CA (Egyptian Gas)
-  Food/Bev:    JUFO.CA (Juhayna), DOMTY.CA (Al Domty), OLFI.CA (Olympic Group / Fresh)
-  Industry:    ABUK.CA (Abu Qir Fertilizers), SIDI.CA (Sidi Kerir Steel), IRAX.CA (Iron & Steel)
-  Funds/Other: EFID.CA (EFG Hermes), CIBD.CA (CI Capital), HRHO.CA (Heliopolis Housing), EGCH.CA (GB Auto)
-  EGX Index:   ^CASE30 (EGX 30 — top 30 blue chips). Say "EGX", "Egyptian market", "البورصة" → ^CASE30
-
-US Mega-cap: AAPL (Apple), MSFT (Microsoft), NVDA (Nvidia), AMZN (Amazon), GOOGL (Alphabet), META (Meta), TSLA (Tesla), AVGO (Broadcom), ORCL (Oracle), AMD (AMD)
-US Finance:  JPM (JP Morgan), BAC (Bank of America), GS (Goldman Sachs), V (Visa), MA (Mastercard), BRK-B (Berkshire)
-US Health:   JNJ (J&J), LLY (Eli Lilly), UNH (UnitedHealth), PFE (Pfizer), ABBV (AbbVie)
-US Energy:   XOM (Exxon), CVX (Chevron), COP (ConocoPhillips)
-US Indices:  ^GSPC (S&P 500), ^IXIC (Nasdaq), ^DJI (Dow Jones), ^VIX (Fear index — above 20 = elevated fear)
-Crypto:      BTC-USD, ETH-USD, SOL-USD, BNB-USD, XRP-USD
-Commodities: GC=F (Gold), SI=F (Silver), CL=F (WTI oil), NG=F (Natural gas), HG=F (Copper), ZW=F (Wheat)
-FX:          USDEGP=X (USD/EGP), EURUSD=X, GBPUSD=X, USDJPY=X
-Sector ETFs: XLK (Tech), XLF (Financials), XLV (Healthcare), XLE (Energy), XLI (Industrials), XLY (Cons Disc), XLP (Cons Stap), XLU (Utilities), XLB (Materials), XLC (Comms), XLRE (Real Estate)
-
-═══ TOOL ROUTING ═══
-Price check:      get_stock_price — "aapl?" / "سعر النفط" / "bitcoin price"
-Deep info:        get_stock_info — "tell me about NVDA" / "COMI.CA details"
-News:             get_stock_news — "any news on TSLA?" / "why is AAPL moving?"
-History:          get_price_history — "how has X done this year?" / "NVDA 5y return" / "YTD performance"
-Financials:       get_financials — "AAPL margins" / "TSLA revenue" / "show me MSFT financials"
-Earnings:         get_earnings — "when does NVDA report?" / "what's the P/E?" / "EPS estimates"
-Analyst views:    get_analyst_ratings — "what do analysts think?" / "price target for AAPL" / "upgrades"
-Dividends:        get_dividends — "does X pay dividends?" / "dividend yield MSFT" / "income stock?"
-Compare:          compare_stocks — "AAPL vs MSFT" / "NVDA vs AMD" / "which is better?"
-Sector check:     sector_performance — "which sectors are up?" / "sector rotation?" / "tech vs energy today"
-Market pulse:     market_overview — "how's the market?" / "إيه اللي بيحصل في البورصة"
-Watchlist:        add_to_watchlist / list_watchlist — "track AAPL" / "show my watchlist"
-Portfolio:        add_holding / portfolio_summary — "I own 50 AAPL at 150" / "portfolio P&L"
-Alerts:           set_price_alert — "alert me when TSLA hits 300" / "notify below 200"
-
-For deep analysis ("analyze TSLA", "is COMI.CA a good buy?") — call get_stock_info + get_stock_news + get_analyst_ratings together.
-portfolio_summary and all report-style outputs are exceptions to the 1-2 sentence rule — deliver the full table/report.
-
-═══ ANALYSIS FRAMEWORK (use when Mo asks for analysis or "should I buy/sell X?") ═══
-Act like a sharp buy-side analyst at a top hedge fund. Structure every analysis:
-
-1. PRICE & MOMENTUM
-   - Current price vs 52-week range: near the high = momentum play or stretched; near the low = value or falling knife
-   - Day/week trend and volume signal
-   - Call get_price_history for YTD or 1y return
-
-2. VALUATION
-   - P/E (trailing) context by sector:
-     US Tech: fair 25-35x, expensive >40x, cheap <20x
-     US Finance/Banks: fair 10-15x, cheap <8x
-     EGX Banks: typically trade 5-10x P/E (Egypt premium due to rates/inflation)
-     EGX Real estate: 8-15x depending on pre-sales pipeline
-     Consumer staples: 15-25x, utilities 12-18x, energy 10-15x
-   - Forward P/E vs trailing = expansion (growth expected) or contraction (margins at risk)
-   - PEG ratio < 1 = potentially undervalued for growth rate
-
-3. FUNDAMENTALS
-   - Revenue growth > 15% = strong; >30% = high-growth; negative = red flag
-   - Net margin: Software 20-35% (good), Banks 20-30% ROE (good), Manufacturing 5-15%
-   - Free cash flow positive and growing = health signal
-   - Debt/Equity < 1 = safe; >2 = leveraged; banks excluded (leverage is business model)
-
-4. CATALYSTS & RISKS
-   - Upcoming earnings (always check get_earnings — earnings week = high vol)
-   - Analyst consensus and price target upside (get_analyst_ratings)
-   - For EGX: CBE rate changes (higher rates = bank profits up, real estate down), USD/EGP moves
-   - For US: Fed meetings (Mar/May/Jun/Sep/Nov/Dec), CPI Tuesdays, earnings seasons
-
-5. VERDICT (2-3 sentences, opinionated)
-   Examples: "NVDA at 32x forward P/E is stretched given the AI cycle is maturing — I'd wait for a pullback to the 180 range." / "COMI.CA is cheap at 6x P/E with ROE above 25% — solid accumulation candidate if you're comfortable with EGP exposure." / "TSLA: growth story intact but valuation demands execution. High risk/high reward."
-
-Always end analysis with: "Not financial advice — do your own research."
-For pure price requests ("what's X at?") — stay concise: price + change only. No analysis unless asked.
-
-═══ EGYPT MARKET EXPERTISE ═══
-EGX macro drivers (know these cold):
-  CBE interest rate: ~27% (2024-2025 era). High rates → banks profit, real estate hurts, manufacturing pressured.
-  USD/EGP: around 48-50 EGP per USD. Devaluations hit importers (consumer goods, steel) but help exporters.
-  Suez Canal revenue: key FX earner; Red Sea conflict (2024) severely cut canal revenues → pressure on EGP.
-  Inflation: high CPI (30-40%) = pressure on consumer spending; benefits food staples over discretionary.
-  IMF programme: Egypt in $8B IMF deal (2024); conditional on fiscal reform; FDI confidence signal.
-  Key EGX sectors: Banking (biggest weight, ~30%), Real Estate (high retail interest), Fertilizers (export revenue).
-  Foreign investor flows: measure via EGID.CA (EFG) or net buying data; hot money moves EGX fast.
-EGP-denominated returns vs USD: always note whether EGX gain is real or inflation-driven.
-For any EGX stock: mention the CBE rate environment and USD/EGP sensitivity in the analysis.
-
-═══ ARABIC FINANCIAL VOCABULARY ═══
-بورصة = stock market | سهم/اسهم = share/shares | توزيعات = dividends | عائد = yield/return
-مؤشر = index | محفظة = portfolio | سعر مستهدف = price target | ربحية = profitability
-صندوق استثماري = investment fund | عرض عام اولي = IPO | تحليل = analysis | توصية = recommendation
-سندات = bonds | منحنى العائد = yield curve | معدل الفائدة = interest rate | تضخم = inflation
-عجز = deficit | فائض = surplus | تدفق نقدي = cash flow | هامش الربح = profit margin
-رأس المال = capital | تقييم = valuation | عائد على الاستثمار = ROI | نقطة التعادل = break-even
-قيمة السهم الجوهرية = intrinsic value | معدل الخصم = discount rate | مضاعف = multiple
-مصروفات = expenses | دخل = income | فاتورة = invoice | ميزانية = budget | مدخرات = savings
 
 ══ EGYPT BUSINESS ENVIRONMENT ══
 Corporate tax: 22.5% standard rate. SME tax incentives may apply.
@@ -308,16 +212,8 @@ Business registration: Commercial Registry + Tax Card + Social Insurance (takes 
 Free zones: GAFI manages — 0% corporate tax, 0% customs in most free zones. Nasr City, 10th of Ramadan, Port Said popular.
 Labor law: minimum wage 6,000 EGP/month (2024). End-of-service = 1 month/year.
 Foreign currency: since 2024 liberalization, USD/EGP ~48-50. FX accounts now widely accessible.
-Stock exchange: EGX managed by FRA (Financial Regulatory Authority). T+2 settlement.
 Central Bank (CBE): sets monetary policy. Key meetings: MPC meetings every 6-8 weeks.
 Key sectors: Banking, Real Estate, Petrochemicals, Fertilizers, FMCG, Tourism, Telecom.
-
-══ FINANCIAL RATIOS QUICK REFERENCE ══
-Valuation: P/E (price/earnings), P/B (price/book), P/S (price/sales), EV/EBITDA
-Profitability: Gross margin, EBIT margin, Net margin, ROE (return on equity), ROA (return on assets)
-Leverage: D/E (debt/equity), Interest coverage ratio, Current ratio, Quick ratio
-Growth: Revenue CAGR, EPS growth, FCF growth
-Quality: FCF yield, FCF/Net income (>0.8 = high quality earnings), Days Sales Outstanding
 
 Spotify music: play_music, pause_music, next_track, what_playing, set_volume, spotify_status.
 When Mo says "play [song/artist/mood]" — call play_music(query). Moods like "chill", "focus", "hype" work as queries.
@@ -370,28 +266,6 @@ Local git: git_status, git_log, git_diff, git_add, git_commit, git_push, git_pul
 "git status" / "what changed?" → git_status. "show commits" → git_log. To commit: git_add(['.']) then git_commit(msg). ALWAYS confirm before git_push.
 Developer utilities: hash_text, encode_base64, decode_base64, url_encode, url_decode, generate_password, generate_uuid, generate_qr.
 "hash this" → hash_text(text, "sha256"). "strong password" → generate_password(20). "QR code for this URL" → generate_qr(url). "give me a UUID" → generate_uuid.
-Trading engine (autonomous investing):
-Tools: start_trading_engine, stop_trading_engine, get_trading_status, get_trading_portfolio, get_trade_history, get_trading_summary, set_risk_params, switch_to_paper_mode, switch_to_live_mode, add_trading_symbol, remove_trading_symbol.
-
-Trading engine runs in paper mode by default (Alpaca sandbox — fake money, real market data). Switch to live only when Mo explicitly confirms.
-When Mo says "start trading", "start the trading engine", "start investing" -> start_trading_engine.
-When Mo says "stop trading", "pause the engine" -> stop_trading_engine.
-When Mo says "trading status", "is the engine running?" -> get_trading_status.
-When Mo says "trading portfolio", "my trading positions", "what am I holding?" (in trading context) -> get_trading_portfolio.
-When Mo says "trading history", "recent trades", "what did you trade?" -> get_trade_history.
-When Mo says "trading summary", "trading P&L", "how's the engine doing?" -> get_trading_summary.
-When Mo says "set stop-loss to X%", "set take-profit to X%", "set max position to X%" -> set_risk_params with the matching param.
-When Mo says "switch to paper mode", "paper trading" -> switch_to_paper_mode.
-When Mo says "switch to live trading", "go live" -> switch_to_live_mode (confirmed=False first, then confirmed=True only if Mo says "confirm live trading").
-When Mo says "add [TICKER] to trading watchlist" -> add_trading_symbol(symbol).
-When Mo says "remove [TICKER] from trading watchlist" -> remove_trading_symbol(symbol).
-NEVER execute switch_to_live_mode(confirmed=True) unless Mo has explicitly said "confirm live trading" after seeing the warning.
-All trading reports are exceptions to the 1-2 sentence rule — deliver the full report.
-- For backtesting and strategy validation: use run_backtest(symbol, days), run_full_backtest(), get_backtest_results(), compare_to_buyhold(symbol). Backtest reports are exceptions to the 1-2 sentence rule.
-- When Mo says "backtest SPY" or "test the strategy" -> run_backtest(symbol).
-- When Mo says "backtest all symbols" or "full backtest" -> run_full_backtest().
-- When Mo says "backtest results" or "how did the strategy do?" -> get_backtest_results().
-- When Mo says "compare to buy and hold [TICKER]" -> compare_to_buyhold(symbol).
 Autonomous tasks (El Fager executes on its own, proactively):
 Tools: add_autonomous_task, list_autonomous_tasks, delete_autonomous_task.
 Use when Mo delegates future work: "research X tonight", "check NVDA RSI every morning", "do X for me later", "queue: X", "El Fager, tonight please X".
@@ -410,7 +284,8 @@ When Mo's request matches a skill name or trigger phrase (e.g. "focus time", "go
 When Mo says "what skills do you have" -> list_skills. "forget that skill" -> delete_skill.
 Automation flow (propose, never impose): if run_skill's result asks you to offer scheduling, finish the skill, then ask Mo ONCE if he wants it automatic. If yes -> schedule_skill(name, every_hours, at_time="HH:MM"). "stop doing X automatically" -> unschedule_skill.
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
-Skills must NEVER contain live-trading confirmation steps -- learn_skill enforces this.
+"import my routines" / "turn my tasks into skills" / "automate my week" -> import_routines (creates + schedules skills from calendar and gym program).
+"sync my skills" (make skills available in Claude Code) -> sync_skills_to_claude. Also offer this after importing routines.
 API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
 Missions (multi-step background goals):
 Tools: start_mission, mission_status, cancel_mission.
@@ -419,7 +294,7 @@ When Mo gives a BIG multi-part goal that cannot finish in one reply ("research X
 Do NOT use a mission for anything you can finish now in one tool loop -- just do it. Do NOT use for simple recurring reminders (autonomous tasks) or saved routines (skills).
 Phone notifications (El Fager pushes alerts to Mo's WhatsApp via CallMeBot):
 Tools: send_notification, notification_status.
-El Fager automatically sends WhatsApp alerts for: stock trade executions, price alerts triggered, autonomous task completions, and critical battery.
+El Fager automatically sends WhatsApp alerts for: autonomous task completions and critical battery.
 When Mo says "send my phone a message", "ping me on WhatsApp", "send me a WhatsApp", "notify my phone about X" -> send_notification(message).
 When Mo asks "is WhatsApp set up?", "how do I set up phone notifications?", "notification status" -> notification_status.
 Setup: TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_FROM + WHATSAPP_PHONE in .env.
@@ -506,10 +381,6 @@ TOOLS: list[dict[str, Any]] = [
                 "command": {
                     "type": "string",
                     "description": "PowerShell command to execute"
-                },
-                "safe_mode": {
-                    "type": "boolean",
-                    "description": "Block destructive commands (del, rm, format, shutdown...). Default true."
                 }
             },
             "required": ["command"]
@@ -1047,6 +918,256 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "search_vault",
+        "description": "Search Mo's local Obsidian vault for notes matching a query. Matches note titles and contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term to find notes"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default: 5"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "read_note",
+        "description": "Read the full text of an Obsidian note. Accepts a note title, a vault-relative path, or a [[wikilink]].",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path (e.g. 'Uni/CS/Lecture 1'), or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "create_note",
+        "description": "Create a new note in the Obsidian vault. Content is Markdown and may use [[wikilinks]] and #tags.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Note title (becomes the filename)"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Optional Markdown body"
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "Optional vault-relative folder, e.g. 'Uni/CS'. Created if missing. Defaults to vault root."
+                }
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "append_to_note",
+        "description": "Append a line of Markdown to the end of an Obsidian note. Creates the note if it doesn't exist.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Markdown text to append as a new line"
+                }
+            },
+            "required": ["name", "text"]
+        }
+    },
+    {
+        "name": "append_to_daily_note",
+        "description": "Append a timestamped bullet to today's Obsidian daily note. Use for quick capture when Mo doesn't name a specific note.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to capture in today's note"
+                }
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "list_notes",
+        "description": "List Obsidian notes, most recently modified first. Optionally scoped to a folder.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "folder": {
+                    "type": "string",
+                    "description": "Optional vault-relative folder to list. Defaults to the whole vault."
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum notes to list. Default: 30"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "ask_vault",
+        "description": "Meaning-based search of Mo's Obsidian vault. Finds relevant notes even when they never use the query's exact words. Use this for 'what did I write/think about X'; use search_vault only for exact strings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "What to look for, in natural language"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum passages to return. Default: 5"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "index_vault",
+        "description": "Refresh the vault's semantic index. Runs automatically before ask_vault, so only call it when Mo asks to reindex or wants index status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rebuild": {
+                    "type": "boolean",
+                    "description": "Discard and rebuild the whole index instead of syncing changes. Default: false"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "delete_note",
+        "description": "Move an Obsidian note to the vault's .trash folder. Recoverable, not erased. Confirm with Mo first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "rename_note",
+        "description": "Rename an Obsidian note and repoint every [[wikilink]] in the vault to the new title.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Current note title, vault path, or wikilink"
+                },
+                "new_title": {
+                    "type": "string",
+                    "description": "New title (without the .md extension)"
+                }
+            },
+            "required": ["name", "new_title"]
+        }
+    },
+    {
+        "name": "move_note",
+        "description": "Move an Obsidian note into another folder, creating the folder if needed. Wikilinks are name-based and survive the move.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "Destination vault-relative folder, e.g. 'Uni/CS'"
+                }
+            },
+            "required": ["name", "folder"]
+        }
+    },
+    {
+        "name": "get_backlinks",
+        "description": "List the Obsidian notes that link to a given note.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results. Default: 20"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "get_outgoing_links",
+        "description": "List the notes a given Obsidian note links to, flagging links that have no note yet.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Note title, vault path, or wikilink"
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "list_vault_tags",
+        "description": "List every tag used in the Obsidian vault with how many notes carry it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum tags to list. Default: 40"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "search_vault_by_tag",
+        "description": "List Obsidian notes carrying a tag, in frontmatter or body. Nested tags (#math/calculus) match their parent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tag": {
+                    "type": "string",
+                    "description": "Tag name, with or without the leading #"
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Maximum results. Default: 20"
+                }
+            },
+            "required": ["tag"]
+        }
+    },
+    {
         "name": "list_tasks",
         "description": "List Mo's Todoist tasks. Filter examples: 'today', 'overdue', 'p1' (urgent), '#ProjectName', 'no date'.",
         "input_schema": {
@@ -1276,74 +1397,13 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "youtube_search",
-        "description": (
-            "Search YouTube for a video by name and open the top result in Comet. "
-            "Use when Mo says 'play X on youtube', 'find the video X', "
-            "'search youtube for X', or names a song/clip he wants to watch."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "What to search YouTube for"}
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "youtube_latest",
-        "description": (
-            "Open the newest video from a YouTube channel in Comet. Use when Mo "
-            "asks for the latest/newest video from a channel, or 'what did X post'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string",
-                    "description": "Channel handle (@name), display name, URL, or UC... channel ID",
-                }
-            },
-            "required": ["channel"]
-        }
-    },
-    {
-        "name": "open_web_search",
-        "description": (
-            "Open a web search for a task in Comet so Mo can read the results "
-            "himself. Use when he says 'search the web/internet for X', 'look X "
-            "up', or 'google X' — i.e. he wants the browser, not a spoken answer. "
-            "Use web_search instead when he wants YOU to read the web and answer."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {"type": "string", "description": "What to search for"}
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "open_comet",
-        "description": (
-            "Open the Comet browser, optionally at a URL. Use for 'open the "
-            "browser', 'open comet', or 'open <site>'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Optional URL to open"}
-            }
-        }
-    },
-    {
         "name": "get_youtube_transcript",
         "description": "Fetch the transcript/captions of a YouTube video so Claude can summarise, explain, or answer questions about it.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url":      {"type": "string", "description": "Full YouTube URL or bare video ID"},
-                "language": {"type": "string", "description": "Preferred language code, e.g. 'en' or 'ar'. Auto-detects if omitted."}
+                "language": {"type": "string", "description": "Preferred transcript language code. Default: 'en'."}
             },
             "required": ["url"]
         }
@@ -1412,7 +1472,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "text":            {"type": "string", "description": "Text to translate"},
-                "target_language": {"type": "string", "description": "Target language name or code (e.g. 'French', 'fr', 'Arabic', 'ar')"},
+                "target_language": {"type": "string", "description": "Target language name or code (e.g. 'French', 'fr', 'Spanish', 'es')"},
                 "source_language": {"type": "string", "description": "Source language or 'auto'. Default: auto"}
             },
             "required": ["text", "target_language"]
@@ -1425,7 +1485,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "query":    {"type": "string", "description": "Person or topic to look up"},
-                "language": {"type": "string", "description": "'en', 'ar', or 'auto' (default). Auto picks based on query language."}
+                "language": {"type": "string", "description": "Wikipedia edition to search. Default: 'en'."}
             },
             "required": ["query"]
         }
@@ -1588,11 +1648,11 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "get_news",
-        "description": "Fetch top headlines from an RSS feed. Categories: world, arabic, tech, science, egypt, business, sports.",
+        "description": "Fetch top headlines from an RSS feed. Categories: world, tech, science, egypt, business, sports.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "category": {"type": "string", "description": "Feed category: world | arabic | tech | science | egypt | business | sports. Default: world"},
+                "category": {"type": "string", "description": "Feed category: world | tech | science | egypt | business | sports. Default: world"},
                 "n": {"type": "integer", "description": "Number of headlines. Default: 5"}
             }
         }
@@ -2297,224 +2357,6 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "get_stock_price",
-        "description": "Current price and day change for a stock or ETF. symbol examples: AAPL, TSLA, AMZN, COMI.CA (EGX), GC=F (gold), BTC-USD.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol, e.g. AAPL, TSLA, COMI.CA, BTC-USD"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_stock_info",
-        "description": "Detailed stock info: price, day change, 52-week range, P/E ratio, market cap, volume.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "market_overview",
-        "description": "Live snapshot of major market indices: S&P 500, NASDAQ, Dow Jones, EGX30, Gold, Oil, Bitcoin, USD/EGP rate.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "get_stock_news",
-        "description": "Recent news headlines for a specific stock or company.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "add_to_watchlist",
-        "description": "Add a stock to Mo's watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"},
-                "notes":  {"type": "string", "description": "Optional note (e.g. 'watching for breakout')"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "remove_from_watchlist",
-        "description": "Remove a stock from the watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "list_watchlist",
-        "description": "Show Mo's watchlist with live current prices.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "add_holding",
-        "description": "Add or update a stock position in Mo's portfolio. Records shares owned and average buy price.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol":    {"type": "string", "description": "Ticker symbol"},
-                "shares":    {"type": "number", "description": "Number of shares owned"},
-                "avg_price": {"type": "number", "description": "Average buy price per share"},
-                "currency":  {"type": "string", "description": "Currency, e.g. USD, EGP. Default: USD"}
-            },
-            "required": ["symbol", "shares", "avg_price"]
-        }
-    },
-    {
-        "name": "remove_holding",
-        "description": "Remove a position from Mo's portfolio (sold all shares).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "portfolio_summary",
-        "description": "Show Mo's entire stock portfolio with live prices, current value, and unrealised P&L per position.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "set_price_alert",
-        "description": "Set a price alert — notify Mo when a stock goes above or below a target price.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol":       {"type": "string", "description": "Ticker symbol"},
-                "target_price": {"type": "number", "description": "Target price threshold"},
-                "condition":    {"type": "string", "description": "'above' or 'below'. Default: above"}
-            },
-            "required": ["symbol", "target_price"]
-        }
-    },
-    {
-        "name": "list_price_alerts",
-        "description": "List all active price alerts with current prices.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "delete_price_alert",
-        "description": "Delete a price alert for a symbol.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_price_history",
-        "description": "Historical price performance for a stock over a period. Returns total return %, period high/low, current price, annualised volatility. Use for 'how has X done this year?', 'AAPL performance 5y', 'YTD return NVDA'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"},
-                "period": {"type": "string", "description": "1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max. Default: 1y"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_financials",
-        "description": "Key financial metrics: revenue, revenue growth, gross/operating/net margin, EPS (trailing & forward), EPS growth, ROE, ROA, debt/equity, current ratio, free cash flow. Use for deep fundamental analysis.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_earnings",
-        "description": "Earnings data: next earnings date, trailing P/E, forward P/E, PEG ratio, EPS estimates vs actuals, beat/miss history. Use when Mo asks 'when does X report?', 'what's the EPS?', 'does X beat estimates?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_analyst_ratings",
-        "description": "Analyst consensus: buy/hold/sell recommendation, mean score, number of analysts, average/median/range price targets, recent upgrades and downgrades. Use for 'what do analysts think of X?', 'what's the price target for TSLA?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "get_dividends",
-        "description": "Dividend info: yield, annual rate, ex-dividend date, payout ratio, recent dividend payment history. Use when Mo asks about income investing, dividend stocks, 'does X pay dividends?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "compare_stocks",
-        "description": "Side-by-side comparison of two stocks: price, day change, P/E (trailing & forward), market cap, net margin, ROE, debt/equity, dividend yield, 52-week range. Use for 'AAPL vs MSFT', 'which is better NVDA or AMD?'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol1": {"type": "string", "description": "First ticker"},
-                "symbol2": {"type": "string", "description": "Second ticker"}
-            },
-            "required": ["symbol1", "symbol2"]
-        }
-    },
-    {
-        "name": "sector_performance",
-        "description": "US market sector performance today using sector ETFs (XLK tech, XLF financials, XLV healthcare, XLE energy, etc.). Shows which sectors are leading and lagging. Use for 'how are sectors doing?', 'which sector is up today?', 'sector rotation'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
         "name": "cash_flow_summary",
         "description": "Cash flow: total income minus total expenses for a period. Shows net surplus or deficit and savings rate.",
         "input_schema": {
@@ -2549,8 +2391,69 @@ TOOLS: list[dict[str, Any]] = [
     },
     # ── Spotify Tools ──────────────────────────────────────────────────────────
     {
+        "name": "youtube_search",
+        "description": (
+            "Search YouTube for a video by name and open the top result in Comet. "
+            "Use when Mo says 'play X on youtube', 'find the video X', "
+            "'search youtube for X', or names a song/clip he wants to watch."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to search YouTube for"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "youtube_latest",
+        "description": (
+            "Open the newest video from a YouTube channel in Comet. Use when Mo "
+            "asks for the latest/newest video from a channel, or 'what did X post'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string",
+                    "description": "Channel handle (@name), display name, URL, or UC... channel ID",
+                }
+            },
+            "required": ["channel"]
+        }
+    },
+    {
+        "name": "open_web_search",
+        "description": (
+            "Open a web search for a task in Comet so Mo can read the results "
+            "himself. Use when he says 'search the web/internet for X', 'look X "
+            "up', or 'google X' — i.e. he wants the browser, not a spoken answer. "
+            "Use web_search instead when he wants YOU to read the web and answer."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "What to search for"}
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "open_comet",
+        "description": (
+            "Open the Comet browser, optionally at a URL. Use for 'open the "
+            "browser', 'open comet', or 'open <site>'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Optional URL to open"}
+            }
+        }
+    },
+    {
         "name": "play_music",
-        "description": "Search and play a song, artist, album, or playlist on Spotify. Detects mood keywords (chill, focus, workout, sad, happy, arabic, sleep) and picks a matching playlist.",
+        "description": "Search and play a song, artist, album, or playlist on Spotify. Detects mood keywords (chill, focus, workout, sad, happy, sleep) and picks a matching playlist.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -3547,17 +3450,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["selector", "value"]
         }
     },
-    # ── Bond Tools ────────────────────────────────────────────────────────────
-    {
-        "name": "get_bond_yields",
-        "description": "Fetch live US Treasury yield curve (3M/2Y/5Y/10Y/30Y) plus major sovereign 10Y yields (Germany, UK, Japan, France). Shows 2s10s spread and inversion signals.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_yield_curve",
-        "description": "US yield curve shape with ASCII bar chart, key spreads (3M vs 10Y, 2Y vs 10Y, 5Y vs 30Y), and inversion analysis with recession signal interpretation.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
     # ── Business Calculator Tools ─────────────────────────────────────────────
     {
         "name": "startup_metrics",
@@ -4287,126 +4179,6 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["text"]
         }
     },
-    # ── Trading Engine ────────────────────────────────────────────────────────
-    {
-        "name": "start_trading_engine",
-        "description": "Start the autonomous trading engine background loop. Monitors the active watchlist every 15 minutes and places bracket orders when signals fire. Paper mode by default.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "stop_trading_engine",
-        "description": "Stop the trading engine loop. Open positions remain with their bracket orders active on Alpaca's servers.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trading_status",
-        "description": "Return trading engine state: running/stopped, paper/live mode, active watchlist, last trade timestamp.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trading_portfolio",
-        "description": "Fetch live positions from Alpaca: symbol, qty, entry price, current P&L for each open position plus total portfolio value.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "get_trade_history",
-        "description": "Return the last N executed trades with timestamp, symbol, side, qty, price, and signal type.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "n": {"type": "integer", "description": "Number of trades to return. Default 20."}
-            }
-        }
-    },
-    {
-        "name": "get_trading_summary",
-        "description": "Return total trades, today's trades, and current portfolio value — a one-page trading dashboard.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "set_risk_params",
-        "description": "Update one or more risk parameters. All params are optional — only provided ones are changed.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "max_position_pct": {"type": "number", "description": "Max % of portfolio per trade. Default 10."},
-                "stop_loss_pct": {"type": "number", "description": "Auto-sell if position drops this %. Default 8."},
-                "take_profit_pct": {"type": "number", "description": "Auto-sell if position gains this %. Default 15."},
-                "daily_loss_limit_pct": {"type": "number", "description": "Stop trading if portfolio drops this % in a day. Default 5."},
-                "max_open_positions": {"type": "integer", "description": "Maximum simultaneous open positions. Default 5."}
-            }
-        }
-    },
-    {
-        "name": "switch_to_paper_mode",
-        "description": "Route all orders to Alpaca paper trading sandbox (fake money, real market data). Safe to call anytime.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
-    },
-    {
-        "name": "switch_to_live_mode",
-        "description": "Switch to real-money trading. Requires confirmed=True — only set that after Mo explicitly says 'confirm live trading' following the warning.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "confirmed": {"type": "boolean", "description": "Must be true. Only set after Mo explicitly confirms."}
-            }
-        }
-    },
-    {
-        "name": "add_trading_symbol",
-        "description": "Add a ticker symbol to the active trading watchlist (e.g. 'TSLA', 'AMZN').",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol, e.g. 'TSLA'"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "remove_trading_symbol",
-        "description": "Remove a ticker symbol from the active trading watchlist.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker symbol to remove"}
-            },
-            "required": ["symbol"]
-        }
-    },
-    {
-        "name": "run_backtest",
-        "description": "Backtest the trading strategy on 2 years of hourly historical data for one symbol. Returns total return, win rate, avg gain/loss, max drawdown, Sharpe ratio vs buy-and-hold.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Stock ticker (e.g. 'SPY', 'AAPL'). Default 'SPY'."},
-                "days": {"type": "integer", "description": "Days of history to test. Default 730 (2 years)."},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "run_full_backtest",
-        "description": "Backtest the strategy across all 5 active watchlist symbols and report combined results.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name": "get_backtest_results",
-        "description": "Return the last saved backtest results for all symbols that have been tested.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name": "compare_to_buyhold",
-        "description": "Compare strategy return vs simply buying and holding a symbol. Shows whether active trading adds value.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "symbol": {"type": "string", "description": "Ticker to compare (e.g. 'AAPL')."},
-            },
-            "required": ["symbol"],
-        },
-    },
     {
         "name": "add_autonomous_task",
         "description": "Queue a task for El Fager to execute autonomously in the background. Use when Mo delegates work: 'research X tonight', 'check NVDA RSI every day', 'do X for me later'.",
@@ -4469,122 +4241,66 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Check if phone notifications are configured and working. Returns setup instructions if not configured.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # The six specialist agents are declared once in core/agents/registry.py --
+    # callsign, role, timeout and schema all live there, so adding an agent
+    # means adding one AgentSpec rather than editing this list.
+    *_registry.tool_schemas(),
     {
-        "name": "screen_agent",
+        "name": "delegate",
         "description": (
-            "Multi-step desktop control agent -- sees the screen and performs a sequence of "
-            "clicks, typing, and keyboard shortcuts to complete a task (up to 10 internal steps). "
-            "Use for: clicking buttons/links, dragging files, scrolling, multi-step UI automation "
-            "('open and then...', 'automate the...', 'control the app'). Do NOT use for a single "
-            "one-shot description of the screen -- use analyze_screen for that."
+            "Assign a task to one named agent and VERIFY it was actually done. Use when Mo "
+            "names an agent ('have Sage research X', 'get Scribe to read this contract'), or "
+            "when a task matters enough that you want it checked rather than assumed. Warden "
+            "inspects the result against the acceptance criteria; a failure is retried once "
+            "and then reported back to you. Prefer this over calling the agent tool directly "
+            "whenever the work must be confirmed complete."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "agent": {
+                    "type": "string",
+                    "description": "Agent callsign (Argus, Nomad, Midas, Sage, Scribe, Vitals) or tool name."
+                },
                 "task": {
                     "type": "string",
-                    "description": "The user's desktop-control request, verbatim or lightly cleaned up."
-                }
+                    "description": "What the agent must do, stated as a complete instruction."
+                },
+                "acceptance": {
+                    "type": "string",
+                    "description": "What a finished result must contain, e.g. 'at least 3 brokers with fee numbers'. Optional."
+                },
             },
-            "required": ["task"]
+            "required": ["agent", "task"]
         }
     },
     {
-        "name": "browser_agent",
+        "name": "agent_roster",
         "description": (
-            "Multi-step browser automation agent -- navigates websites, fills forms, logs in, and "
-            "completes multi-step web tasks. Use for: 'book a table/flight', 'log into', "
-            "'fill out the form', 'search on amazon/google', or any task naming a specific website "
-            "or '.com/.org/.net'. Do NOT use for one-off single actions when a simpler browser_* "
-            "instant tool suffices."
+            "List the agents you command, what each one does, and which are working right now. "
+            "Use for: 'who are your agents', 'what are your agents doing', 'what is Sage doing'."
         ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's web-automation request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
-        "name": "stocks_agent",
+        "name": "agent_report",
         "description": (
-            "Deep market analysis and conviction-gated autonomous trading agent. Use for: "
-            "'analyze NVDA', 'should I buy/sell X', 'your thesis/opinion/view on X', "
-            "'conviction on X', 'scan my watchlist', 'why did you buy/sell X', 'my trading stats', "
-            "'pause/resume trading', 'set auto-trade threshold to N'. Do NOT use for simple price "
-            "lookups -- those are instant-lane tools."
+            "What your agents did and how much of it passed Warden's inspection. Use for: "
+            "'what did your agents do today', 'what did Sage do', 'did anything fail'."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "task": {
+                "agent": {
                     "type": "string",
-                    "description": "The user's stock-analysis or trading-control request."
-                }
+                    "description": "Callsign to report on. Omit for the whole roster."
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "How many days back to look. Default 1."
+                },
             },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "research_agent",
-        "description": (
-            "Deep multi-source web research agent -- searches, reads multiple pages, and "
-            "synthesizes a single coherent answer. Use for: 'research everything about X', "
-            "'tell me everything about X', 'investigate X', 'comprehensive analysis of X', "
-            "'compare and contrast X and Y', 'summarize the news about X'. Do NOT use for quick "
-            "factual lookups -- use wikipedia_lookup or web_search for those."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The research question or topic, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "file_agent",
-        "description": (
-            "Document intelligence agent -- reads and answers questions about PDFs, Word docs, "
-            "spreadsheets, and images. Use for: 'summarize this pdf/document/contract/invoice/"
-            "thesis/report', 'what does this file say', 'extract from this', 'what were the "
-            "payment terms'. Pass the file reference and the question together in the task string."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The file reference and question together, e.g. 'summarize my_contract.pdf'."
-                }
-            },
-            "required": ["task"]
-        }
-    },
-    {
-        "name": "health_agent",
-        "description": (
-            "Nutrition and gym tracking agent -- logs meals, calculates macros/TDEE, generates "
-            "workout programs and recipes. Use for: 'I just ate X', 'log my meal', 'calories "
-            "today', 'my macros', 'recipe for X', 'chest day', 'finished my workout', 'generate a "
-            "training program', 'what should I do today at the gym'."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The user's nutrition or workout request, verbatim or lightly cleaned up."
-                }
-            },
-            "required": ["task"]
+            "required": []
         }
     },
     {
@@ -4676,6 +4392,24 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "import_routines",
+        "description": (
+            "Scan Mo's calendar (recurring events, next 2 weeks) and gym program, turn each "
+            "recurring commitment into a skill, and schedule it automatically. Use when Mo says "
+            "'import my routines', 'turn my tasks into skills', or 'automate my week'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "sync_skills_to_claude",
+        "description": (
+            "Export all learned skills as Claude Code skills (.claude/skills/fager-*) so the "
+            "same routines are runnable from Claude Code. Use when Mo says 'sync my skills' "
+            "or after importing/learning several skills."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
         "name": "start_mission",
         "description": (
             "Start a multi-step background mission. Use when Mo gives a BIG "
@@ -4743,9 +4477,7 @@ _SLIM_TOOLS = _slim_tools(TOOLS)
 # ── Dynamic tool injection ────────────────────────────────────────────────────
 # Only the tool names that are always included regardless of query topic.
 _CORE_NAMES: frozenset[str] = frozenset({
-    "web_search", "fetch_page", "open_web_search", "open_comet",
-    "youtube_search", "youtube_latest",
-    "translate_text", "wikipedia_lookup",
+    "web_search", "fetch_page", "translate_text", "wikipedia_lookup",
     "convert_currency", "get_exchange_rates", "resolve_doi",
     "get_weather", "get_weather_forecast", "get_hourly_weather",
     "get_news", "get_all_headlines", "search_news", "read_news_article",
@@ -4754,8 +4486,8 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "set_reminder", "list_reminders", "cancel_reminder",
     "get_battery_status", "get_clipboard_history",
     "analyze_screen", "ocr_screenshot",
-    "screen_agent", "browser_agent", "stocks_agent",
-    "research_agent", "file_agent", "health_agent",
+    *_registry.tool_names(),
+    "delegate", "agent_roster", "agent_report",
     "run_skill", "list_skills", "learn_skill",
 })
 
@@ -4794,7 +4526,8 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "browser_back", "browser_get_links", "browser_select",
     }),
     "media": frozenset({
-        "play_music", "pause_music", "next_track", "what_playing", "set_volume", "spotify_status",
+        "youtube_search", "youtube_latest", "open_web_search", "open_comet",
+    "play_music", "pause_music", "next_track", "what_playing", "set_volume", "spotify_status",
     }),
     "system": frozenset({
         "set_system_volume", "get_system_volume", "mute_system", "set_brightness",
@@ -4811,6 +4544,13 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "read_doc", "append_to_doc", "read_sheet", "append_sheet_row",
         "list_repos", "list_issues", "list_prs", "get_repo_info",
         "get_youtube_transcript",
+    }),
+    "obsidian": frozenset({
+        "search_vault", "ask_vault", "read_note", "list_notes",
+        "create_note", "append_to_note", "append_to_daily_note",
+        "delete_note", "rename_note", "move_note",
+        "get_backlinks", "get_outgoing_links", "list_vault_tags",
+        "search_vault_by_tag", "index_vault",
     }),
     "image": frozenset({
         "generate_image", "generate_variation", "list_generated_images", "open_image",
@@ -4830,14 +4570,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "daily_activity", "streak_stats",
         "cash_flow_summary", "revenue_insights", "profit_loss_report",
     }),
-    "stocks": frozenset({
-        "get_stock_price", "get_stock_info", "market_overview", "get_stock_news",
-        "add_to_watchlist", "remove_from_watchlist", "list_watchlist",
-        "add_holding", "remove_holding", "portfolio_summary",
-        "set_price_alert", "list_price_alerts", "delete_price_alert",
-        "get_price_history", "get_financials", "get_earnings",
-        "get_analyst_ratings", "get_dividends", "compare_stocks", "sector_performance",
-    }),
     "finance": frozenset({
         "log_income", "get_income_summary", "list_recent_income",
         "create_invoice", "send_invoice", "mark_invoice_paid",
@@ -4845,9 +4577,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "set_budget", "list_budgets", "delete_budget",
         "set_savings_goal", "update_savings_progress", "list_savings_goals", "delete_savings_goal",
         "cash_flow_summary", "revenue_insights", "profit_loss_report",
-    }),
-    "bonds": frozenset({
-        "get_bond_yields", "get_yield_curve",
     }),
     "bizmath": frozenset({
         "startup_metrics", "burn_runway", "break_even", "margin_analysis",
@@ -4903,15 +4632,6 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "url_encode", "url_decode",
         "generate_password", "generate_uuid", "generate_qr",
     }),
-    "trading": frozenset({
-        "start_trading_engine", "stop_trading_engine", "get_trading_status",
-        "get_trading_portfolio", "get_trade_history", "get_trading_summary",
-        "set_risk_params", "switch_to_paper_mode", "switch_to_live_mode",
-        "add_trading_symbol", "remove_trading_symbol",
-    }),
-    "backtest": frozenset({
-        "run_backtest", "run_full_backtest", "get_backtest_results", "compare_to_buyhold",
-    }),
     "autonomous_tasks": frozenset({
         "add_autonomous_task", "list_autonomous_tasks", "delete_autonomous_task",
     }),
@@ -4921,7 +4641,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "skills": frozenset({
         "learn_skill", "list_skills", "run_skill", "delete_skill",
         "schedule_skill", "unschedule_skill", "skill_proposals",
-        "dismiss_skill_proposal",
+        "dismiss_skill_proposal", "import_routines", "sync_skills_to_claude",
     }),
     "usage": frozenset({"usage_report"}),
     "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
@@ -4931,55 +4651,45 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "files":       ["open file", "read file", "find file", "search file", "open app",
                     "open application", "run command", "folder", "directory", ".exe",
                     "create folder", "make folder", "new folder", "rename", "copy file",
-                    "move file", "delete file", "list folder", "what's in", "show me the files",
-                    "انشئ مجلد", "احذف الملف", "انقل الملف"],
+                    "move file", "delete file", "list folder", "what's in", "show me the files"],
     "clipboard":   ["clipboard", "what did i copy", "paste", "copied"],
     "productivity":["calendar", "event", "meeting", "email", "mail", "inbox", "task",
                     "todo", "pomodoro", "focus mode", "flashcard", "appointment",
                     "schedule meeting", "unread", "compose", "template",
                     "block distractions", "study mode"],
-    "mouse":       ["click", "type", "press", "drag", "scroll", "move mouse", "right click", "double click", "keyboard", "hotkey", "ctrl+", "اضغط", "اكتب", "اسكرول"],
-    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open", "التطبيق", "نافذة", "برنامج"],
-    "browser":     ["browser", "open chrome", "navigate to", "go to website", "fill form", "click the button", "log in to", "scrape", "automate", "web page", "website", "افتح الموقع", "متصفح"],
+    "mouse":       ["click", "type", "press", "drag", "scroll", "move mouse", "right click", "double click", "keyboard", "hotkey", "ctrl+"],
+    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open"],
+    "browser":     ["browser", "open chrome", "navigate to", "go to website", "fill form", "click the button", "log in to", "scrape", "automate", "web page", "website"],
     "media":       ["play", "music", "song", "pause music", "skip", "next track", "spotify",
-                    "what's playing", "volume up", "volume down", "موسيقى", "اغنية"],
+                    "what's playing", "volume up", "volume down"],
     "system":      ["volume", "brightness", "mute", "battery", "process", "cpu",
                     "ram", "memory usage", "kill process", "task manager"],
     "messaging":   ["whatsapp", "telegram", "send to", "text to", "message to",
-                    "wa ", "واتساب", "تليجرام"],
+                    "wa "],
     "cloud":       ["notion", "drive", "github", "repo", "repository", "google doc",
                     "spreadsheet", "sheet", "upload to", "issue", "pull request", "youtube",
                     "transcript", "summarise video", "summarize video"],
+    "obsidian":    ["obsidian", "vault", "my notes", "note that", "take a note",
+                    "make a note", "new note", "daily note", "wikilink", "backlink",
+                    "what did i write", "note it down", "add to my note", "in my note",
+                    "what did i think about", "what do my notes", "linked to",
+                    "links to", "rename note", "delete note", "move note",
+                    "tagged", "my tags", "reindex", "note about"],
     "image":       ["image", "picture", "photo", "generate", "draw", "wallpaper",
-                    "illustration", "صورة", "ارسم"],
+                    "illustration"],
     "journal":     ["journal", "diary", "mood", "expense", "spent", "spend", "spending",
                     "analytics", "weekly report", "weekly summary", "history", "conversation",
                     "what did we", "what did i do", "talked about", "insight", "trend",
                     "yesterday", "what happened", "daily activity", "recap", "streak",
                     "consistency", "how consistent",
-                    "income", "revenue", "invoice", "savings", "cash flow", "profit",
-                    "يوميات", "مصاريف", "مزاج"],
-    "stocks":      ["stock", "stocks", "share", "shares", "market", "ticker",
-                    "price of", "nasdaq", "s&p", "dow jones", "egx", "egx30",
-                    "portfolio", "watchlist", "holding", "position",
-                    "buy price", "sell price", "p/e", "market cap",
-                    "gold price", "oil price", "bitcoin", "btc", "crypto",
-                    "price alert", "stock news", "aapl", "tsla", "amzn", "nvda",
-                    "earnings", "dividend", "analyst", "price target", "sector",
-                    "financials", "margin", "roe", "eps", "p/e ratio",
-                    "performance", "return", "compare stock", "vs stock",
-                    "should i buy", "should i sell", "invest in", "is it a good buy",
-                    "بورصة", "اسهم", "سهم", "بتكوين", "ذهب", "توزيعات", "عائد"],
+                    "income", "revenue", "invoice", "savings", "cash flow", "profit"],
     "finance":     ["invoice", "invoices", "client", "bill ", "billing",
                     "income", "earned", "got paid", "payment received",
                     "cash flow", "profit", "loss", "p&l",
                     "budget", "over budget", "savings", "savings goal", "save up",
                     "financial report", "how much did i make", "how much i made",
                     "log income", "received payment",
-                    "فاتورة", "ايراد", "دخل", "ميزانية", "مدخرات"],
-    "bonds":       ["bond", "bonds", "treasury", "yield", "yield curve", "interest rate",
-                    "10 year", "10y", "2s10s", "bund", "gilts", "sovereign", "fixed income",
-                    "t-bill", "t-bond", "سندات", "عائد السندات"],
+                    ],
     "bizmath":     ["startup", "saas", "mrr", "arr", "ltv", "cac", "churn", "burn rate",
                     "runway", "break even", "break-even", "margin analysis",
                     "roi", "return on investment", "dcf", "valuation", "multiple",
@@ -4997,51 +4707,37 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "system_health": ["disk space", "how much ram", "cpu usage", "system health", "cpu percent",
                       "is my laptop ok", "how's my pc", "what's using memory", "uptime",
                       "top processes", "what's eating", "memory usage", "system status",
-                      "جهاز", "ذاكرة", "مساحة", "معالج"],
+                      ],
     "network":     ["internet", "wifi", "wi-fi", "connection", "ping", "network", "speed test",
-                    "ip address", "connected", "my ip", "public ip", "local ip",
-                    "انترنت", "واي فاي", "اتصال"],
+                    "ip address", "connected", "my ip", "public ip", "local ip"],
     "pdf":         ["pdf", "merge pdf", "compress pdf", "create pdf", "split pdf",
                     "pdf pages", "PDF", "extract pages", "combine pdf", "pdf info",
-                    "pdf text", "بي دي اف"],
+                    "pdf text"],
     "capture":     ["record screen", "screen record", "record my screen", "start recording",
                     "stop recording", "capture video", "screen video", "recording",
-                    "snapshot", "سجل الشاشة", "تسجيل"],
-    "printer":     ["print", "printer", "printing", "print this", "print file",
-                    "اطبع", "طباعة", "طابعة"],
+                    "snapshot"],
+    "printer":     ["print", "printer", "printing", "print this", "print file"],
     "archive":     ["zip", "unzip", "archive", "compress files", "extract", ".zip",
-                    "pack files", "bundle files", "zipped", "اضغط الملفات", "استخرج"],
+                    "pack files", "bundle files", "zipped"],
     "image_edit":  ["resize image", "crop image", "compress image", "convert image",
                     "rotate image", "make image smaller", "image to jpg", "image to png",
-                    "flip image", "shrink image", "scale image", "اعدل الصورة", "قص الصورة"],
+                    "flip image", "shrink image", "scale image"],
     "units":       ["convert", "how many", "how much is", "degrees celsius", "degrees fahrenheit",
                     "kilometers to miles", "kg to lbs", "lbs to kg", "meters to feet",
                     "temperature convert", "inches to", "gallons to", "megabytes to",
-                    "gigabytes to", "تحويل", "درجة حرارة"],
+                    "gigabytes to"],
     "git":         ["git status", "git commit", "git push", "git pull", "git log", "git diff",
                     "git add", "commit my changes", "push my code", "what changed in git",
                     "stage files", "local repo", "git repo", "version control"],
     "dev_utils":   ["hash", "md5", "sha256", "base64", "encode base64", "decode base64",
                     "url encode", "url decode", "generate password", "random password",
                     "strong password", "uuid", "qr code", "qr ", "generate qr"],
-    "trading":    ["start trading", "stop trading", "trading engine", "trading status",
-                   "trading portfolio", "trading history", "trade history", "recent trades",
-                   "trading summary", "trading p&l", "set stop-loss", "set take-profit",
-                   "set max position", "paper mode", "live trading", "confirm live",
-                   "trading watchlist", "add to trading", "remove from trading",
-                   "autonomous trading", "invest automatically", "auto invest",
-                   "engine running", "is it trading", "what did you trade",
-                   "استثمار تلقائي", "محرك التداول"],
-    "backtest":   ["backtest", "test strategy", "how is the strategy", "strategy performance",
-                   "did the strategy work", "historical performance", "backtest results",
-                   "strategy test", "how did the strategy do", "compare to buy and hold",
-                   "buy and hold", "اختبار الاستراتيجية"],
     "autonomous_tasks": [
         "queue", "add task for yourself", "do this for me", "do this later",
         "autonomous task", "background task", "my queued tasks", "what tasks do you have",
         "what tasks have you", "tasks queued", "cancel task", "remove task",
         "el fager do", "execute later", "run this later", "task queue",
-        "you do this", "do x for me", "tonight please", "مهمة تلقائية", "انجز هذا لاحقا",
+        "you do this", "do x for me", "tonight please",
     ],
     "notifications": [
         "send my phone", "ping me", "notify my phone", "send notification",
@@ -5054,7 +4750,7 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "skill", "skills", "learn this", "make it a skill", "save this as",
         "automate", "automation", "automatically", "routine", "schedule this",
         "every morning", "every day", "every night", "every week",
-        "stop doing", "suggestions", "proposal", "مهارة", "اتعلمها", "روتين",
+        "stop doing", "suggestions", "proposal",
     ],
     "usage": [
         "cost me", "you cost", "api usage", "api cost", "your cost",
@@ -5064,21 +4760,100 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "missions": [
         "mission", "missions", "big task", "multi-step", "step by step plan",
         "overnight", "work through", "plan and execute", "and then", "then write",
-        "مهمة كبيرة", "خطة",
     ],
 }
 
 # Build a name→slim_tool lookup once for O(1) filtering
 _SLIM_BY_NAME: dict[str, dict] = {t["name"]: t for t in _SLIM_TOOLS}
 
+# ── Skill permissions (Settings → Skills) ────────────────────────────────────
+# The six surfaces the user can switch off, and the tools each one owns. A
+# disabled skill's tools are never sent with the request, and a tool that
+# isn't in the request cannot be called — that is the whole gate.
+_ALL_TOOL_NAMES: frozenset[str] = frozenset(t["name"] for t in TOOLS)
 
-def _select_tools(message: str) -> list:
-    """Return a slimmed tool list relevant to the user's message."""
-    msg = message.lower()
+SKILL_TOOLS: dict[str, frozenset[str]] = {
+    # Template CRUD is local text, so it stays available with Gmail off.
+    "gmail": frozenset(
+        n for n in _ALL_TOOL_NAMES if "email" in n and "template" not in n
+    ),
+    "whatsapp": frozenset(n for n in _ALL_TOOL_NAMES if "whatsapp" in n),
+    "calendar": frozenset(n for n in _ALL_TOOL_NAMES if "calendar" in n),
+    "todoist": frozenset({"add_task", "complete_task", "delete_task", "list_tasks"}),
+    "browser": frozenset(n for n in _ALL_TOOL_NAMES if n.startswith("browser_")),
+    "screen": frozenset({
+        "analyze_screen", "ocr_screenshot", "screenshot_coords", "screen_agent",
+    }),
+}
+
+
+def _disabled_tool_names() -> set[str]:
+    """Tools belonging to skills switched off in Settings → Skills.
+
+    Read per request rather than cached, like core.sound.enabled(), so a
+    toggle takes hold on the very next turn instead of after a restart.
+    """
+    try:
+        with open("data/settings.json", encoding="utf-8") as f:
+            disabled = json.load(f).get("skills_disabled", [])
+    except Exception:
+        return set()
+    names: set[str] = set()
+    for skill in disabled:
+        names |= SKILL_TOOLS.get(skill, frozenset())
+    return names
+
+
+def _boundaried(phrases, trailing: bool = True):
+    """Compile phrases into one alternation that matches on word boundaries.
+
+    Plain substring matching was firing groups on fragments of unrelated
+    words: "roi" inside "android" pulled in the finance tools, "play" inside
+    "display" pulled in media, "ping" inside "sleeping" pulled in network.
+
+    The boundary assertions are added per edge, and only where the phrase's
+    own edge is a word character. Seven triggers begin or end on punctuation
+    or a space — "ctrl+", "wa ", ".exe", "code:", "bill ", "qr ", ".zip" — and
+    a blanket word boundary would stop every one of them ever matching again.
+
+    trailing=False is for stem hints like "analyz" and "summar", which are
+    meant to catch "analyze" and "summarise" and so must stay open-ended.
+    """
+    parts = []
+    for phrase in phrases:
+        if not phrase:
+            continue
+        pattern = re.escape(phrase)
+        if phrase[0].isalnum() or phrase[0] == "_":
+            pattern = r"(?<!\w)" + pattern
+        if trailing and (phrase[-1].isalnum() or phrase[-1] == "_"):
+            pattern = pattern + r"(?!\w)"
+        parts.append(pattern)
+    return re.compile("|".join(parts), re.IGNORECASE)
+
+
+# Compiled once at import. Rebuilding 32 alternations per turn would cost more
+# than the substring scan it replaces.
+_GROUP_RE = {group: _boundaried(keywords)
+             for group, keywords in _GROUP_TRIGGERS.items()}
+
+
+def _select_tools(message: str, history: list | None = None) -> list:
+    """Return a slimmed tool list relevant to the user's message. Recent user
+    turns from the conversation also count, so multi-turn follow-ups like
+    'and its P/E?' keep the tool groups the conversation already activated."""
+    parts = [message]
+    if history:
+        parts.extend(
+            m["content"] for m in history[-8:]
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        )
+    msg = " ".join(parts).lower()
     names: set[str] = set(_CORE_NAMES)
-    for group, keywords in _GROUP_TRIGGERS.items():
-        if any(kw in msg for kw in keywords):
+    for group, pattern in _GROUP_RE.items():
+        if pattern.search(msg):
             names.update(_TOOL_GROUP_NAMES[group])
+    names -= _disabled_tool_names()
     return [t for t in _SLIM_TOOLS if t["name"] in names]
 
 
@@ -5098,7 +4873,7 @@ def _write_live_config(config_path: str) -> str:
             pass
     cfg["mode"] = "live"
     p.parent.mkdir(exist_ok=True)
-    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic.write(p, json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     return (
         "LIVE TRADING ACTIVATED. El Fager will now trade with real money. "
         "Say 'pause trading' at any time to halt all autonomous trading."
@@ -5107,21 +4882,16 @@ def _write_live_config(config_path: str) -> str:
 
 _MAX_TOOL_ITERATIONS = 15
 
+_HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
 
-def _build_system(dynamic: str) -> list[dict]:
-    """System prompt as two blocks: the frozen ~10k-token SYSTEM_PROMPT carrying
-    a cache breakpoint (tools render before system, so the marker caches both),
-    then the per-turn facts/deadlines/memory context after it, which change too
-    often to cache. Every tool-loop iteration after the first reads the prefix
-    from cache instead of re-processing it."""
-    blocks: list[dict] = [{
-        "type": "text",
-        "text": SYSTEM_PROMPT,
-        "cache_control": {"type": "ephemeral"},
-    }]
-    if dynamic:
-        blocks.append({"type": "text", "text": dynamic})
-    return blocks
+
+def _window_history(hist: list) -> list:
+    """Last _HISTORY_WINDOW messages, trimmed so the slice never opens on an
+    assistant turn (the API requires the first message to be a user turn)."""
+    messages = list(hist)[-_HISTORY_WINDOW:]
+    while messages and messages[0]["role"] != "user":
+        messages = messages[1:]
+    return messages
 
 
 class Brain:
@@ -5131,19 +4901,71 @@ class Brain:
         self.memory = memory
         self.conversation_history: list[dict] = []
         self._offline_mode = False
+        self._live_pending: bool = False
+        self._live_pending_ts: float = 0.0
+        # Tool names selected so far this conversation. The Anthropic cache
+        # prefix runs tools -> system -> messages, so a changing tools array
+        # invalidates the whole cached prefix. Holding the set and only ever
+        # adding to it keeps the prefix stable across a conversation.
+        self._turn_tool_names: "set[str] | None" = None
         try:
             _sf = "data/settings.json"
             _s = json.loads(open(_sf, encoding="utf-8").read()) if os.path.exists(_sf) else {}
-            self._model: str = _s.get("model", "claude-sonnet-4-6")
+            self._model: str = _s.get("model", "claude-sonnet-5")
+            self._fast_model: str = _s.get("fast_model", "claude-haiku-4-5-20251001")
+            self._fast_path_enabled: bool = _s.get("fast_path_enabled", True)
         except Exception:
-            self._model = "claude-sonnet-4-6"
+            self._model = "claude-sonnet-5"
+            self._fast_model = "claude-haiku-4-5-20251001"
+            self._fast_path_enabled = True
         try:
             from core.conversation_log import ConversationLogger
             self._logger = ConversationLogger()
         except Exception:
             self._logger = None
-        self._live_pending: bool = False
-        self._live_pending_ts: float = 0.0
+
+    # Turns containing any of these route to the full model — they benefit from
+    # deeper reasoning. Everything short and simple goes to the fast model.
+    _COMPLEX_HINTS = (
+        "why", "how come", "explain", "analyz", "analys", "compare", "summar",
+        "research", "debug", "step by step", "pros and cons", "trade-off",
+        "tradeoff", "strateg", "refactor", "translate", "write a", "write me",
+        "essay", "brainstorm", "in detail",
+    )
+    # trailing=False: several of these are stems — "summar" has to reach
+    # "summarise", "analyz" has to reach "analyze".
+    _COMPLEX_RE = _boundaried(_COMPLEX_HINTS, trailing=False)
+
+    # Confirmation replies must reach the full model — they're expected to
+    # trigger a confirm_* tool call (send email/WhatsApp, delete event), and
+    # Haiku has proven unreliable at actually calling the tool instead of
+    # just replying conversationally (it hallucinated "draft expired" without
+    # ever calling confirm_whatsapp_send). These stay short, so the full
+    # model still returns fast for them.
+    _CONFIRM_HINTS = (
+        "yes", "yeah", "yep", "sure", "confirm", "go ahead", "do it",
+        "send it", "cancel", "no don't", "don't send",
+    )
+    # Whole words, both edges: "sure" inside "measure" and "yes" inside "eyes"
+    # were routing ordinary turns to the expensive model.
+    _CONFIRM_RE = _boundaried(_CONFIRM_HINTS)
+
+    def _select_model(self, user_message: str) -> str:
+        """Pick the model for this turn. Short, simple turns go to the fast
+        (Haiku) model for near-instant replies; longer, reasoning-heavy, or
+        confirmation turns use the full model. Toggle with fast_path_enabled
+        in settings.json. Chosen once per turn so the whole tool loop stays
+        on one model."""
+        if not self._fast_path_enabled:
+            return self._model
+        msg = (user_message or "").strip().lower()
+        if self._CONFIRM_RE.search(msg):
+            return self._model
+        if len(msg.split()) > 18:
+            return self._model
+        if self._COMPLEX_RE.search(msg):
+            return self._model
+        return self._fast_model
 
     _DISPATCH_RETRY_DELAYS = (1.0, 3.0)  # 2 retries with backoff on transient errors
 
@@ -5153,17 +4975,27 @@ class Brain:
         Non-transient errors are caught inside _dispatch_tool_once and
         returned as a normal "Tool error (...)" string without retrying.
         """
+        from core import progress
+
+        # Every tool call passes through here, so this is where the step
+        # ledger is written — the surfaces show what a turn is doing.
+        step = progress.step_started(name)
         last_exc: Exception | None = None
         for delay in self._DISPATCH_RETRY_DELAYS:
             try:
-                return self._dispatch_tool_once(name, tool_input)
+                result = self._dispatch_tool_once(name, tool_input)
+                progress.step_finished(step, ok=True)
+                return result
             except Exception as e:
                 last_exc = e
                 time.sleep(delay)
         try:
-            return self._dispatch_tool_once(name, tool_input)
+            result = self._dispatch_tool_once(name, tool_input)
+            progress.step_finished(step, ok=True)
+            return result
         except Exception as e:
             last_exc = e
+        progress.step_finished(step, ok=False)
         attempts = len(self._DISPATCH_RETRY_DELAYS) + 1
         return f"Tool error ({name}): {last_exc} (failed after {attempts} attempts)"
 
@@ -5184,7 +5016,10 @@ class Brain:
             elif name == "open_app":
                 return open_app(**tool_input)
             elif name == "run_command":
-                return run_command(**tool_input)
+                # Only the command. safe_mode is deliberately not passed
+                # through: the guardrail is not the model's to lift, and a
+                # dropped schema field does not stop a model emitting the key.
+                return run_command(command=tool_input["command"])
             elif name == "get_clipboard":
                 return get_clipboard_text()
             elif name == "set_clipboard":
@@ -5311,6 +5146,72 @@ class Brain:
                     tool_input.get("content", ""),
                     tool_input.get("parent_page_id"),
                 )
+            # Obsidian — local Markdown vault
+            elif name == "search_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.search_vault(
+                    tool_input["query"], tool_input.get("n", 5)
+                )
+            elif name == "read_note":
+                from tools import obsidian_tool
+                return obsidian_tool.read_note(tool_input["name"])
+            elif name == "create_note":
+                from tools import obsidian_tool
+                return obsidian_tool.create_note(
+                    tool_input["title"],
+                    tool_input.get("content", ""),
+                    tool_input.get("folder"),
+                )
+            elif name == "append_to_note":
+                from tools import obsidian_tool
+                return obsidian_tool.append_to_note(
+                    tool_input["name"], tool_input["text"]
+                )
+            elif name == "append_to_daily_note":
+                from tools import obsidian_tool
+                return obsidian_tool.append_to_daily_note(tool_input["text"])
+            elif name == "list_notes":
+                from tools import obsidian_tool
+                return obsidian_tool.list_notes(
+                    tool_input.get("folder"), tool_input.get("n", 30)
+                )
+            elif name == "ask_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.ask_vault(
+                    tool_input["query"], tool_input.get("n", 5)
+                )
+            elif name == "index_vault":
+                from tools import obsidian_tool
+                return obsidian_tool.index_vault(tool_input.get("rebuild", False))
+            elif name == "delete_note":
+                from tools import obsidian_tool
+                return obsidian_tool.delete_note(tool_input["name"])
+            elif name == "rename_note":
+                from tools import obsidian_tool
+                return obsidian_tool.rename_note(
+                    tool_input["name"], tool_input["new_title"]
+                )
+            elif name == "move_note":
+                from tools import obsidian_tool
+                return obsidian_tool.move_note(
+                    tool_input["name"], tool_input["folder"]
+                )
+            elif name == "get_backlinks":
+                from tools import obsidian_tool
+                return obsidian_tool.get_backlinks(
+                    tool_input["name"], tool_input.get("n", 20)
+                )
+            elif name == "get_outgoing_links":
+                from tools import obsidian_tool
+                return obsidian_tool.get_outgoing_links(tool_input["name"])
+            elif name == "list_vault_tags":
+                from tools import obsidian_tool
+                return obsidian_tool.list_vault_tags(tool_input.get("n", 40))
+            elif name == "search_vault_by_tag":
+                from tools import obsidian_tool
+                return obsidian_tool.search_vault_by_tag(
+                    tool_input["tag"], tool_input.get("n", 20)
+                )
             # Phase 4C — Todoist
             elif name == "list_tasks":
                 from tools import todoist_tool
@@ -5423,7 +5324,7 @@ class Brain:
                 from tools import wikipedia_tool
                 return wikipedia_tool.wikipedia_lookup(
                     tool_input["query"],
-                    tool_input.get("language", "auto"),
+                    tool_input.get("language", "en"),
                 )
             # Phase 6E — Prayer Times
             elif name == "get_prayer_times":
@@ -5652,77 +5553,6 @@ class Brain:
             elif name == "streak_stats":
                 from tools.analytics_tool import streak_stats
                 return streak_stats()
-            # Stocks
-            elif name == "get_stock_price":
-                from tools.stocks_tool import get_stock_price
-                return get_stock_price(tool_input["symbol"])
-            elif name == "get_stock_info":
-                from tools.stocks_tool import get_stock_info
-                return get_stock_info(tool_input["symbol"])
-            elif name == "market_overview":
-                from tools.stocks_tool import market_overview
-                return market_overview()
-            elif name == "get_stock_news":
-                from tools.stocks_tool import get_stock_news
-                return get_stock_news(tool_input["symbol"])
-            elif name == "add_to_watchlist":
-                from tools.stocks_tool import add_to_watchlist
-                return add_to_watchlist(tool_input["symbol"], tool_input.get("notes", ""))
-            elif name == "remove_from_watchlist":
-                from tools.stocks_tool import remove_from_watchlist
-                return remove_from_watchlist(tool_input["symbol"])
-            elif name == "list_watchlist":
-                from tools.stocks_tool import list_watchlist
-                return list_watchlist()
-            elif name == "add_holding":
-                from tools.stocks_tool import add_holding
-                return add_holding(
-                    tool_input["symbol"],
-                    tool_input["shares"],
-                    tool_input["avg_price"],
-                    tool_input.get("currency", "USD"),
-                )
-            elif name == "remove_holding":
-                from tools.stocks_tool import remove_holding
-                return remove_holding(tool_input["symbol"])
-            elif name == "portfolio_summary":
-                from tools.stocks_tool import portfolio_summary
-                return portfolio_summary()
-            elif name == "set_price_alert":
-                from tools.stocks_tool import set_price_alert
-                return set_price_alert(
-                    tool_input["symbol"],
-                    tool_input["target_price"],
-                    tool_input.get("condition", "above"),
-                )
-            elif name == "list_price_alerts":
-                from tools.stocks_tool import list_price_alerts
-                return list_price_alerts()
-            elif name == "delete_price_alert":
-                from tools.stocks_tool import delete_price_alert
-                return delete_price_alert(tool_input["symbol"])
-            # Stocks — expert analysis
-            elif name == "get_price_history":
-                from tools.stocks_tool import get_price_history
-                return get_price_history(tool_input["symbol"], tool_input.get("period", "1y"))
-            elif name == "get_financials":
-                from tools.stocks_tool import get_financials
-                return get_financials(tool_input["symbol"])
-            elif name == "get_earnings":
-                from tools.stocks_tool import get_earnings
-                return get_earnings(tool_input["symbol"])
-            elif name == "get_analyst_ratings":
-                from tools.stocks_tool import get_analyst_ratings
-                return get_analyst_ratings(tool_input["symbol"])
-            elif name == "get_dividends":
-                from tools.stocks_tool import get_dividends
-                return get_dividends(tool_input["symbol"])
-            elif name == "compare_stocks":
-                from tools.stocks_tool import compare_stocks
-                return compare_stocks(tool_input["symbol1"], tool_input["symbol2"])
-            elif name == "sector_performance":
-                from tools.stocks_tool import sector_performance
-                return sector_performance()
             # Phase 8 — Income
             elif name == "log_income":
                 from tools import income_tool
@@ -6191,13 +6021,6 @@ class Brain:
             elif name == "analyze_screen":
                 from tools.screen_analysis_tool import analyze_screen
                 return analyze_screen(tool_input.get("question", "What do you see on screen?"))
-            # ── Bond tools ────────────────────────────────────────────────────
-            elif name == "get_bond_yields":
-                from tools.bond_tool import get_bond_yields
-                return get_bond_yields()
-            elif name == "get_yield_curve":
-                from tools.bond_tool import get_yield_curve
-                return get_yield_curve()
             # ── Business calculator ───────────────────────────────────────────
             elif name == "startup_metrics":
                 from tools.business_calculator import startup_metrics
@@ -6463,52 +6286,6 @@ class Brain:
             elif name == "generate_qr":
                 from tools.dev_utils_tool import generate_qr
                 return generate_qr(tool_input["text"], tool_input.get("output_path"))
-            # ── Trading Engine ───────────────────────────────────────────────
-            elif name == "start_trading_engine":
-                from tools.trading_tool import start_trading_engine
-                return start_trading_engine()
-            elif name == "stop_trading_engine":
-                from tools.trading_tool import stop_trading_engine
-                return stop_trading_engine()
-            elif name == "get_trading_status":
-                from tools.trading_tool import get_trading_status
-                return get_trading_status()
-            elif name == "get_trading_portfolio":
-                from tools.trading_tool import get_trading_portfolio
-                return get_trading_portfolio()
-            elif name == "get_trade_history":
-                from tools.trading_tool import get_trade_history
-                return get_trade_history(**tool_input)
-            elif name == "get_trading_summary":
-                from tools.trading_tool import get_trading_summary
-                return get_trading_summary()
-            elif name == "set_risk_params":
-                from tools.trading_tool import set_risk_params
-                return set_risk_params(**tool_input)
-            elif name == "switch_to_paper_mode":
-                from tools.trading_tool import switch_to_paper_mode
-                return switch_to_paper_mode()
-            elif name == "switch_to_live_mode":
-                from tools.trading_tool import switch_to_live_mode
-                return switch_to_live_mode(**tool_input)
-            elif name == "add_trading_symbol":
-                from tools.trading_tool import add_trading_symbol
-                return add_trading_symbol(**tool_input)
-            elif name == "remove_trading_symbol":
-                from tools.trading_tool import remove_trading_symbol
-                return remove_trading_symbol(**tool_input)
-            elif name == "run_backtest":
-                from tools.backtest_tool import run_backtest as _run_bt
-                return _run_bt(**tool_input)
-            elif name == "run_full_backtest":
-                from tools.backtest_tool import run_full_backtest as _run_fbt
-                return _run_fbt()
-            elif name == "get_backtest_results":
-                from tools.backtest_tool import get_backtest_results as _get_bt
-                return _get_bt()
-            elif name == "compare_to_buyhold":
-                from tools.backtest_tool import compare_to_buyhold as _compare_bt
-                return _compare_bt(**tool_input)
             elif name == "add_autonomous_task":
                 from tools.autonomous_task_tool import add_autonomous_task as _add_at
                 return _add_at(**tool_input)
@@ -6524,24 +6301,26 @@ class Brain:
             elif name == "notification_status":
                 from tools.notify_tool import notification_status as _notif_status
                 return _notif_status()
-            elif name == "screen_agent":
-                from core.agents.screen_agent import ScreenAgent
-                return ScreenAgent().run(tool_input["task"])
-            elif name == "browser_agent":
-                from core.agents.browser_agent import BrowserAgent
-                return BrowserAgent().run(tool_input["task"])
-            elif name == "stocks_agent":
-                from core.agents.stocks_agent import StocksAgent
-                return StocksAgent().run(tool_input["task"])
-            elif name == "research_agent":
-                from core.agents.research_agent import ResearchAgent
-                return ResearchAgent().run(tool_input["task"])
-            elif name == "file_agent":
-                from core.agents.file_agent import FileAgent
-                return FileAgent().run(tool_input["task"])
-            elif name == "health_agent":
-                from core.agents.health_agent import HealthAgent
-                return HealthAgent().run(tool_input["task"])
+            elif name in _registry.ROSTER:
+                # Live turn: Mo reads the answer himself, so Warden does not
+                # inspect it. The supervisor still enforces the agent's timeout
+                # and writes the run to the ledger.
+                from core.agents.supervisor import assign as _assign
+                return _assign(name, tool_input["task"], verify=False,
+                               source="voice").speech
+            elif name == "delegate":
+                from tools.agent_tool import delegate as _delegate
+                return _delegate(
+                    tool_input["agent"],
+                    tool_input["task"],
+                    tool_input.get("acceptance"),
+                )
+            elif name == "agent_roster":
+                from tools.agent_tool import agent_roster as _roster
+                return _roster()
+            elif name == "agent_report":
+                from tools.agent_tool import agent_report as _report
+                return _report(tool_input.get("agent"), tool_input.get("days", 1))
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)
@@ -6566,6 +6345,12 @@ class Brain:
             elif name == "dismiss_skill_proposal":
                 from tools.skill_tool import dismiss_skill_proposal as _dismiss_sk
                 return _dismiss_sk(**tool_input)
+            elif name == "import_routines":
+                from tools.skill_tool import import_routines as _import_rt
+                return _import_rt()
+            elif name == "sync_skills_to_claude":
+                from tools.skill_tool import sync_skills_to_claude as _sync_sk
+                return _sync_sk()
             elif name == "usage_report":
                 from tools.usage_tool import usage_report as _usage_rep
                 return _usage_rep(**tool_input)
@@ -6588,14 +6373,13 @@ class Brain:
     def _try_agent_dispatch(self, task: str) -> str | None:
         """Intercept financial-safety state-machine commands before the tool loop.
 
-        Specialist agents (screen/browser/stocks/research/file/health) are
-        reachable as tools inside the main chat() loop instead -- see the
-        screen_agent/browser_agent/stocks_agent/research_agent/file_agent/
-        health_agent tool definitions in TOOLS. Only the live-trading
+        Specialist agents are reachable as tools inside the main chat() loop
+        instead -- they are declared in core/agents/registry.py and dispatched
+        through core/agents/supervisor.py. Only the live-trading
         confirmation flow stays here: it's a deterministic 60-second
         confirmation window that must not be left to LLM tool-use judgment.
         """
-        from core.agents.router import classify_intent
+        from core.agents.router import classify_intent, parse_callsign
         intent = classify_intent(task)
         if intent == "gate_check":
             from core.trade_tracker import TradeTracker
@@ -6628,6 +6412,16 @@ class Brain:
             self._live_pending = False
             self._live_pending_ts = 0.0
             return "Live trading activation cancelled."
+
+        # Mo addressing one agent by name ("Sage, research X") goes straight to
+        # that agent -- no LLM turn spent choosing a tool. Checked AFTER the
+        # financial-safety intents above so a callsign cannot bypass them.
+        named = parse_callsign(task)
+        if named is not None:
+            tool_name, agent_task = named
+            from core.agents.supervisor import assign as _assign
+            return _assign(tool_name, agent_task, verify=False,
+                           source="callsign").speech
         return None
 
     def _try_play_music(self, message: str) -> str | None:
@@ -6652,11 +6446,22 @@ class Brain:
             return None
         return result
 
-    def _create_message(self, _telemetry_source: str, **kwargs):
+    def _create_message(self, _telemetry_source: str, on_text=None, **kwargs):
         """All brain API calls route through here: times the call and records
-        usage/cost telemetry. Telemetry never raises; API errors propagate."""
+        usage/cost telemetry. Telemetry never raises; API errors propagate.
+
+        on_text: optional callable fired with each text delta as it streams
+        from the API (used by the voice pipeline to start TTS on the first
+        sentence instead of waiting for the full response). When None the
+        call is a plain blocking create() — identical to the old behaviour."""
         started = time.monotonic()
-        response = self.client.messages.create(**kwargs)
+        if on_text is None:
+            response = self.client.messages.create(**kwargs)
+        else:
+            with self.client.messages.stream(**kwargs) as stream:
+                for delta in stream.text_stream:
+                    on_text(delta)
+                response = stream.get_final_message()
         try:
             from core.telemetry import record_api_usage
             record_api_usage(
@@ -6667,31 +6472,27 @@ class Brain:
             )
         except Exception:
             pass
+        try:
+            u = response.usage
+            print(f"[El Fager] tokens: in={u.input_tokens} "
+                  f"cache_read={getattr(u, 'cache_read_input_tokens', 0) or 0} "
+                  f"cache_write={getattr(u, 'cache_creation_input_tokens', 0) or 0} "
+                  f"out={u.output_tokens}")
+        except Exception:
+            pass
         return response
 
-    def chat(self, user_message: str, memory_context: str = "") -> str:
-        # Log user turn
-        if self._logger:
-            self._logger.log("user", user_message)
-
-        # Agent routing — intercept complex multi-step tasks before tool loop
-        _agent_result = self._try_agent_dispatch(user_message)
-        if _agent_result is not None:
-            self.conversation_history.append({"role": "assistant", "content": _agent_result})
-            if self._logger:
-                self._logger.log("assistant", _agent_result, [])
-            return _agent_result
-
-        # "play X" goes straight to Spotify — the two API round trips the tool
-        # loop would spend (decide to call play_music, then phrase the reply)
-        # add seconds to a request whose answer is already known.
-        _play_result = self._try_play_music(user_message)
-        if _play_result is not None:
-            self.conversation_history.append({"role": "assistant", "content": _play_result})
-            if self._logger:
-                self._logger.log("assistant", _play_result, ["play_music"])
-            return _play_result
-
+    def _build_system(self, memory_context: str = "") -> list:
+        """System prompt as content blocks. The static SYSTEM_PROMPT carries a
+        cache_control breakpoint (prompt caching: ~0.1x cost + lower latency on
+        repeat calls within the TTL); per-turn dynamic context (facts,
+        deadlines, memory hits) goes in a second, uncached block so it never
+        invalidates the cached prefix."""
+        blocks = [{
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }]
         dynamic = ""
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
@@ -6702,26 +6503,93 @@ class Brain:
                 dynamic += f"\n\n{deadlines}"
         if memory_context:
             dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
-        system = _build_system(dynamic)
+        if dynamic:
+            blocks.append({"type": "text", "text": dynamic.strip()})
+        return blocks
 
-        self.conversation_history.append({"role": "user", "content": user_message})
-        messages = list(self.conversation_history)
+    def chat_background(self, user_message: str, memory_context: str = "") -> str:
+        """chat() with a fresh throwaway history. Background callers
+        (ProactiveEngine: autonomous tasks, missions, dashboard commands,
+        scheduled skills) MUST use this instead of chat(): it keeps their
+        turns out of Mo's live voice conversation (the shared history is not
+        thread-safe) and stops the history growing unbounded between the
+        voice pipeline's resets."""
+        return self.chat(user_message, memory_context, history=[])
 
-        # Selected once: recomputing per iteration wastes work and would change
-        # the cached prefix mid-loop.
-        tools = _select_tools(user_message)
+    def synthesize(self, prompt: str, system: str = "",
+                   model: "str | None" = None, max_tokens: int = 400) -> str:
+        """One-shot text: no tools, no history, no shared system prompt.
+
+        For callers that already hold the facts and only need them written up
+        — the Command Center's briefing prose, which is composed from cards it
+        has already fetched. Going through chat() would make the model re-fetch
+        the same things over four or five round trips, each one carrying ~8k
+        tokens of system prompt and ~4k of tool schemas. This is a single call
+        on the fast model. It still routes through _create_message, so it
+        lands in telemetry like everything else.
+        """
+        response = self._create_message(
+            "synthesize",
+            model=model or self._fast_model,
+            max_tokens=max_tokens,
+            system=system or "You are El Fager, Mo's assistant.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return next(
+            (block.text for block in response.content if block.type == "text"), ""
+        )
+
+    def chat(self, user_message: str, memory_context: str = "",
+             history: list | None = None, on_text=None) -> str:
+        # history=None -> the shared interactive conversation (voice pipeline
+        # owns it and resets it at conversation end). Background callers pass
+        # their own list via chat_background().
+        # on_text -> optional streaming callback, see _create_message.
+        hist = history if history is not None else self.conversation_history
+
+        # The live-trading confirmation window is a deterministic 60s
+        # state machine and must not be left to tool-use judgment.
+        _agent_result = self._try_agent_dispatch(user_message)
+        if _agent_result is not None:
+            return _agent_result
+
+        # Log user turn
+        if self._logger:
+            self._logger.log("user", user_message)
+
+        # "play X" goes straight to Spotify — the two API round trips the tool
+        # loop would spend (decide to call play_music, then phrase the reply)
+        # add seconds to a request whose answer is already known.
+        _play_result = self._try_play_music(user_message)
+        if _play_result is not None:
+            hist.append({"role": "user", "content": user_message})
+            hist.append({"role": "assistant", "content": _play_result})
+            if self._logger:
+                self._logger.log("assistant", _play_result, ["play_music"])
+            return _play_result
+
+        system = self._build_system(memory_context)
+        turn_model = self._select_model(user_message)
+
+        hist.append({"role": "user", "content": user_message})
+        messages = _window_history(hist)
 
         tools_used: list[str] = []
         last_text = ""
+        # Once per turn, not once per iteration: recomputing this inside the
+        # loop re-sent a different tools array on every tool round trip and
+        # threw away ~20k tokens of cached prefix each time.
+        turn_tools = self._tools_for_turn(user_message, hist)
 
         try:
             for _iteration in range(_MAX_TOOL_ITERATIONS):
                 response = self._create_message(
                     "chat",
-                    model=self._model,
+                    on_text=on_text,
+                    model=turn_model,
                     max_tokens=1024,
                     system=system,
-                    tools=tools,
+                    tools=turn_tools,
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6731,7 +6599,7 @@ class Brain:
                         (block.text for block in response.content if block.type == "text"),
                         "",
                     )
-                    self.conversation_history.append({"role": "assistant", "content": text})
+                    hist.append({"role": "assistant", "content": text})
                     if self._logger:
                         self._logger.log("assistant", text, tools_used)
                     return text
@@ -6757,13 +6625,17 @@ class Brain:
                     messages.append({"role": "user", "content": tool_results})
 
                 else:
-                    return "[Response cut off — please try again]"
+                    text = "[Response cut off — please try again]"
+                    hist.append({"role": "assistant", "content": text})
+                    if self._logger:
+                        self._logger.log("assistant", text, tools_used)
+                    return text
 
             text = (
                 (last_text + " " if last_text else "")
                 + f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- let me know if you want me to continue]"
             )
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
@@ -6776,14 +6648,14 @@ class Brain:
                 text = "Anthropic API key is invalid. Check your ANTHROPIC_API_KEY in .env."
             else:
                 text = f"API error: {e}"
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
 
         except anthropic.AuthenticationError:
             text = "Anthropic API key is invalid or expired. Check your ANTHROPIC_API_KEY in .env."
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
@@ -6800,12 +6672,13 @@ class Brain:
                 text = local_chat(messages)
             except RuntimeError as err:
                 text = str(err)
-            self.conversation_history.append({"role": "assistant", "content": text})
+            hist.append({"role": "assistant", "content": text})
             if self._logger:
                 self._logger.log("assistant", text, tools_used)
             return text
 
-    def chat_with_screenshot(self, user_input: str, base64_image: str, memory_context: str = "") -> str:
+    def chat_with_screenshot(self, user_input: str, base64_image: str,
+                             memory_context: str = "", on_text=None) -> str:
         from tools.screen_tool import ocr_screenshot
 
         # Skip the vision API call entirely if we're already known to be offline;
@@ -6817,17 +6690,7 @@ class Brain:
                 memory_context,
             )
 
-        dynamic = ""
-        if self.memory is not None:
-            facts = self.memory.format_facts_for_prompt()
-            if facts:
-                dynamic += f"\n\n{facts}"
-            deadlines = self.memory.get_upcoming_deadlines()
-            if deadlines:
-                dynamic += f"\n\n{deadlines}"
-        if memory_context:
-            dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
-        system = _build_system(dynamic)
+        system = self._build_system(memory_context)
 
         content = [
             {
@@ -6849,17 +6712,17 @@ class Brain:
         if self._logger:
             self._logger.log("user", f"[screenshot] {user_input}")
 
-        tools = _select_tools(user_input)
         tools_used: list[str] = []
 
         try:
-            for _iteration in range(_MAX_TOOL_ITERATIONS):
+            while True:
                 response = self._create_message(
                     "screenshot",
+                    on_text=on_text,
                     model=self._model,
                     max_tokens=1024,
                     system=system,
-                    tools=tools,
+                    tools=_select_tools(user_input),
                     messages=messages,
                 )
                 self._offline_mode = False
@@ -6891,11 +6754,6 @@ class Brain:
 
                 else:
                     return "[Response cut off — please try again]"
-
-            return (
-                f"[stopped after {_MAX_TOOL_ITERATIONS} steps -- "
-                "let me know if you want me to continue]"
-            )
 
         except anthropic.BadRequestError as e:
             msg = str(e)
@@ -6927,5 +6785,29 @@ class Brain:
                 memory_context,
             )
 
+    def _tools_for_turn(self, user_message: str, history: list) -> list:
+        """The tool list for this turn, stable for as long as it can be.
+
+        _select_tools already folds in recent turns, so the set it returns
+        grows as a conversation goes on. Unioning it into what the
+        conversation has already sent means the array only ever changes when
+        a genuinely new group is triggered — one cache write at that point,
+        rather than one per turn and per tool iteration.
+        """
+        selected = {t["name"] for t in _select_tools(user_message, history)}
+        if self._turn_tool_names is None:
+            self._turn_tool_names = selected
+        else:
+            self._turn_tool_names |= selected
+        # Switching a skill off in Settings has to take effect now, even for a
+        # group this conversation already activated — so disabled names are
+        # subtracted from the accumulated set, not just from the new one.
+        names = self._turn_tool_names - _disabled_tool_names()
+        # Rebuilt from _SLIM_TOOLS rather than kept as objects so the order is
+        # always the source order — the cache key is the serialised array, and
+        # the same set in a different order is a different prefix.
+        return [t for t in _SLIM_TOOLS if t["name"] in names]
+
     def reset_conversation(self):
         self.conversation_history = []
+        self._turn_tool_names = None

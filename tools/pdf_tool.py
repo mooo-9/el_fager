@@ -9,7 +9,7 @@ import os
 
 
 def create_pdf(text: str, output_path: str, title: str = "") -> str:
-    """Create a PDF from plain text. Handles Arabic (RTL) and long documents."""
+    """Create a PDF from plain text. Handles long documents."""
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle

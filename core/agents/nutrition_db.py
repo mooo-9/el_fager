@@ -1,5 +1,11 @@
 import os
 import httpx
+from dotenv import load_dotenv
+
+# Every other module that reads a key loads dotenv itself. Without this the
+# class works inside the app (main.py loads it first) but silently sees empty
+# keys when imported standalone — a difference that only shows up in tests.
+load_dotenv()
 
 _EDAMAM_URL    = "https://api.edamam.com/api/food-database/v2/parser"
 _USDA_URL      = "https://api.nal.usda.gov/fdc/v1/foods/search"
@@ -46,7 +52,13 @@ class NutritionDB:
             return self._search_usda(name, grams)
 
     def _search_edamam(self, name: str, grams: float) -> dict:
-        if not (self._app_id and self._app_key):
+        # `.env` ships placeholders like "your_app_id_here", which are truthy —
+        # a bare emptiness check sends a doomed request on every lookup before
+        # falling back. Same guard tools/spotify_tool.py uses.
+        def _configured(v: str) -> bool:
+            return bool(v) and not v.startswith("your_")
+
+        if not (_configured(self._app_id) and _configured(self._app_key)):
             raise FoodNotFoundError("Edamam not configured")
         try:
             resp = httpx.get(
