@@ -63,16 +63,14 @@ def test_run_done_immediately():
     mock_page = MagicMock()
     mock_page.url = "https://example.com"
     mock_page.screenshot.return_value = b"fake_png"
-    mock_browser = MagicMock()
-    mock_browser.new_page.return_value = mock_page
-    mock_playwright_ctx = MagicMock()
-    mock_playwright_ctx.chromium.launch.return_value = mock_browser
+    mock_browser, mock_context = MagicMock(), MagicMock()
+    mock_context.new_page.return_value = mock_page
 
     with patch.object(agent, "_get_action", return_value=done), \
          patch("time.sleep"), \
-         patch("playwright.sync_api.sync_playwright") as mock_pw:
-        mock_pw.return_value.__enter__ = MagicMock(return_value=mock_playwright_ctx)
-        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+         patch("playwright.sync_api.sync_playwright"), \
+         patch("tools.comet_tool.automation_context",
+               return_value=(mock_browser, mock_context, True)):
         result = agent.run("find something")
 
     assert result == "Found the answer."
@@ -87,17 +85,15 @@ def test_run_requests_login_when_no_vault_creds():
     mock_page = MagicMock()
     mock_page.url = "https://accounts.google.com"
     mock_page.screenshot.return_value = b"fake_png"
-    mock_browser = MagicMock()
-    mock_browser.new_page.return_value = mock_page
-    mock_playwright_ctx = MagicMock()
-    mock_playwright_ctx.chromium.launch.return_value = mock_browser
+    mock_browser, mock_context = MagicMock(), MagicMock()
+    mock_context.new_page.return_value = mock_page
 
     with patch.object(agent, "_get_action", return_value=need_login), \
          patch("core.vault.Vault.get", return_value=None), \
          patch("time.sleep"), \
-         patch("playwright.sync_api.sync_playwright") as mock_pw:
-        mock_pw.return_value.__enter__ = MagicMock(return_value=mock_playwright_ctx)
-        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+         patch("playwright.sync_api.sync_playwright"), \
+         patch("tools.comet_tool.automation_context",
+               return_value=(mock_browser, mock_context, True)):
         result = agent.run("check gmail")
 
     assert "login required" in result.lower() or "vault set" in result.lower()
@@ -112,17 +108,15 @@ def test_run_continues_when_vault_creds_found():
     mock_page = MagicMock()
     mock_page.url = "https://accounts.google.com"
     mock_page.screenshot.return_value = b"fake_png"
-    mock_browser = MagicMock()
-    mock_browser.new_page.return_value = mock_page
-    mock_playwright_ctx = MagicMock()
-    mock_playwright_ctx.chromium.launch.return_value = mock_browser
+    mock_browser, mock_context = MagicMock(), MagicMock()
+    mock_context.new_page.return_value = mock_page
 
     with patch.object(agent, "_get_action", side_effect=[need_login, done]) as mock_get_action, \
          patch("core.vault.Vault.get", return_value={"username": "mo", "password": "secret"}), \
          patch("time.sleep"), \
-         patch("playwright.sync_api.sync_playwright") as mock_pw:
-        mock_pw.return_value.__enter__ = MagicMock(return_value=mock_playwright_ctx)
-        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+         patch("playwright.sync_api.sync_playwright"), \
+         patch("tools.comet_tool.automation_context",
+               return_value=(mock_browser, mock_context, True)):
         result = agent.run("check gmail")
 
     assert result == "Task complete."
