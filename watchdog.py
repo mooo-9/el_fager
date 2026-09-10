@@ -13,6 +13,9 @@ Behaviour:
     keeps polling without spawning duplicates.
   - After 3 crashes within 10 minutes it stops restarting and shows a
     Windows toast so Mo knows something is structurally broken.
+  - Every 15 minutes it deploys whatever CI has verified: the workflow moves
+    the `verified` branch only when the suite passes on master, so anything
+    reachable there has been tested. Nothing else is ever pulled.
 
 cp1252 note: keep all strings ASCII-safe (no arrows/emoji) — they end up
 in console handles and toast notifications.
@@ -30,6 +33,12 @@ POLL_SECONDS = 5
 CLEAN_EXIT_GRACE = 15       # exit 0 within this many seconds = "already running"
 MAX_CRASHES = 3
 CRASH_WINDOW_SECONDS = 600  # 10 minutes
+DEPLOY_BRANCH = "verified"  # CI moves this, and only when the suite is green
+UPDATE_CHECK_SECONDS = 900  # 15 minutes
+STOP_GRACE_SECONDS = 10     # wait this long for a clean exit before killing
+
+# pythonw has no console, so a bare subprocess would flash one up per git call.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 class RestartTracker:
@@ -89,6 +98,95 @@ def _spawn():
     return proc, stderr_file, stderr_path
 
 
+def _git(*args: str) -> tuple[bool, str]:
+    """Run a git command in the project. Returns (succeeded, combined output)."""
+    try:
+        r = subprocess.run(
+            ["git", *args], cwd=str(_ROOT), capture_output=True, text=True,
+            timeout=120, creationflags=_NO_WINDOW,
+        )
+        return r.returncode == 0, (r.stdout + r.stderr).strip()
+    except Exception as e:
+        return False, str(e)
+
+
+def _deployable_commit() -> str | None:
+    """Return the commit CI has verified, when it is not the one running.
+
+    The deploy branch is moved by the workflow and only after the suite
+    passes, so reaching a commit here is what "tested" means. Any failure to
+    reach GitHub returns None: no network, no deploy.
+    """
+    ok, _ = _git("fetch", "origin", DEPLOY_BRANCH)
+    if not ok:
+        return None
+    ok, verified = _git("rev-parse", f"origin/{DEPLOY_BRANCH}")
+    if not ok:
+        return None
+    ok, head = _git("rev-parse", "HEAD")
+    if not ok or verified == head:
+        return None
+    return verified
+
+
+def _sync_dependencies(old_sha: str, new_sha: str) -> None:
+    """Reinstall only when the new commit actually changed requirements.txt."""
+    ok, changed = _git("diff", "--name-only", old_sha, new_sha, "--", "requirements.txt")
+    if not ok or not changed:
+        return
+    _log("requirements.txt changed; reinstalling dependencies.")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(_ROOT / "requirements.txt")],
+            cwd=str(_ROOT), capture_output=True, text=True, timeout=1800,
+            creationflags=_NO_WINDOW,
+        )
+    except Exception as e:
+        _log(f"Dependency install failed: {e}")
+
+
+def _deploy(sha: str) -> bool:
+    """Fast-forward the working copy onto a verified commit."""
+    ok, dirty = _git("status", "--porcelain")
+    if not ok:
+        return False
+    if dirty:
+        # Mo is editing. His uncommitted work outranks an automatic update.
+        _log("Update available but the working tree is dirty; leaving it alone.")
+        return False
+
+    ok, head = _git("rev-parse", "HEAD")
+    if not ok:
+        return False
+
+    ok, out = _git("merge", "--ff-only", sha)
+    if not ok:
+        _log(f"Cannot fast-forward onto {sha[:8]}: {out}")
+        return False
+
+    _sync_dependencies(head, sha)
+    _log(f"Deployed {sha[:8]}.")
+    return True
+
+
+def _deploy_if_verified() -> bool:
+    sha = _deployable_commit()
+    return bool(sha) and _deploy(sha)
+
+
+def _stop(proc) -> None:
+    """Ask El Fager to exit, then insist."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=STOP_GRACE_SECONDS)
+    except Exception:
+        try:
+            proc.kill()
+            proc.wait(timeout=STOP_GRACE_SECONDS)
+        except Exception:
+            pass
+
+
 def _acquire_watchdog_mutex() -> bool:
     """Single watchdog instance only. Returns False if one already runs."""
     try:
@@ -105,20 +203,33 @@ def main() -> None:
 
     tracker = RestartTracker()
     _log("Watchdog started.")
+    _deploy_if_verified()  # pick up whatever landed while Mo was logged off
 
     while True:
         proc, stderr_file, stderr_path = _spawn()
         started = time.time()
         _log(f"Launched El Fager (pid {proc.pid}).")
 
+        deployed = False
+        next_check = time.time() + UPDATE_CHECK_SECONDS
         while proc.poll() is None:
             time.sleep(POLL_SECONDS)
+            if time.time() >= next_check:
+                next_check = time.time() + UPDATE_CHECK_SECONDS
+                if _deploy_if_verified():
+                    _log("Restarting El Fager on the new code.")
+                    deployed = True
+                    _stop(proc)
 
         uptime = time.time() - started
         code = proc.returncode
         stderr_file.close()
         if stderr_path.exists() and stderr_path.stat().st_size == 0:
             stderr_path.unlink()  # no stderr output -> no point keeping the file
+
+        if deployed:
+            # We stopped it on purpose. Not a crash, and no backoff.
+            continue
 
         if code == 0 and uptime < CLEAN_EXIT_GRACE:
             # Single-instance mutex: another El Fager is already running.

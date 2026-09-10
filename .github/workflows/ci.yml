@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+# Only master on push: a PR branch is already covered by `pull_request`, and
+# matching "**" here runs every job twice on a Windows runner.
+
+# A Windows run installs the full model stack; don't let superseded pushes pile up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # PyTorch CPU-only first, or the requirements install pulls the 2 GB CUDA build.
+      - name: Install PyTorch (CPU-only)
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      # Same gate as hooks/pre-push.
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+  # CD. El Fager runs on Mo's PC, so there is no server to push to: the
+  # watchdog there fast-forwards onto `verified` every 15 minutes. This job is
+  # the only thing that moves that branch, and it needs `tests` to have passed,
+  # so an untested commit can never reach the machine.
+  deploy:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Not forced: if this ever fails to fast-forward, the deploy pointer
+      # should stop rather than roll Mo's machine onto unrelated history.
+      - name: Point `verified` at this commit
+        run: git push origin HEAD:refs/heads/${{ env.DEPLOY_BRANCH }}
+        env:
+          DEPLOY_BRANCH: verified

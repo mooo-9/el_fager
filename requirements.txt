@@ -12,6 +12,7 @@ edge-tts>=7.2.8
 
 # UI
 PyQt6>=6.11.0
+PyQt6-WebEngine>=6.11.0   # ui/hud_web.py and main.py import QtWebEngineWidgets
 
 # System tray
 pystray>=0.19.5
@@ -95,3 +96,10 @@ apscheduler>=3.10.0
 
 # Phase 10 — Autonomous Trading Engine
 alpaca-py>=0.8.2
+yfinance>=0.2.40   # tools/bond_tool.py, tools/stocks_tool.py
+
+# Imported at module load but previously unlisted
+cryptography>=42.0.0   # core/vault.py
+pyautogui>=0.9.54      # tools/mouse_tool.py
+playwright>=1.40.0     # core/agents/browser_agent.py, core/agents/research_agent.py
+pdfplumber>=0.11.0     # core/agents/file_agent.py reads PDFs with it, not pymupdf

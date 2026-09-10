@@ -168,3 +168,26 @@ python -m pip install google-auth google-auth-oauthlib google-auth-httplib2 goog
 | English | `en-US-GuyNeural` (male) |
 
 Voice is auto-detected from the text content of each response. To change, edit `VOICE_AR` / `VOICE_EN` in `core/voice_out.py`.
+
+---
+
+## CI/CD
+
+**CI** runs on every pull request and every push to `master`: GitHub Actions installs the full dependency set on a Windows runner and runs `pytest tests/`, the same command as `hooks/pre-push`. Windows because the app is Windows-only — the suite reaches `win32print`, `winotify`, `pycaw` and PyQt6 WebEngine.
+
+**CD** delivers to this PC. There is no server, so the watchdog does the deploying:
+
+| | |
+|---|---|
+| A push to `master` goes green | The workflow's `deploy` job moves the `verified` branch to that commit |
+| Every 15 minutes, and at logon | The watchdog fast-forwards onto `verified` |
+| `requirements.txt` changed in it | It reinstalls dependencies before restarting |
+| Nothing else | El Fager restarts on the new code |
+
+`verified` is the only branch the watchdog ever pulls, and the workflow only moves it after the suite passes, so a broken `master` cannot reach this machine.
+
+**It will not touch a dirty working tree.** Uncommitted edits win; the update is skipped and logged until the tree is clean. It also skips silently when GitHub is unreachable.
+
+**Deploying restarts the app**, which closes whatever it was doing. Set `UPDATE_CHECK_SECONDS` in `watchdog.py` higher if that lands at bad moments, or park an uncommitted change in the tree to pause updates entirely.
+
+Watch it work in `data/logs/watchdog.log`.

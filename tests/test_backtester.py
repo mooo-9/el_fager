@@ -14,6 +14,18 @@ def _bar(open_: float, high: float, low: float, close: float) -> dict:
     return {"open": open_, "high": high, "low": low, "close": close}
 
 
+def _pin_sl_tp(monkeypatch, sl_pct: float = 5.0, tp_pct: float = 12.0) -> None:
+    """Pin the exit levels these tests are written around.
+
+    Live percentages come from data/trading_config.json, which Mo can change by
+    voice - without this the expected pnl depends on whatever is on disk.
+    """
+    monkeypatch.setattr(bt, "get_stop_loss_price",
+                        lambda entry: round(entry * (1 - sl_pct / 100), 2))
+    monkeypatch.setattr(bt, "get_take_profit_price",
+                        lambda entry: round(entry * (1 + tp_pct / 100), 2))
+
+
 # --- _max_drawdown ---
 
 def test_max_drawdown_basic():
@@ -63,15 +75,20 @@ def test_simulate_tp_hit(monkeypatch):
     monkeypatch.setattr(bt, "rsi", lambda *a, **k: 50.0)
     monkeypatch.setattr(bt, "macd", lambda *a, **k: type("M", (), {"histogram": 0.0})())
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
+    _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    bars[110] = _bar(114.0, 116.0, 113.0, 115.0)  # high=116 >= tp=112 (12%)
+    # Derived from the pinned exit levels, so the test neither goes stale
+    # nor depends on whatever trading_config.json holds.
+    tp = bt.get_take_profit_price(100.0)
+    expected_gain = (tp - 100.0) / 100.0 * 100
+    bars[110] = _bar(tp, tp + 1.0, tp - 1.0, tp)  # high clears tp
     result = bt._simulate(bars, "TEST")
     assert result.total_trades == 1
     assert result.winning_trades == 1
     assert result.losing_trades == 0
     assert result.win_rate_pct == 100.0
-    assert result.avg_gain_pct == pytest.approx(12.0, rel=0.01)
+    assert result.avg_gain_pct == pytest.approx(expected_gain, rel=0.01)
 
 
 def test_simulate_sl_hit(monkeypatch):
@@ -83,15 +100,20 @@ def test_simulate_sl_hit(monkeypatch):
     monkeypatch.setattr(bt, "rsi", lambda *a, **k: 50.0)
     monkeypatch.setattr(bt, "macd", lambda *a, **k: type("M", (), {"histogram": 0.0})())
     monkeypatch.setattr(bt, "classify_signal", mock_sig)
+    _pin_sl_tp(monkeypatch)
     bars = _flat_bars(200, 100.0)
     bars[101] = _bar(100.0, 101.0, 99.0, 100.0)
-    bars[110] = _bar(93.0, 93.5, 91.0, 92.0)  # low=91 <= sl=95 (5%)
+    # Derived from the pinned exit levels, so the test neither goes stale
+    # nor depends on whatever trading_config.json holds.
+    sl = bt.get_stop_loss_price(100.0)
+    expected_loss = abs((sl - 100.0) / 100.0 * 100)
+    bars[110] = _bar(sl, sl + 1.0, sl - 1.0, sl)  # low clears sl
     result = bt._simulate(bars, "TEST")
     assert result.total_trades == 1
     assert result.winning_trades == 0
     assert result.losing_trades == 1
     assert result.win_rate_pct == 0.0
-    assert result.avg_loss_pct == pytest.approx(5.0, rel=0.01)
+    assert result.avg_loss_pct == pytest.approx(expected_loss, rel=0.01)
 
 
 def test_simulate_benchmark_return():
