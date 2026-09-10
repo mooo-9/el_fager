@@ -2,8 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [master]
   pull_request:
+# Only master on push: a PR branch is already covered by `pull_request`, and
+# matching "**" here runs every job twice on a Windows runner.
 
 # A Windows run installs the full model stack; don't let superseded pushes pile up.
 concurrency:
