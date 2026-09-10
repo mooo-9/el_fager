@@ -37,3 +37,23 @@ jobs:
       # Same gate as hooks/pre-push.
       - name: Run tests
         run: python -m pytest tests/ -q
+
+  # CD. El Fager runs on Mo's PC, so there is no server to push to: the
+  # watchdog there fast-forwards onto `verified` every 15 minutes. This job is
+  # the only thing that moves that branch, and it needs `tests` to have passed,
+  # so an untested commit can never reach the machine.
+  deploy:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Not forced: if this ever fails to fast-forward, the deploy pointer
+      # should stop rather than roll Mo's machine onto unrelated history.
+      - name: Point `verified` at this commit
+        run: git push origin HEAD:refs/heads/${{ env.DEPLOY_BRANCH }}
+        env:
+          DEPLOY_BRANCH: verified
