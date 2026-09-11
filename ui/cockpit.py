@@ -296,6 +296,8 @@ class CockpitWindow(QWidget):
         self._attention = "ready"
         self._orb = None            # QWebEngineView, built on first open
         self._orb_ready = False
+        self._clock = None          # this and the rest of the chrome arrive
+                                    # with set_wake_listener, not with __init__
         # The stage's own short memory, so the scrubber under it has turns to
         # move through. _live is position 0; _history holds the ones behind it.
         self._history: list = []
@@ -1169,6 +1171,11 @@ class CockpitWindow(QWidget):
         self._orb_js("window.orb && window.orb.bloom()")
 
     def _close(self):
+        if self._clock is None:
+            # Never wired, so there are no timers, no keymap and no orb to
+            # quiet. Raising here would escape closeEvent and abort the app.
+            self.hide()
+            return
         self._clock.stop()
         self._ambient_timer.stop()      # no timers running behind the tray
         self._keymap.setVisible(False)
