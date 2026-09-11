@@ -386,3 +386,14 @@ class TestRails:
         w._refresh_rails()
         assert w._auto_list.count() >= 1
         w.close()
+
+
+class TestClosingBeforeItIsWired:
+    """set_wake_listener builds the timers, so a window closed before that
+    call is only half there. main.py always wires it, but a construct-then-
+    close path must not take the app down with an AttributeError."""
+
+    def test_closing_an_unwired_cockpit_does_not_raise(self, qapp):
+        from ui.cockpit import CockpitWindow
+        w = CockpitWindow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        w.close()      # closeEvent -> _close(); nothing it touches exists yet
