@@ -1124,6 +1124,15 @@ class TestNormalWindow:
         assert w._title_bar.isAncestorOf(w._btn_close)
         w.close()
 
+    def test_the_title_bar_carries_the_clock_before_the_buttons(self, qapp):
+        w = _make_cockpit(qapp)
+        w._tick_clock()
+        assert w._title_bar.isAncestorOf(w._title_clock)
+        assert w._title_clock.text() == w._status.time.text()
+        row = w._title_bar.layout()
+        assert row.indexOf(w._title_clock) < row.indexOf(w._btn_min)
+        w.close()
+
     def test_close_hides_it_but_el_fager_keeps_running(self, qapp):
         w = _make_cockpit(qapp)
         w._show_window()

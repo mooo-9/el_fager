@@ -792,8 +792,8 @@ class CockpitWindow(QWidget):
         self._keymap = self._build_keymap(chrome)
 
     def _build_title_bar(self) -> QWidget:
-        """Name on the left, – □ × on the right; drag it to move the window,
-        double-click it to maximise."""
+        """Name on the left, the time and – □ × on the right, as the reel's
+        corner has it; drag it to move the window, double-click to maximise."""
         self._title_bar = QWidget()
         self._title_bar.setStyleSheet("background: transparent;")
         self._title_bar.installEventFilter(self)
@@ -805,6 +805,11 @@ class CockpitWindow(QWidget):
         name.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         row.addWidget(name)
         row.addStretch()
+        self._title_clock = QLabel("")
+        self._title_clock.setStyleSheet(_mono(11, tokens.CK_TEXT_MID, 1.2))
+        self._title_clock.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        row.addWidget(self._title_clock)
+        row.addSpacing(14)
         self._btn_min = _TitleButton("min")
         self._btn_min.clicked.connect(self.showMinimized)
         self._btn_max = _TitleButton("max")
@@ -1332,6 +1337,7 @@ class CockpitWindow(QWidget):
         hour = now.hour % 12 or 12
         suffix = "AM" if now.hour < 12 else "PM"
         self._status.time.setText(f"{hour}:{now.minute:02d} {suffix}")
+        self._title_clock.setText(self._status.time.text())
         self._status.date.setText(now.strftime("%a, %b %d").upper())
 
     def _refresh_readouts(self):
