@@ -256,6 +256,19 @@ class _RailRow(QWidget):
             row.addWidget(chip, 0, Qt.AlignmentFlag.AlignTop)
 
 
+def _wrapped(text: str, style: str) -> QLabel:
+    """A word-wrapped label that tells its layout how tall it is — wrapped
+    labels clip otherwise, the trap this project has hit before."""
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+    policy = label.sizePolicy()
+    policy.setHeightForWidth(True)
+    label.setSizePolicy(policy)
+    label.setStyleSheet(style)
+    return label
+
+
 class _Panel(QWidget):
     """A rail card: hairline border on the void, a mono kicker at the top."""
 
@@ -297,12 +310,10 @@ class CockpitWindow(QWidget):
         self._attention = "ready"
         self._orb = None            # QWebEngineView, built on first open
         self._orb_ready = False
-        # Every exchange this session, [heard, answer], one numbered tab each.
-        # Memory-only and kept whole until the Cockpit closes — the ledger is
-        # the durable record. _tab is the one on stage, -1 for none.
+        # Every exchange this session as [heard, answer, interrupted, time],
+        # stacked in the TRANSCRIPT panel. Memory-only and kept whole until the
+        # Cockpit closes — the ledger is the durable record.
         self._exchanges: list = []
-        self._tab_buttons: list = []
-        self._tab = -1
 
     def set_wake_listener(self, listener):
         self._wake_listener = listener
@@ -486,7 +497,7 @@ class CockpitWindow(QWidget):
     def _build_left_rail(self) -> QWidget:
         """The day: the clock, the month, what is next, what is on today."""
         rail = QWidget()
-        rail.setFixedWidth(258)
+        rail.setFixedWidth(318)
         rail.setStyleSheet("background: transparent;")
         col = QVBoxLayout(rail)
         col.setContentsMargins(0, 0, 0, 0)
@@ -522,74 +533,11 @@ class CockpitWindow(QWidget):
     def _build_right_rail(self) -> QWidget:
         """What it runs for you, and what it just said."""
         rail = QWidget()
-        rail.setFixedWidth(340)
+        rail.setFixedWidth(400)
         rail.setStyleSheet("background: transparent;")
         col = QVBoxLayout(rail)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(16)
-
-        # The transcript heads the rail and takes its height: every exchange
-        # this session, one numbered tab each, read here and nowhere else.
-        # An answer is set as labelled sections rather than one block — the
-        # model reaches for "Academic:" style headings on a summary, and
-        # reading that structure is better than a wall of prose.
-        reading = _Panel("TRANSCRIPT")
-        self._reading_panel = reading
-
-        tabs_box = QWidget()
-        tabs_box.setStyleSheet("background: transparent;")
-        self._tabs_layout = QHBoxLayout(tabs_box)
-        self._tabs_layout.setContentsMargins(0, 0, 0, 0)
-        self._tabs_layout.setSpacing(6)
-        self._tabs_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self._tabs_scroll = QScrollArea()
-        self._tabs_scroll.setWidgetResizable(True)
-        self._tabs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # theme.SCROLL_AREA only dresses the vertical bar; this strip scrolls
-        # the other way, so its bar is styled here to match.
-        self._tabs_scroll.setStyleSheet(
-            theme.SCROLL_AREA
-            + "QScrollBar:horizontal { background: transparent; height: 4px; }"
-            + f"QScrollBar::handle:horizontal {{ background: {tokens.rgba('#FFFFFF', 0.14)};"
-            + " border-radius: 2px; min-width: 24px; }"
-            + "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }"
-            + "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal"
-            + " { background: transparent; }")
-        self._tabs_scroll.viewport().setStyleSheet("background: transparent;")
-        self._tabs_scroll.setFixedHeight(38)
-        self._tabs_scroll.setWidget(tabs_box)
-        reading.column.addWidget(self._tabs_scroll)
-
-        self._reading_box = QWidget()
-        self._reading_box.setStyleSheet("background: transparent;")
-        self._reading_layout = QVBoxLayout(self._reading_box)
-        self._reading_layout.setContentsMargins(0, 6, 8, 6)
-        self._reading_layout.setSpacing(0)
-        self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._reading_scroll = QScrollArea()
-        self._reading_scroll.setWidgetResizable(True)
-        self._reading_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._reading_scroll.setStyleSheet(theme.SCROLL_AREA)
-        self._reading_scroll.viewport().setStyleSheet("background: transparent;")
-        self._reading_scroll.setWidget(self._reading_box)
-        reading.column.addWidget(self._reading_scroll, 1)
-
-        self._audio_bar = QWidget()
-        self._audio_bar.setStyleSheet("background: transparent;")
-        audio = QHBoxLayout(self._audio_bar)
-        audio.setContentsMargins(0, 8, 0, 0)
-        audio.setSpacing(10)
-        self._audio_dot = QLabel("●")
-        self._audio_dot.setStyleSheet(_mono(8, tokens.CK_STATE["speaking"], 0))
-        audio.addWidget(self._audio_dot)
-        self._audio_text = QLabel("SPEAKING")
-        self._audio_text.setStyleSheet(_mono(9, tokens.CK_TEXT_LOW, 1.6))
-        audio.addWidget(self._audio_text)
-        audio.addStretch()
-        self._audio_bar.setVisible(False)
-        reading.column.addWidget(self._audio_bar)
-        col.addWidget(reading, 1)
 
         auto = _Panel("AUTOMATIONS")
         self._auto_list = QVBoxLayout()
@@ -627,6 +575,36 @@ class CockpitWindow(QWidget):
         auto.column.addWidget(self._r_skills)
         col.addWidget(auto)
 
+        # The conversation takes the rest of the rail: every exchange this
+        # session stacked in one scroll, newest last, the way the reel lays
+        # out its chat. An answer is set as labelled sections rather than one
+        # block — the model reaches for "Academic:" style headings on a
+        # summary, and reading that structure beats a wall of prose.
+        reading = _Panel("TRANSCRIPT")
+        self._reading_panel = reading
+        self._reading_box = QWidget()
+        self._reading_box.setStyleSheet("background: transparent;")
+        self._reading_layout = QVBoxLayout(self._reading_box)
+        self._reading_layout.setContentsMargins(0, 4, 10, 4)
+        self._reading_layout.setSpacing(0)
+        self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._reading_scroll = QScrollArea()
+        self._reading_scroll.setWidgetResizable(True)
+        self._reading_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._reading_scroll.setStyleSheet(theme.SCROLL_AREA)
+        self._reading_scroll.viewport().setStyleSheet("background: transparent;")
+        self._reading_scroll.setWidget(self._reading_box)
+        reading.column.addWidget(self._reading_scroll, 1)
+
+        # The reel's voice bar: who you are talking to, or what it is doing
+        # right now. Clicking it does what Space does.
+        self._voice_bar = QPushButton()
+        self._voice_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._voice_bar.clicked.connect(lambda _c=False: self._start_pipeline())
+        reading.column.addWidget(self._voice_bar)
+        col.addWidget(reading, 1)
+
         # The receipt ledger and the skills count close the rail out.
         self._receipts_box = QWidget()
         self._receipts_box.setStyleSheet("background: transparent;")
@@ -643,108 +621,74 @@ class CockpitWindow(QWidget):
         self._close()
         self.knowledge_requested.emit()
 
-    def _set_transcript(self, answer: str, heard: str = "",
-                        interrupted: bool = False) -> None:
-        """Lay one exchange out: what Mo said, then the answer as labelled
-        sections.
+    def _add_exchange(self, heard: str):
+        """A new question joins the conversation at once, before its answer
+        exists, and the panel follows it."""
+        stamp = datetime.now().strftime("%I:%M %p").lstrip("0")
+        self._exchanges.append([heard, "", False, stamp])
+        self._reading_layout.addWidget(QWidget())      # placeholder, rendered next
+        self._render_exchange(len(self._exchanges) - 1)
+
+    def _render_exchange(self, index: int):
+        """Rebuild one exchange in place: what Mo said, the answer as labelled
+        sections, and the time it was asked.
 
         Kicker over body, the same shape as every readout on this surface, so
         a five-part summary scans instead of having to be read start to end.
         Markdown never reaches a label: it is parsed here, not displayed.
         """
-        while self._reading_layout.count():
-            item = self._reading_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)          # not deleteLater: the old rows stay
-                                           # painted over the new ones
+        heard, answer, interrupted, stamp = self._exchanges[index]
+        block = QWidget()
+        block.setStyleSheet("background: transparent;")
+        rows = QVBoxLayout(block)
+        rows.setContentsMargins(0, 0 if index == 0 else 18, 0, 0)
+        rows.setSpacing(0)
 
         if heard:
-            said = QLabel(heard)
-            said.setWordWrap(True)
-            policy = said.sizePolicy()
-            policy.setHeightForWidth(True)
-            said.setSizePolicy(policy)
-            said.setStyleSheet(
-                f"{_mono(11, tokens.CK_TEXT_LOW, 0.6)} padding: 2px 0 12px 0;")
-            self._reading_layout.addWidget(said)
+            rows.addWidget(_wrapped(
+                heard, f"{_mono(11, tokens.CK_TEXT_LOW, 0.6)} padding: 0 0 10px 0;"))
 
-        for index, (label, body) in enumerate(prose.sections(answer)):
+        for n, (label, body) in enumerate(prose.sections(answer)):
             if label:
                 kicker = QLabel(label.upper())
                 kicker.setStyleSheet(
                     f"{_mono(9, tokens.CK_TEXT_LOW, 1.8)}"
-                    f" padding: {14 if index else 2}px 0 3px 0;")
-                self._reading_layout.addWidget(kicker)
-            text = QLabel(body)
-            text.setWordWrap(True)
-            text.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-            # Wrapped labels clip unless the layout is told to ask for their
-            # height — the trap this project has hit before.
-            policy = text.sizePolicy()
-            policy.setHeightForWidth(True)
-            text.setSizePolicy(policy)
-            text.setStyleSheet(
+                    f" padding: {12 if n else 0}px 0 3px 0;")
+                rows.addWidget(kicker)
+            rows.addWidget(_wrapped(
+                body,
                 f"color: {tokens.CK_TEXT_MID if label else tokens.CK_TEXT_HI};"
                 f" font-family: {theme.FONT}; font-size: 13px;"
                 f" background: transparent; line-height: 150%;"
-                f" padding: {0 if label else (12 if index else 0)}px 0 0 0;")
-            self._reading_layout.addWidget(text)
+                f" padding: {0 if label else (10 if n else 0)}px 0 0 0;"))
 
         if interrupted:
             # Talked over: the half-spoken answer stays, marked as cut short.
             cut = QLabel("INTERRUPTED")
-            cut.setStyleSheet(f"{_mono(9, tokens.CK_TEXT_LOW, 1.8)} padding: 10px 0 0 0;")
-            self._reading_layout.addWidget(cut)
+            cut.setStyleSheet(f"{_mono(9, tokens.CK_TEXT_LOW, 1.8)} padding: 8px 0 0 0;")
+            rows.addWidget(cut)
 
-    def _open_tab(self, heard: str):
-        """A new question gets the next numbered tab, shown at once — before
-        its answer exists, so asking again visibly moves to the next one."""
-        self._exchanges.append([heard, "", False])     # heard, answer, interrupted
-        index = len(self._exchanges) - 1
-        button = QPushButton(str(index + 1))
-        button.setCheckable(True)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setFixedHeight(28)
-        button.setMinimumWidth(32)
-        button.setStyleSheet(
-            f"QPushButton {{ {_mono(11, tokens.CK_TEXT_LOW, 0)}"
-            f" border: 1px solid {tokens.rgba('#FFFFFF', 0.08)};"
-            f" border-radius: 14px; padding: 0 10px; }}"
-            f"QPushButton:hover {{ color: {tokens.CK_TEXT_HI};"
-            f" border-color: {tokens.rgba(tokens.EMBER, 0.45)}; }}"
-            f"QPushButton:checked {{ color: {tokens.CK_TEXT_HI};"
-            f" background: {tokens.rgba(tokens.EMBER, 0.14)};"
-            f" border-color: {tokens.rgba(tokens.EMBER, 0.65)}; }}"
-        )
-        button.clicked.connect(lambda _c=False, i=index: self._on_tab_clicked(i))
-        self._tabs_layout.addWidget(button)
-        self._tab_buttons.append(button)
-        self._show_tab(index)
+        time_label = QLabel(stamp)
+        time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        time_label.setStyleSheet(f"{_mono(9, tokens.CK_TEXT_FAINT, 0.8)} padding: 6px 0 0 0;")
+        rows.addWidget(time_label)
 
-    def _on_tab_clicked(self, index: int):
-        self._show_tab(index)
-        self._wake_attention("ready")
+        old = self._reading_layout.itemAt(index).widget()
+        self._reading_layout.replaceWidget(old, block)
+        old.setParent(None)                # not deleteLater: the old rows stay
+                                           # painted over the new ones
+        QTimer.singleShot(0, self._follow_latest)
 
-    def _show_tab(self, index: int):
-        """Fill the TRANSCRIPT panel from one tab, read from its first line."""
-        self._tab = index
-        for i, button in enumerate(self._tab_buttons):
-            button.setChecked(i == index)
-        heard, answer, interrupted = self._exchanges[index]
-        self._set_transcript(answer, heard=heard, interrupted=interrupted)
-        self._reading_scroll.verticalScrollBar().setValue(0)
-        QTimer.singleShot(0, self._reveal_active_tab)
-
-    def _reveal_active_tab(self):
-        """Scroll the strip to the tab being read. Looked up when it runs: a
-        close in the meantime may have removed the buttons."""
-        if 0 <= self._tab < len(self._tab_buttons):
-            # Lay the strip out first: a just-added button still sits at x=0,
-            # and the scroll would aim at the wrong place.
-            self._tabs_layout.activate()
-            self._tabs_scroll.widget().adjustSize()
-            self._tabs_scroll.ensureWidgetVisible(self._tab_buttons[self._tab])
+    def _follow_latest(self):
+        """Bring the newest exchange's first line to the top of the panel — a
+        long answer is read from its start, not its end. Looked up when it
+        runs: a close in the meantime may have emptied the panel."""
+        count = self._reading_layout.count()
+        if count:
+            self._reading_layout.activate()
+            self._reading_box.adjustSize()
+            latest = self._reading_layout.itemAt(count - 1).widget()
+            self._reading_scroll.verticalScrollBar().setValue(latest.y())
 
     def _refresh_rails(self):
         """Rail content, from data already on disk — never the network."""
@@ -896,10 +840,22 @@ class CockpitWindow(QWidget):
         self._state_label.setStyleSheet(_mono(11, color, 2.6))
         for readout in self._readouts():
             readout.set_tint(color)
-        # The rail's audio bar is the reel's player: it exists only while
-        # there is something being said.
-        self._audio_bar.setVisible(state == "speaking")
+        self._paint_voice_bar(state, color)
         self._push_orb_state(state)
+
+    def _paint_voice_bar(self, state: str, color: str):
+        """At rest it says who you are talking to; mid-turn, what it is doing."""
+        busy = {"listening": "LISTENING…", "processing": "THINKING…",
+                "speaking": "SPEAKING"}.get(state)
+        self._voice_bar.setText(busy or "You're talking to El Fager through voice")
+        font = _mono(10, tokens.CK_TEXT_HI, 1.8) if busy else (
+            f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT}; font-size: 12px;")
+        self._voice_bar.setStyleSheet(
+            f"QPushButton {{ {font} text-align: left; padding: 10px 14px;"
+            f" background: {tokens.rgba(color if busy else '#FFFFFF', 0.08 if busy else 0.03)};"
+            f" border: 1px solid {tokens.rgba(color if busy else '#FFFFFF', 0.45 if busy else 0.10)};"
+            f" border-radius: 10px; }}"
+            f"QPushButton:hover {{ border-color: {tokens.rgba(tokens.EMBER, 0.55)}; }}")
 
     # ── Attention: ambient → ready → exchange ─────────────────────────────
 
@@ -1122,24 +1078,23 @@ class CockpitWindow(QWidget):
     def on_state_update(self, state: str, transcript: str, response: str):
         self._current_state = state
         if state == "listening":
-            # The mic reopens a beat after every answer; the transcript stays
-            # put so it can still be read. The next question opens a new tab.
+            # The mic reopens a beat after every answer; the conversation
+            # stays put so it can still be read.
             self._notice.setText("")
             self._clear_data_moment()
         elif (state == "processing" and transcript
                 and transcript not in ("Transcribing...", "Loading Whisper model...")):
-            self._open_tab(transcript)
+            self._add_exchange(transcript)
         elif state == "speaking" and response:
             if not self._exchanges:
-                self._open_tab("")
+                self._add_exchange("")
             self._exchanges[-1][1] = response
-            self._show_tab(len(self._exchanges) - 1)
+            self._render_exchange(len(self._exchanges) - 1)
             self._show_data_moment()
         elif state == "interrupted" and self._exchanges:
-            # The half-spoken answer stays in its tab, marked as cut short.
+            # The half-spoken answer stays, marked as cut short.
             self._exchanges[-1][2] = True
-            if self._tab == len(self._exchanges) - 1:
-                self._show_tab(self._tab)
+            self._render_exchange(len(self._exchanges) - 1)
         self._paint_state(state)
         # An exchange dims the readouts to 12%: the exchange owns the screen.
         self._wake_attention("exchange" if state != "idle" else "ready")
@@ -1187,16 +1142,13 @@ class CockpitWindow(QWidget):
         self._orb_js("window.orb && window.orb.bloom()")
 
     def _close(self):
-        # The session's tabs end with it: the next open starts again at 1.
-        while self._tabs_layout.count():
-            item = self._tabs_layout.takeAt(0)
+        # The session's conversation ends with it: the next open starts empty.
+        while self._reading_layout.count():
+            item = self._reading_layout.takeAt(0)
             if item.widget() is not None:
                 item.widget().setParent(None)
-        self._tab_buttons = []
         self._exchanges = []
-        self._tab = -1
         self._notice.setText("")
-        self._set_transcript("")
         self._clock.stop()
         self._ambient_timer.stop()      # no timers running behind the tray
         self._keymap.setVisible(False)

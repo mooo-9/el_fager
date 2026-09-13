@@ -136,7 +136,9 @@ class TestAttention:
         w._go_ambient()                       # what the timer would do
         assert w._attention == "ambient"
         assert w._r_time.graphicsEffect().opacity() == 0.0
-        assert len(w._tab_buttons) == 1       # saved until the Cockpit closes
+        from PyQt6.QtWidgets import QLabel     # saved until the Cockpit closes
+        assert "Three things today." in [
+            label.text() for label in w._reading_box.findChildren(QLabel)]
         w.close()
 
     def test_a_turn_in_flight_never_falls_to_ambient(self, qapp):
@@ -315,30 +317,25 @@ class TestStepMark:
         mark.deleteLater()
 
 
-class TestTranscriptTabs:
-    """Every exchange in a session gets a numbered tab in the TRANSCRIPT panel
-    on the right, and they all stay until the Cockpit is closed. The words
-    live only there — none of them is painted over the sphere."""
+class TestConversation:
+    """The right rail's TRANSCRIPT panel is one scrolling conversation: every
+    exchange this session stacked in order, kept until the Cockpit closes.
+    The words live only there — none of them is painted over the sphere."""
 
     def _exchange(self, w, heard, answer):
         w.on_state_update("listening", "", "")
         w.on_state_update("processing", heard, "")
         w.on_state_update("speaking", heard, answer)
 
-    def _labels(self, w):
-        return [b.text() for b in w._tab_buttons]
-
     def _panel(self, w):
         from PyQt6.QtWidgets import QLabel
-        return [w._reading_layout.itemAt(i).widget().text()
-                for i in range(w._reading_layout.count())
-                if isinstance(w._reading_layout.itemAt(i).widget(), QLabel)]
+        return [label.text() for label in w._reading_box.findChildren(QLabel)]
 
-    def test_the_transcript_panel_heads_the_right_rail(self, qapp):
+    def test_automations_sit_above_the_conversation_which_takes_the_height(self, qapp):
         w = _make_cockpit(qapp)
         rail = w._reading_panel.parentWidget().layout()
-        assert rail.indexOf(w._reading_panel) == 0
-        assert rail.stretch(0) == 1
+        assert rail.indexOf(w._reading_panel) == 1
+        assert rail.stretch(1) == 1
         w.close()
 
     def test_no_words_are_painted_over_the_sphere(self, qapp):
@@ -351,112 +348,100 @@ class TestTranscriptTabs:
         assert "Gym at seven." not in outside_panel
         w.close()
 
-    def test_each_question_gets_its_own_tab_in_order(self, qapp):
+    def test_every_exchange_is_stacked_in_order(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "first question", "first answer")
         self._exchange(w, "second question", "second answer")
-        assert self._labels(w) == ["1", "2"]
-        assert w._tab == 1
-        assert "second question" in self._panel(w)
-        assert "second answer" in self._panel(w)
-
-        w._tab_buttons[0].click()
-        assert w._tab == 0
-        assert "first question" in self._panel(w)
-        assert "first answer" in self._panel(w)
-        assert "second answer" not in self._panel(w)
+        panel = self._panel(w)
+        order = [panel.index(t) for t in
+                 ("first question", "first answer", "second question", "second answer")]
+        assert order == sorted(order)
         w.close()
 
     def test_a_short_answer_is_in_the_panel_too(self, qapp):
-        # The panel used to take only answers over 180 characters.
         w = _make_cockpit(qapp)
         self._exchange(w, "thanks", "Any time.")
         assert "Any time." in self._panel(w)
         w.close()
 
-    def test_asking_again_opens_the_next_tab_before_the_answer(self, qapp):
+    def test_asking_again_adds_the_question_before_the_answer(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "first question", "first answer")
         w.on_state_update("listening", "", "")
         w.on_state_update("processing", "second question", "")
-        assert self._labels(w) == ["1", "2"]
-        assert w._tab == 1
         assert "second question" in self._panel(w)
+        assert "first answer" in self._panel(w)
         w.close()
 
-    def test_only_the_active_tab_is_checked(self, qapp):
-        w = _make_cockpit(qapp)
-        for n in range(3):
-            self._exchange(w, f"q{n}", f"a{n}")
-        w._tab_buttons[1].click()
-        assert [b.isChecked() for b in w._tab_buttons] == [False, True, False]
-        w.close()
-
-    def test_the_same_words_twice_are_two_tabs(self, qapp):
+    def test_the_same_words_twice_are_two_exchanges(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "Send it.", "Sent.")
         self._exchange(w, "Send it.", "Already sent.")
-        assert self._labels(w) == ["1", "2"]
+        assert self._panel(w).count("Send it.") == 2
         w.close()
 
     def test_every_exchange_is_kept_not_just_the_last_twenty(self, qapp):
         w = _make_cockpit(qapp)
         for n in range(30):
             self._exchange(w, f"question {n}", f"answer {n}")
-        assert len(w._tab_buttons) == 30
-        w._tab_buttons[0].click()
         assert "answer 0" in self._panel(w)
+        assert "answer 29" in self._panel(w)
+        w.close()
+
+    def test_each_exchange_carries_its_time(self, qapp):
+        import re
+        w = _make_cockpit(qapp)
+        self._exchange(w, "first question", "first answer")
+        self._exchange(w, "second question", "second answer")
+        stamps = [t for t in self._panel(w) if re.fullmatch(r"\d{1,2}:\d{2} [AP]M", t)]
+        assert len(stamps) == 2
         w.close()
 
     def test_a_long_answer_keeps_its_sections(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "summary please", "**Academic:** " + "two left. " * 30)
-        self._exchange(w, "thanks", "Any time.")
-        w._tab_buttons[0].click()
         assert "ACADEMIC" in self._panel(w)
         assert not any("**" in t for t in self._panel(w))
         w.close()
 
-    def test_listening_again_keeps_the_last_exchange_readable(self, qapp):
+    def test_listening_again_keeps_the_conversation(self, qapp):
         # The mic reopens a beat after every answer; that must not wipe what
         # Mo is still reading.
         w = _make_cockpit(qapp)
         self._exchange(w, "old question", "old answer")
         w.on_state_update("listening", "", "")
         assert "old answer" in self._panel(w)
-        assert w._tab_buttons[0].isChecked()
         w.close()
 
-    def test_an_interrupted_answer_says_so(self, qapp):
+    def test_an_interrupted_answer_says_so_and_only_that_one(self, qapp):
         w = _make_cockpit(qapp)
+        self._exchange(w, "first question", "first answer")
         self._exchange(w, "tell me a story", "Once upon a time")
         w.on_state_update("interrupted", "tell me a story", "Once upon a time")
-        assert "INTERRUPTED" in self._panel(w)
-        w._tab_buttons[0].click()
-        assert "INTERRUPTED" in self._panel(w)
+        panel = self._panel(w)
+        assert panel.count("INTERRUPTED") == 1
+        assert panel.index("INTERRUPTED") > panel.index("Once upon a time")
         w.close()
 
-    def test_escape_clears_every_tab(self, qapp):
+    def test_escape_clears_the_conversation(self, qapp):
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QKeyEvent
         from core import staging
         staging.reset()
         w = _make_cockpit(qapp)
         self._exchange(w, "first question", "first answer")
-        self._exchange(w, "second question", "second answer")
         w.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
                                   Qt.KeyboardModifier.NoModifier))
-        assert w._tab_buttons == []
-        assert w._tabs_layout.count() == 0
         assert self._panel(w) == []
         w.close()
 
-    def test_the_next_session_starts_again_at_tab_one(self, qapp):
+    def test_the_next_session_starts_empty(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "yesterday", "old")
         w._close()
         self._exchange(w, "today", "new")
-        assert self._labels(w) == ["1"]
+        assert "yesterday" not in self._panel(w)
+        assert "today" in self._panel(w)
         w.close()
 
     def test_the_pipeline_caption_is_not_taken_for_what_mo_said(self, qapp):
@@ -464,9 +449,27 @@ class TestTranscriptTabs:
         w.on_state_update("listening", "", "")
         w.on_state_update("processing", "Transcribing...", "")
         w.on_error("Nothing heard — please try again")
-        assert w._tab_buttons == []
-        assert "Transcribing..." not in self._panel(w)
+        assert self._panel(w) == []
         assert w._notice.text() == "Nothing heard — please try again"
+        w.close()
+
+    def test_the_voice_bar_names_who_you_are_talking_to(self, qapp):
+        w = _make_cockpit(qapp)
+        assert "talking to El Fager through voice" in w._voice_bar.text()
+        w.on_state_update("listening", "", "")
+        assert w._voice_bar.text().strip().startswith("LISTENING")
+        w.on_state_update("speaking", "hi", "Hello.")
+        assert w._voice_bar.text().strip().startswith("SPEAKING")
+        w.on_pipeline_done()
+        assert "talking to El Fager through voice" in w._voice_bar.text()
+        w.close()
+
+    def test_the_voice_bar_starts_a_turn(self, qapp):
+        from unittest.mock import patch
+        w = _make_cockpit(qapp)
+        with patch("core.pipeline.PipelineWorker") as worker:
+            w._voice_bar.click()
+        assert worker.called
         w.close()
 
     def test_the_view_pill_asks_for_the_command_center(self, qapp):
