@@ -579,6 +579,43 @@ class TestConversation:
         assert "talking to El Fager through voice" in w._voice_bar.text()
         w.close()
 
+    def _icon_inks(self, w):
+        """(hue, saturation) of every solid pixel in the voice bar's icon.
+
+        Plain numbers only, and the Qt images freed here on the main thread:
+        left for Python's collector, a pixmap can be freed from whatever
+        thread next allocates — a Command Center worker, in this suite — and
+        that crashed a later test outright."""
+        import gc
+        pixmap = w._voice_bar.icon().pixmap(w._voice_bar.iconSize())
+        image = pixmap.toImage()
+        inks = []
+        for x in range(image.width()):
+            for y in range(image.height()):
+                colour = image.pixelColor(x, y)
+                if colour.alpha() > 200:
+                    inks.append((colour.hue(), colour.saturation()))
+        del colour, image, pixmap
+        gc.collect()
+        return inks
+
+    def test_the_voice_bar_leads_with_a_painted_microphone(self, qapp):
+        w = _make_cockpit(qapp)
+        assert not w._voice_bar.icon().isNull()
+        assert len(self._icon_inks(w)) > 20, "the microphone painted nothing"
+        w.close()
+
+    def test_the_microphone_takes_the_colour_of_what_it_is_doing(self, qapp):
+        from PyQt6.QtGui import QColor
+        from ui import tokens
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        listening = QColor(tokens.CK_STATE["listening"]).hue()
+        inks = self._icon_inks(w)
+        assert inks and all(abs(hue - listening) <= 12 for hue, saturation in inks
+                            if saturation > 60), "listening mic is not the listening colour"
+        w.close()
+
     def test_the_voice_bar_starts_a_turn(self, qapp):
         from unittest.mock import patch
         w = _make_cockpit(qapp)

@@ -22,8 +22,10 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PyQt6.QtCore import (
+    QEvent, QPoint, QPointF, QRect, QRectF, QSize, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot,
+)
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsOpacityEffect,
@@ -459,6 +461,32 @@ def _wrapped(text: str, style: str) -> QLabel:
     label.setSizePolicy(policy)
     label.setStyleSheet(style)
     return label
+
+
+def _mic_icon(color: str) -> QIcon:
+    """The voice bar's microphone, painted: a capsule, the cradle under it,
+    and its stand. Drawn at 3x so it stays crisp on a scaled display."""
+    scale = 3
+    pixmap = QPixmap(14 * scale, 16 * scale)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pixmap)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.scale(scale, scale)
+    ink = QColor(color)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(ink)
+    p.drawRoundedRect(QRectF(4.5, 1, 5, 8.5), 2.5, 2.5)
+    pen = QPen(ink, 1.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    cradle = QPainterPath(QPointF(2.5, 7))
+    cradle.cubicTo(QPointF(2.5, 12), QPointF(11.5, 12), QPointF(11.5, 7))
+    p.drawPath(cradle)
+    p.drawLine(QPointF(7, 11.8), QPointF(7, 14.5))
+    p.drawLine(QPointF(4.8, 14.5), QPointF(9.2, 14.5))
+    p.end()
+    return QIcon(pixmap)
 
 
 class _TitleButton(QPushButton):
@@ -918,6 +946,7 @@ class CockpitWindow(QWidget):
         # The reel's voice bar: who you are talking to, or what it is doing
         # right now. Clicking it does what Space does.
         self._voice_bar = QPushButton()
+        self._voice_bar.setIconSize(QSize(14, 16))
         self._voice_bar.setCursor(Qt.CursorShape.PointingHandCursor)
         self._voice_bar.clicked.connect(lambda _c=False: self._start_pipeline())
         reading.column.addWidget(self._voice_bar)
@@ -1237,6 +1266,7 @@ class CockpitWindow(QWidget):
         busy = {"listening": "LISTENING…", "processing": "THINKING…",
                 "speaking": "SPEAKING"}.get(state)
         self._voice_bar.setText(busy or "You're talking to El Fager through voice")
+        self._voice_bar.setIcon(_mic_icon(color if busy else tokens.CK_TEXT_MID))
         font = _mono(10, tokens.CK_TEXT_HI, 1.8) if busy else (
             f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT}; font-size: 12px;")
         self._voice_bar.setStyleSheet(
