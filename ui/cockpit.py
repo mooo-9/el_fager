@@ -749,7 +749,10 @@ class CockpitWindow(QWidget):
         self._reading_layout = QVBoxLayout(self._reading_box)
         self._reading_layout.setContentsMargins(0, 4, 10, 4)
         self._reading_layout.setSpacing(0)
-        self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # No AlignTop here: an aligned layout sizes its rows from their
+        # unwrapped height, which clipped a long question and its answer
+        # mid-line with nothing left to scroll to. Each exchange carries its
+        # own stretch instead, so a short one still sits at the top.
         self._reading_scroll = QScrollArea()
         self._reading_scroll.setWidgetResizable(True)
         self._reading_scroll.setHorizontalScrollBarPolicy(
@@ -859,6 +862,7 @@ class CockpitWindow(QWidget):
         time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         time_label.setStyleSheet(f"{_mono(10, tokens.CK_TEXT_LOW, 0.8)} padding: 6px 0 0 0;")
         rows.addWidget(time_label)
+        rows.addStretch(1)
 
         old = self._reading_layout.itemAt(index).widget()
         self._reading_layout.replaceWidget(old, block)

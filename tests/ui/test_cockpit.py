@@ -611,6 +611,48 @@ class TestTranscriptTabs:
         assert bar.value() == 0, "it should open at its first line"
         w.close()
 
+    def _wrapped_on_show(self, w):
+        from PyQt6.QtWidgets import QLabel
+        return [label for label in w._reading_box.findChildren(QLabel)
+                if label.isVisibleTo(w._reading_box) and label.wordWrap()]
+
+    def test_every_word_of_a_long_exchange_can_be_scrolled_to(self, qapp):
+        # 2026-09-13: Mo's question and the answer were both cut off mid-line
+        # at 93px each when they needed ~155, and the panel scrolled 12px.
+        w = _make_cockpit(qapp)
+        w.setGeometry(0, 0, 1536, 816)
+        w.show()
+        heard = ("Ok, let's go one by one. First one, the October deadline was my "
+                 "graduation, which is on the 4th of October. That's why I was talking "
+                 "about October and you wanted the deadline. Class schedule, I don't "
+                 "need it anymore because I finished. Todoist, keep it off for now.")
+        answer = ("Locked in — October 4th for graduation, no class schedule needed "
+                  "anymore since you're done, and Todoist stays off the list till your "
+                  "days actually have a shape to track. Notion can wait as well, till "
+                  "you need somewhere to put the bigger projects. Anything else?")
+        self._exchange(w, heard, answer)
+        for _ in range(60):
+            qapp.processEvents()
+        for label in self._wrapped_on_show(w):
+            assert label.height() >= label.heightForWidth(label.width()),                 f"clipped: {label.text()[:30]!r}"
+        bar = w._reading_scroll.verticalScrollBar()
+        viewport = w._reading_scroll.viewport().height()
+        assert bar.maximum() + viewport >= sum(
+            label.heightForWidth(label.width()) for label in self._wrapped_on_show(w))
+        w.close()
+
+    def test_a_short_answer_sits_right_under_the_question(self, qapp):
+        w = _make_cockpit(qapp)
+        w.setGeometry(0, 0, 1536, 816)
+        w.show()
+        self._exchange(w, "thanks", "Any time, Mo.")
+        for _ in range(60):
+            qapp.processEvents()
+        said, reply = self._wrapped_on_show(w)[:2]
+        gap = reply.mapTo(w, reply.rect().topLeft()).y() -             said.mapTo(w, said.rect().bottomLeft()).y()
+        assert gap < 30, f"the answer floats {gap}px below the question"
+        w.close()
+
     def test_escape_clears_the_tabs(self, qapp):
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QKeyEvent
