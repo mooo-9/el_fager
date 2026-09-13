@@ -860,10 +860,8 @@ class CockpitWindow(QWidget):
         self._talk_btn.clicked.connect(self._start_pipeline)
         buttons.addWidget(self._talk_btn)
         auto.column.addLayout(buttons)
-        # The count belongs against the list it counts, not adrift at the foot
-        # of the rail — it reads as a caption on the panel above it.
-        self._r_skills = _Readout("SKILLS ONLINE", align_right=True)
-        auto.column.addWidget(self._r_skills)
+        # The panel ends at its buttons, as the reel's does; how many skills
+        # are on rides on the SKILLS button rather than a readout of its own.
         col.addWidget(auto)
 
         # The conversation takes the rest of the rail: every exchange this
@@ -1258,7 +1256,7 @@ class CockpitWindow(QWidget):
             f"window.orb && window.orb.setAmbient({str(level == 'ambient').lower()})")
 
     def _readouts(self):
-        return (self._status, self._r_today, self._r_skills)
+        return (self._status, self._r_today)
 
     def _go_ambient(self):
         """Ambient is the orb alone: the readouts go, and so does anything on
@@ -1289,7 +1287,7 @@ class CockpitWindow(QWidget):
         self._status.next.setText(_cached("calendar"))
         self._status.done.setText(self._done_today())
         self._r_today.set_value(_cached("tasks"))
-        self._r_skills.set_value(self._skills_online())
+        self._skills_btn.setText(f"SKILLS  {self._skills_online().replace(' of ', '/')}")
         self._refresh_rails()
 
     def _done_today(self) -> str:

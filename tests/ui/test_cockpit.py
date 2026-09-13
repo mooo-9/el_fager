@@ -984,10 +984,30 @@ class TestArrows:
 
 
 class TestRails:
-    def test_the_skills_count_sits_with_the_list_it_counts(self, qapp):
-        # It used to float unparented at the foot of the rail.
+    def test_the_skills_count_rides_on_the_skills_button(self, qapp, tmp_path, monkeypatch):
+        # The reel's panel is the list and its buttons; the count used to take
+        # a tall readout of its own under them.
+        import json
+        import ui.overlay as overlay_mod
+        from PyQt6.QtWidgets import QLabel
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"skills_disabled": ["gmail", "browser"]}), encoding="utf-8")
+        monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
         w = _make_cockpit(qapp)
-        assert w._r_skills.parent() is not None
+        w._refresh_readouts()
+        assert w._skills_btn.text() == "SKILLS  4/6"
+        assert "SKILLS ONLINE" not in [l.text() for l in w.findChildren(QLabel)]
+        w.close()
+
+    def test_the_automations_panel_ends_at_its_buttons(self, qapp):
+        w = _make_cockpit(qapp)
+        w._refresh_readouts()
+        w._show_window()
+        for _ in range(40):
+            qapp.processEvents()
+        panel = w._skills_btn.parentWidget()
+        bottom_of_buttons = w._skills_btn.mapTo(panel, w._skills_btn.rect().bottomLeft()).y()
+        assert panel.height() - bottom_of_buttons <= 24,             f"{panel.height() - bottom_of_buttons}px of panel below the buttons"
         w.close()
 
     def test_automations_never_render_an_empty_rail(self, qapp):
