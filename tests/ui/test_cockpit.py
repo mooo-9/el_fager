@@ -502,6 +502,89 @@ class TestConversation:
         w.close()
 
 
+class TestNeverWiderThanTheScreen:
+    """Mo's screen is 1536 wide. The old stage's heard line never wrapped, so
+    one long sentence made the window 2007px wide and the whole Cockpit slid
+    over until a restart. Nothing said, answered or reported may do that."""
+
+    URL = ("https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+           "&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG&index=4")
+    LOOP = ("I'm going to get a check on my calendar, and I'm going to get a check "
+            "on my calendar, and I'm going to get a check on my calendar today")
+
+    def _min_width(self, qapp, w):
+        for _ in range(20):
+            qapp.processEvents()
+        return w.minimumSizeHint().width()
+
+    def test_a_long_sentence_does_not_widen_the_window(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_state_update("processing", self.LOOP, "")
+        w.on_state_update("speaking", self.LOOP, self.LOOP)
+        assert self._min_width(qapp, w) <= 1280
+        w.close()
+
+    def test_a_long_unbroken_error_does_not_widen_the_window(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_error("Pipeline error: " + "x" * 240)
+        assert self._min_width(qapp, w) <= 1280
+        w.close()
+
+    def test_a_link_in_an_answer_wraps_inside_the_panel(self, qapp):
+        w = _make_cockpit(qapp)
+        w.setGeometry(0, 0, 1536, 816)
+        w.show()
+        w.on_state_update("processing", "open the video", "")
+        w.on_state_update("speaking", "open the video", f"Here it is: {self.URL}")
+        self._min_width(qapp, w)
+        assert w._reading_box.minimumSizeHint().width() <= w._reading_scroll.viewport().width()
+        w.close()
+
+
+class TestReadableTranscript:
+    """The transcript is the thing to read on this surface, so it is set
+    large and heavy enough to read from a normal sitting distance."""
+
+    def _exchange_labels(self, w):
+        from PyQt6.QtWidgets import QLabel
+        w.on_state_update("processing", "what's on my calendar", "")
+        w.on_state_update("speaking", "what's on my calendar", "Gym at seven.")
+        return {label.text(): label.styleSheet()
+                for label in w._reading_box.findChildren(QLabel)}
+
+    @staticmethod
+    def _px(style):
+        import re
+        return int(re.search(r"font-size:\s*(\d+)px", style).group(1))
+
+    def test_what_mo_said_is_bold_and_large(self, qapp):
+        import re
+        w = _make_cockpit(qapp)
+        style = self._exchange_labels(w)["what's on my calendar"]
+        assert self._px(style) >= 15
+        assert int(re.search(r"font-weight:\s*(\d+)", style).group(1)) >= 600
+        w.close()
+
+    def test_the_answer_is_large(self, qapp):
+        import re
+        w = _make_cockpit(qapp)
+        style = self._exchange_labels(w)["Gym at seven."]
+        assert self._px(style) >= 16
+        assert int(re.search(r"font-weight:\s*(\d+)", style).group(1)) >= 500
+        w.close()
+
+    def test_the_link_text_itself_is_unchanged_for_copying(self, qapp):
+        # Break points are zero-width: the words read and copy as written.
+        w = _make_cockpit(qapp)
+        w.on_state_update("processing", "q", "")
+        w.on_state_update("speaking", "q", "see https://a.example.com/very/long/path_name")
+        from PyQt6.QtWidgets import QLabel
+        texts = [label.text().replace("​", "")
+                 for label in w._reading_box.findChildren(QLabel)]
+        assert "see https://a.example.com/very/long/path_name" in texts
+        w.close()
+
+
 class TestArrows:
     """‹ › under the sphere step through the conversation in the rail."""
 

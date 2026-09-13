@@ -18,6 +18,7 @@ Center's local cache — so opening the cockpit never waits on the network.
 
 import calendar
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -286,10 +287,22 @@ class _RailRow(QWidget):
             row.addWidget(chip, 0, Qt.AlignmentFlag.AlignTop)
 
 
+# A long run with no spaces — a link, an email address — cannot wrap, so it
+# forces its label wider than the rail and the end is clipped off. A
+# zero-width space after each of these characters lets it break there while
+# reading and copying exactly as written.
+_LONG_RUN = re.compile(r"\S{20,}")
+_BREAK_AFTER = re.compile(r"([/?&=._\-@:])")
+
+
+def _breakable(text: str) -> str:
+    return _LONG_RUN.sub(lambda m: _BREAK_AFTER.sub("\\1\u200b", m.group(0)), text)
+
+
 def _wrapped(text: str, style: str) -> QLabel:
     """A word-wrapped label that tells its layout how tall it is — wrapped
     labels clip otherwise, the trap this project has hit before."""
-    label = QLabel(text)
+    label = QLabel(_breakable(text))
     label.setWordWrap(True)
     label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     policy = label.sizePolicy()
@@ -429,6 +442,9 @@ class CockpitWindow(QWidget):
         self._notice.setWordWrap(True)
         self._notice.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._notice.setMaximumWidth(620)
+        # An explicit minimum overrides the text's own: an error with one long
+        # unbroken string must never push the window past the screen edge.
+        self._notice.setMinimumWidth(1)
         self._notice.setStyleSheet(
             f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT};"
             f" font-size: 15px; background: transparent;"
@@ -709,21 +725,26 @@ class CockpitWindow(QWidget):
         rows.setContentsMargins(12, 0, 0, 0)
         rows.setSpacing(0)
 
+        # Set to be read from a normal sitting distance: what Mo said heavy,
+        # the answer large, both in the reading face rather than mono.
         if heard:
             rows.addWidget(_wrapped(
-                heard, f"{_mono(11, tokens.CK_TEXT_LOW, 0.6)} padding: 0 0 10px 0;"))
+                heard,
+                f"color: {tokens.CK_TEXT_HI}; font-family: {theme.FONT};"
+                f" font-size: 15px; font-weight: 600; background: transparent;"
+                f" padding: 0 0 10px 0;"))
 
         for n, (label, body) in enumerate(prose.sections(answer)):
             if label:
                 kicker = QLabel(label.upper())
                 kicker.setStyleSheet(
-                    f"{_mono(9, tokens.CK_TEXT_LOW, 1.8)}"
-                    f" padding: {12 if n else 0}px 0 3px 0;")
+                    f"{_mono(10, tokens.CK_TEXT_MID, 1.8)}"
+                    f" padding: {14 if n else 0}px 0 4px 0;")
                 rows.addWidget(kicker)
             rows.addWidget(_wrapped(
                 body,
-                f"color: {tokens.CK_TEXT_MID if label else tokens.CK_TEXT_HI};"
-                f" font-family: {theme.FONT}; font-size: 13px;"
+                f"color: {tokens.CK_TEXT_HI};"
+                f" font-family: {theme.FONT}; font-size: 16px; font-weight: 500;"
                 f" background: transparent; line-height: 150%;"
                 f" padding: {0 if label else (10 if n else 0)}px 0 0 0;"))
 
@@ -735,7 +756,7 @@ class CockpitWindow(QWidget):
 
         time_label = QLabel(stamp)
         time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        time_label.setStyleSheet(f"{_mono(9, tokens.CK_TEXT_FAINT, 0.8)} padding: 6px 0 0 0;")
+        time_label.setStyleSheet(f"{_mono(10, tokens.CK_TEXT_LOW, 0.8)} padding: 6px 0 0 0;")
         rows.addWidget(time_label)
 
         old = self._reading_layout.itemAt(index).widget()
@@ -1190,7 +1211,7 @@ class CockpitWindow(QWidget):
     @pyqtSlot(str)
     def on_error(self, message: str):
         self._current_state = "error"
-        self._notice.setText(message)
+        self._notice.setText(_breakable(message))
         self._paint_state("error")
         self._wake_attention("exchange")
 
