@@ -79,6 +79,41 @@ class TestTheApiCockpitDrivesStillExists:
             "stop() no longer cancels the frame; a cockpit in the tray would burn GPU"
 
 
+def _colours(script) -> dict:
+    table = re.search(r"const COLORS\s*=\s*\{(.*?)\}", script, re.S).group(1)
+    return {name: tuple(int(v) for v in (r, g, b))
+            for name, r, g, b in re.findall(r"(\w+):\s*\[\s*(\d+),\s*(\d+),\s*(\d+)\]", table)}
+
+
+def _hue(rgb) -> float:
+    import colorsys
+    return colorsys.rgb_to_hsv(*(v / 255 for v in rgb))[0] * 360
+
+
+class TestTheSphereIsBlue:
+    """The reel's sphere is blue; El Fager's follows it (it was amber)."""
+
+    @pytest.mark.parametrize("state", ["idle", "thinking", "speaking"])
+    def test_rest_thinking_and_speech_are_blue(self, script, state):
+        assert 205 <= _hue(_colours(script)[state]) <= 240, f"{state} is not blue"
+
+    def test_listening_still_reads_apart_from_rest(self, script):
+        colours = _colours(script)
+        assert abs(_hue(colours["idle"]) - _hue(colours["listening"])) >= 25, \
+            "listening would blur into the resting blue"
+
+    def test_error_stays_red(self, script):
+        hue = _hue(_colours(script)["error"])
+        assert hue <= 15 or hue >= 345
+
+    def test_it_opens_on_its_resting_colour(self, script):
+        # The eased colour starts at `cur`; left amber, every open would fade
+        # from gold to blue.
+        cur = re.search(r"const cur = \{ r: (\d+), g: (\d+), b: (\d+) \}", script)
+        assert cur, "the starting colour moved"
+        assert tuple(int(v) for v in cur.groups()) == _colours(script)["idle"]
+
+
 class TestMotionConstantsStayInRange:
     """Both of these shipped wrong once and were caught only by rendering."""
 

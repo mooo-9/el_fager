@@ -13,18 +13,19 @@
 // alpha so the silhouette reads dense and the far face falls away. Two
 // smaller clusters drift above it, one warm and one pale.
 //
-// The Ember's identity is its colour, not its geometry — the state palette
-// below is unchanged from the design, except that rest is now amber rather
-// than slate, so the sphere reads as El Fager's and not as anyone else's.
+// The sphere is blue, as the reel's is: rest and thinking a deep blue, speech
+// a paler one. Listening stays cyan and error red, far enough round the hue
+// wheel from rest that a state change still reads at a glance. The two
+// clusters keep their warm and pale tones — the only warmth left in the scene.
 //
 // Python drives it through window.orb (see ui/cockpit.py). The loop parks
 // itself whenever the window hides, so a cockpit in the tray costs no GPU.
 
 const COLORS = {
-  idle:      [240, 153,  80],
+  idle:      [ 72, 112, 255],
   listening: [ 56, 224, 255],
-  thinking:  [240, 153,  80],
-  speaking:  [255, 215, 130],
+  thinking:  [ 72, 112, 255],
+  speaking:  [150, 180, 255],
   error:     [255,  80,  66],
 };
 
@@ -35,7 +36,7 @@ let bloomAt = 0;
 let raf = null;
 let running = false;
 
-const cur = { r: 240, g: 153, b: 80 };
+const cur = { r: 72, g: 112, b: 255 };
 
 const c = document.getElementById('orb');
 
@@ -187,8 +188,8 @@ const tick = (now) => {
   // Error stays unambiguously red: a warning light that drifts through pink
   // and orange stops reading as a warning. Every other state is free to move.
   const chroma = aState === 'error' ? 0.22 : 1;
-  // The band on screen at any instant stays narrow — a wide one turns gold
-  // into a pink-to-green rainbow and the state stops being recognisable.
+  // The band on screen at any instant stays narrow — a wide one turns blue
+  // into a violet-to-green rainbow and the state stops being recognisable.
   // The *wander* is what makes it visibly change colour, slowly, over time.
   const wander = chroma * (14 * Math.sin(t * 0.13) + 6 * Math.sin(t * 0.31 + 2.0));
   const spread = chroma * (12 + env * 8);
