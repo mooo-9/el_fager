@@ -165,6 +165,74 @@ class _Readout(QWidget):
         effect.setOpacity(opacity)
 
 
+class _StatusCard(QWidget):
+    """The reel's small card at the head of the left rail: the time and date,
+    what El Fager has done today, and what is next."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("status")
+        self.setStyleSheet(
+            f"QWidget#status {{ background: {tokens.rgba(tokens.CK_PANEL, 0.72)};"
+            f" border: 1px solid {tokens.CK_HAIRLINE}; border-radius: {tokens.R2}px; }}")
+        col = QVBoxLayout(self)
+        col.setContentsMargins(16, 12, 16, 12)
+        col.setSpacing(6)
+
+        top = QHBoxLayout()
+        self.time = QLabel("—")
+        self.time.setStyleSheet(
+            f"color: {tokens.CK_TEXT_HI}; font-family: {theme.FONT}; font-size: 20px;"
+            f" font-weight: 500; background: transparent;")
+        top.addWidget(self.time)
+        top.addStretch()
+        self.date = QLabel("")
+        self.date.setStyleSheet(_mono(10, tokens.CK_TEXT_LOW, 1.4))
+        top.addWidget(self.date, 0, Qt.AlignmentFlag.AlignVCenter)
+        col.addLayout(top)
+
+        done = QHBoxLayout()
+        done.setSpacing(8)
+        dot = QLabel("●")
+        dot.setStyleSheet(_mono(8, tokens.OK, 0))
+        done.addWidget(dot)
+        kicker = QLabel("DONE TODAY")
+        kicker.setStyleSheet(_mono(10, tokens.CK_TEXT_LOW, 1.6))
+        done.addWidget(kicker)
+        self.done = QLabel("—")
+        self.done.setStyleSheet(
+            f"color: {tokens.OK}; font-family: {theme.FONT_MONO}; font-size: 13px;"
+            f" font-weight: 600; background: transparent;")
+        done.addWidget(self.done)
+        done.addStretch()
+        col.addLayout(done)
+
+        upcoming = QHBoxLayout()
+        upcoming.setSpacing(8)
+        kicker = QLabel("NEXT")
+        kicker.setStyleSheet(_mono(10, tokens.CK_TEXT_LOW, 1.6))
+        upcoming.addWidget(kicker, 0, Qt.AlignmentFlag.AlignTop)
+        self.next = QLabel("—")
+        self.next.setWordWrap(True)
+        self.next.setStyleSheet(
+            f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT}; font-size: 12px;"
+            f" background: transparent;")
+        upcoming.addWidget(self.next, 1)
+        col.addLayout(upcoming)
+
+    def set_attention(self, opacity: float):
+        """Recedes with the other readouts; an effect, so nothing reflows."""
+        effect = self.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(self)
+            self.setGraphicsEffect(effect)
+        effect.setOpacity(opacity)
+
+    def set_tint(self, color: str):
+        pass                  # a card, not a hairline readout: it keeps its border
+
+
 class _StateChip(QWidget):
     """Top-centre state mark: a state-tinted dot beside the state's name."""
 
@@ -187,7 +255,8 @@ class _StateChip(QWidget):
 
 class _MonthCalendar(QWidget):
     """The left rail's month grid. Today is the only lit cell — the rail is a
-    place to find yourself in the month, not a calendar to work in."""
+    place to find yourself in the month, not a calendar to work in. ‹ › in
+    the title row look at the months either side, as the reel's does."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -195,9 +264,28 @@ class _MonthCalendar(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(8)
 
+        head = QHBoxLayout()
+        head.setSpacing(4)
         self._title = QLabel("")
         self._title.setStyleSheet(_mono(11, tokens.CK_TEXT_MID, 2.4))
-        col.addWidget(self._title)
+        head.addWidget(self._title)
+        head.addStretch()
+        arrows = []
+        for glyph, step in (("‹", -1), ("›", 1)):
+            arrow = QPushButton(glyph)
+            arrow.setCursor(Qt.CursorShape.PointingHandCursor)
+            arrow.setFixedSize(22, 22)
+            arrow.setStyleSheet(
+                f"QPushButton {{ {_mono(13, tokens.CK_TEXT_LOW, 0)} border: none;"
+                f" border-radius: 11px; }}"
+                f"QPushButton:hover {{ color: {tokens.CK_TEXT_HI};"
+                f" background: {tokens.rgba('#FFFFFF', 0.06)}; }}")
+            arrow.clicked.connect(lambda _c=False, s=step: self._step(s))
+            head.addWidget(arrow)
+            arrows.append(arrow)
+        self._prev, self._next = arrows
+        col.addLayout(head)
+        self._shown = (datetime.now().year, datetime.now().month)
 
         self._grid = QGridLayout()
         self._grid.setContentsMargins(0, 0, 0, 0)
@@ -206,7 +294,17 @@ class _MonthCalendar(QWidget):
         col.addLayout(self._grid)
         self.refresh()
 
+    def _step(self, months: int):
+        index = self._shown[0] * 12 + (self._shown[1] - 1) + months
+        self._paint(index // 12, index % 12 + 1)
+
     def refresh(self):
+        """Back to this month — the rail opens on today."""
+        now = datetime.now()
+        self._paint(now.year, now.month)
+
+    def _paint(self, year: int, month: int):
+        self._shown = (year, month)
         while self._grid.count():
             item = self._grid.takeAt(0)
             w = item.widget()
@@ -214,21 +312,22 @@ class _MonthCalendar(QWidget):
                 w.setParent(None)
 
         today = datetime.now()
-        self._title.setText(today.strftime("%B %Y").upper())
+        self._title.setText(datetime(year, month, 1).strftime("%B %Y").upper())
+        this_month = (year, month) == (today.year, today.month)
         for c, name in enumerate(("M", "T", "W", "T", "F", "S", "S")):
             head = QLabel(name)
             head.setAlignment(Qt.AlignmentFlag.AlignCenter)
             head.setStyleSheet(_mono(9, tokens.CK_TEXT_FAINT, 0.6))
             self._grid.addWidget(head, 0, c)
 
-        for r, week in enumerate(calendar.monthcalendar(today.year, today.month), start=1):
+        for r, week in enumerate(calendar.monthcalendar(year, month), start=1):
             for c, day in enumerate(week):
                 if day == 0:
                     continue
                 cell = QLabel(str(day))
                 cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 cell.setFixedHeight(20)
-                if day == today.day:
+                if this_month and day == today.day:
                     cell.setStyleSheet(
                         f"{_mono(10, tokens.CK_TEXT_ON_FILL, 0)}"
                         f" background: {tokens.EMBER}; border-radius: 4px;"
@@ -690,7 +789,7 @@ class CockpitWindow(QWidget):
     # ── Rails ─────────────────────────────────────────────────────────────
 
     def _build_left_rail(self) -> QWidget:
-        """The day: the clock, the month, what is next, what is on today."""
+        """The day: the status card, the month, what is on today."""
         rail = QWidget()
         rail.setFixedWidth(318)
         rail.setStyleSheet("background: transparent;")
@@ -698,16 +797,13 @@ class CockpitWindow(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(18)
 
-        self._r_time = _Readout("TIME")
-        col.addWidget(self._r_time)
+        self._status = _StatusCard()
+        col.addWidget(self._status)
 
         cal_panel = _Panel("")
         self._calendar = _MonthCalendar()
         cal_panel.column.addWidget(self._calendar)
         col.addWidget(cal_panel)
-
-        self._r_next = _Readout("NEXT")
-        col.addWidget(self._r_next)
 
         today_panel = _Panel("TODAY")
         self._today_list = QVBoxLayout()
@@ -1162,7 +1258,7 @@ class CockpitWindow(QWidget):
             f"window.orb && window.orb.setAmbient({str(level == 'ambient').lower()})")
 
     def _readouts(self):
-        return (self._r_time, self._r_next, self._r_today, self._r_skills)
+        return (self._status, self._r_today, self._r_skills)
 
     def _go_ambient(self):
         """Ambient is the orb alone: the readouts go, and so does anything on
@@ -1185,14 +1281,29 @@ class CockpitWindow(QWidget):
         now = datetime.now()
         hour = now.hour % 12 or 12
         suffix = "AM" if now.hour < 12 else "PM"
-        self._r_time.set_value(f"{hour}:{now.minute:02d} {suffix}")
+        self._status.time.setText(f"{hour}:{now.minute:02d} {suffix}")
+        self._status.date.setText(now.strftime("%a, %b %d").upper())
 
     def _refresh_readouts(self):
         self._tick_clock()
-        self._r_next.set_value(_cached("calendar"))
+        self._status.next.setText(_cached("calendar"))
+        self._status.done.setText(self._done_today())
         self._r_today.set_value(_cached("tasks"))
         self._r_skills.set_value(self._skills_online())
         self._refresh_rails()
+
+    def _done_today(self) -> str:
+        """What the Trust Ledger says El Fager did today: an action that was
+        walked back does not count, and nor does the undo itself."""
+        try:
+            from core import ledger
+            today = datetime.now().date().isoformat()
+            done = [e for e in ledger.entries(limit=1000)
+                    if str(e.get("ts", "")).startswith(today)
+                    and e.get("category") != "revoked" and not e.get("revoked")]
+        except Exception:
+            return "—"
+        return str(len(done))
 
     def _skills_online(self) -> str:
         """How many of the six surfaces are switched on in Settings → Skills."""

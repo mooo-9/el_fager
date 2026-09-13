@@ -91,8 +91,92 @@ class TestReadouts:
     def test_the_clock_is_twelve_hour(self, qapp):
         w = _make_cockpit(qapp)
         w._tick_clock()
-        assert w._r_time._value.text().endswith(("AM", "PM"))
-        assert not w._r_time._value.text().startswith("0")
+        assert w._status.time.text().endswith(("AM", "PM"))
+        assert not w._status.time.text().startswith("0")
+        w.close()
+
+
+class TestStatusCard:
+    """The reel's small card at the top of the left rail: the time, what El
+    Fager has done today, and what is next."""
+
+    def test_it_heads_the_left_rail_in_place_of_the_big_readouts(self, qapp):
+        from PyQt6.QtWidgets import QLabel
+        w = _make_cockpit(qapp)
+        rail = w._status.parentWidget().layout()
+        assert rail.indexOf(w._status) == 0
+        kickers = [l.text() for l in w._status.parentWidget().findChildren(QLabel)
+                   if l.isVisibleTo(w._status.parentWidget())]
+        assert "TIME" not in kickers
+        w.close()
+
+    def test_done_today_counts_only_todays_actions(self, qapp, monkeypatch):
+        from datetime import datetime, timedelta
+        from core import ledger
+        now = datetime.now()
+        today, yesterday = now.isoformat(timespec="seconds"),             (now - timedelta(days=1)).isoformat(timespec="seconds")
+        monkeypatch.setattr(ledger, "entries", lambda limit=50, category=None: [
+            {"ts": today, "category": "sent", "revoked": False},
+            {"ts": today, "category": "logged", "revoked": False},
+            {"ts": today, "category": "sent", "revoked": True},      # walked back
+            {"ts": today, "category": "revoked", "revoked": False},  # the undo itself
+            {"ts": yesterday, "category": "sent", "revoked": False},
+        ])
+        w = _make_cockpit(qapp)
+        w._refresh_readouts()
+        assert w._status.done.text() == "2"
+        w.close()
+
+    def test_an_unreadable_ledger_reads_as_a_dash(self, qapp, monkeypatch):
+        from core import ledger
+        def broken(**_):
+            raise OSError("no key")
+        monkeypatch.setattr(ledger, "entries", broken)
+        w = _make_cockpit(qapp)
+        w._refresh_readouts()
+        assert w._status.done.text() == "—"
+        w.close()
+
+    def test_next_comes_from_the_calendar_cache(self, qapp, tmp_path, monkeypatch):
+        import ui.cockpit as mod
+        cache = tmp_path / "cache.json"
+        cache.write_text('{"cards": {"calendar": {"text": "19:00  Gym"}}}', encoding="utf-8")
+        monkeypatch.setattr(mod, "_CACHE", cache)
+        w = _make_cockpit(qapp)
+        w._refresh_readouts()
+        assert w._status.next.text() == "19:00  Gym"
+        w.close()
+
+
+class TestMonthArrows:
+    def _title(self, w):
+        return w._calendar._title.text()
+
+    def test_the_arrows_step_through_the_months(self, qapp):
+        from datetime import datetime
+        w = _make_cockpit(qapp)
+        now = datetime.now()
+        this = now.strftime("%B %Y").upper()
+        w._calendar._next.click()
+        nxt = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1)
+        assert self._title(w) == nxt.strftime("%B %Y").upper()
+        w._calendar._prev.click()
+        w._calendar._prev.click()
+        prev = datetime(now.year - (now.month == 1), (now.month - 2) % 12 + 1, 1)
+        assert self._title(w) == prev.strftime("%B %Y").upper()
+        w._calendar.refresh()
+        assert self._title(w) == this
+        w.close()
+
+    def test_today_is_lit_only_in_its_own_month(self, qapp):
+        from ui import tokens
+        w = _make_cockpit(qapp)
+        def lit():
+            return [c for c in w._calendar.findChildren(type(w._calendar._title))
+                    if tokens.EMBER in c.styleSheet()]
+        assert len(lit()) == 1
+        w._calendar._next.click()
+        assert lit() == []
         w.close()
 
 
@@ -129,7 +213,7 @@ class TestAttention:
         w = _make_cockpit(qapp)
         w.on_state_update("processing", "what's on my plate", "")
         assert w._attention == "exchange"
-        assert w._r_time.graphicsEffect().opacity() == pytest.approx(0.12)
+        assert w._status.graphicsEffect().opacity() == pytest.approx(0.12)
         w.close()
 
     def test_the_readouts_come_back_when_the_turn_ends(self, qapp):
@@ -137,7 +221,7 @@ class TestAttention:
         w.on_state_update("processing", "x", "")
         w.on_pipeline_done()
         assert w._attention == "ready"
-        assert w._r_time.graphicsEffect().opacity() == pytest.approx(1.0)
+        assert w._status.graphicsEffect().opacity() == pytest.approx(1.0)
         w.close()
 
     def test_silence_falls_to_ambient_but_keeps_the_transcript(self, qapp):
@@ -146,7 +230,7 @@ class TestAttention:
         w.on_pipeline_done()
         w._go_ambient()                       # what the timer would do
         assert w._attention == "ambient"
-        assert w._r_time.graphicsEffect().opacity() == 0.0
+        assert w._status.graphicsEffect().opacity() == 0.0
         from PyQt6.QtWidgets import QLabel     # saved until the Cockpit closes
         assert "Three things today." in [
             label.text() for label in w._reading_box.findChildren(QLabel)]
