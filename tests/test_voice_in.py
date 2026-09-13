@@ -55,6 +55,46 @@ class TestJoinSpeechSegments:
         assert TRANSCRIBE_LANGUAGE == "en"
 
 
+# ── Repetition loops ───────────────────────────────────────────────────────
+# Every line here is a real transcript from data/conversations. Whisper's own
+# compression-ratio check (2.4) passes all of the loops: zlib barely compresses
+# a sentence this short, so none of them scores above 2.1.
+
+class TestRepetitionLoops:
+    @pytest.mark.parametrize("looped", [
+        # 2026-09-05: the mic heard the song El Fager had just started playing
+        "I'm going to get a check on my calendar, and I'm going to get a check "
+        "on my calendar, and I'm going to get a check on my calendar.",
+        "I'm going to ask you a question. How are you? How are you? Sorry, I'm "
+        "sorry. No, I'm sorry. I'm sorry, I'm sorry. I'm sorry, I'm sorry.",
+        "I'm not sure if I can't get it. I'm not sure if I can't get it. You're "
+        "not sure if I can't get it. Yes. I'm not sure.",
+        "Jesus, I saw my life, I saw my life, I saw my life, I saw my life.",
+        "اوه اوه اوه اوه اوه اوه",
+    ])
+    def test_a_looped_decode_is_dropped(self, looped):
+        assert _join_speech_segments("en", [(looped, 0.1)]) == ""
+
+    @pytest.mark.parametrize("real", [
+        # Mo repeating himself on purpose — the loop check must leave these be
+        "I only talk English and Arabic That's not even a language that I speak "
+        "I told you how are you in Arabic How are you, Fager? How are you?",
+        "أريد أن أضعه في To Do List أريد أن أضعه في To Do List ثاني حاجة أريد أن "
+        "أزوده ليس راس الشمال راست الشمال أضلت W R I S T ثاني حاجة أريد أن أذهب "
+        "لدكتور السنان يزودها في To Do List أيضا",
+        "Hold up, close. Hold up, close. Hold up. That's my thing.",
+        "Please, please, please, please. Huh?",
+        "Send it.",
+    ])
+    def test_deliberate_repetition_is_kept(self, real):
+        assert _join_speech_segments("en", [(real, 0.1)]) == real
+
+    def test_a_loop_split_across_segments_is_still_caught(self):
+        segments = [("I saw my life,", 0.1), ("I saw my life,", 0.1),
+                    ("I saw my life, I saw my life.", 0.1)]
+        assert _join_speech_segments("en", segments) == ""
+
+
 # ── Backends decode English, and only English ──────────────────────────────
 
 class _FakeOpenAIWhisper:

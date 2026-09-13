@@ -15,8 +15,11 @@ VAD (end-of-speech detection):
 import io
 import os
 import queue
+import re
 import threading
 import wave as _wave
+from collections import Counter
+
 import numpy as np
 import sounddevice as sd
 
@@ -44,6 +47,16 @@ RMS_SILENCE_SEC = 1.5     # RMS can't tell soft speech from silence — keep a m
 # real filter on noise is NO_SPEECH_MAX.
 TRANSCRIBE_LANGUAGE = "en"
 NO_SPEECH_MAX = 0.6  # drop segments Whisper itself flags as probable non-speech
+
+# A decode stuck in a loop over music or noise repeats one short phrase:
+# "I'm sorry. I'm sorry. I'm sorry." Whisper's compression-ratio check misses
+# these — zlib barely compresses a sentence this short. So count it directly:
+# a transcript is a loop when most of its words belong to a 3-word phrase that
+# occurs 3+ times. Over the logged transcripts, real speech tops out at 0.31
+# ("how are you … How are you, Fager? How are you?") and loops start at 0.46.
+LOOP_PHRASE_WORDS = 3
+LOOP_MIN_REPEATS = 3
+LOOP_COVERAGE_MAX = 0.4
 
 _BACKEND_GROQ   = "groq"
 _BACKEND_FASTER = "faster_whisper"
@@ -141,7 +154,25 @@ def _join_speech_segments(language: str | None,
         return ""
     kept = [t.strip() for t, p in segments
             if t.strip() and (p is None or p < NO_SPEECH_MAX)]
-    return " ".join(kept).strip()
+    text = " ".join(kept).strip()
+    if _is_repetition_loop(text):
+        print(f"[El Fager] Dropped a looped transcript: {text[:80]!r}")
+        return ""
+    return text
+
+
+def _is_repetition_loop(text: str) -> bool:
+    """True when most of the words sit inside a phrase repeated LOOP_MIN_REPEATS+
+    times. Checked on the joined text: a loop often spans segments."""
+    words = re.findall(r"[\w']+", text.lower())
+    n = LOOP_PHRASE_WORDS
+    phrases = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+    counts = Counter(phrases)
+    looped = set()
+    for i, phrase in enumerate(phrases):
+        if counts[phrase] >= LOOP_MIN_REPEATS:
+            looped.update(range(i, i + n))
+    return bool(words) and len(looped) / len(words) > LOOP_COVERAGE_MAX
 
 
 def _normalise(audio: np.ndarray) -> np.ndarray:
