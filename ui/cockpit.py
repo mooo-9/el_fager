@@ -21,7 +21,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QPointF, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QColor, QPainter, QPainterPath
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsOpacityEffect,
@@ -231,6 +232,37 @@ class _MonthCalendar(QWidget):
                 self._grid.addWidget(cell, r, c)
 
 
+class _FileMark(QWidget):
+    """The reel's automation icon: a small ember page with its corner folded.
+
+    Painted rather than typed, like the step ledger's marks — a font without
+    the glyph would draw an empty box.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(12, 16)   # page sits 2px low, on the text line
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        page = QPainterPath(QPointF(1.5, 3.5))
+        page.lineTo(7.5, 3.5)
+        page.lineTo(10.5, 6.5)
+        page.lineTo(10.5, 14.5)
+        page.lineTo(1.5, 14.5)
+        page.closeSubpath()
+        p.setBrush(QColor(tokens.EMBER))
+        p.drawPath(page)
+        fold = QPainterPath(QPointF(7.5, 3.5))
+        fold.lineTo(7.5, 6.5)
+        fold.lineTo(10.5, 6.5)
+        fold.closeSubpath()
+        p.setBrush(QColor(tokens.EMBER_BRIGHT))
+        p.drawPath(fold)
+
+
 class _RailRow(QWidget):
     """One automation: what it is on the left, when/where it runs on the
     right. The tag is mono so the column of them lines up."""
@@ -240,9 +272,7 @@ class _RailRow(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 5, 0, 5)
         row.setSpacing(10)
-        dot = QLabel("▪")
-        dot.setStyleSheet(_mono(8, tokens.rgba(tokens.EMBER, 0.55), 0))
-        row.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(_FileMark(), 0, Qt.AlignmentFlag.AlignTop)
         name = QLabel(label)
         name.setWordWrap(True)
         name.setStyleSheet(

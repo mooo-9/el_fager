@@ -307,6 +307,35 @@ class TestDataMoments:
         w.close()
 
 
+class TestAutomationRows:
+    def test_each_row_leads_with_a_painted_file_icon(self, qapp):
+        from PyQt6.QtWidgets import QLabel
+        from ui.cockpit import _FileMark, _RailRow
+        row = _RailRow("morning routine", "MANUAL")
+        assert len(row.findChildren(_FileMark)) == 1
+        assert "▪" not in [label.text() for label in row.findChildren(QLabel)]
+        row.deleteLater()
+
+    def test_the_icon_is_ember_not_a_blank_box(self, qapp):
+        # Painted, not typed: a font without the glyph would draw nothing.
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QColor, QImage
+        from ui import tokens
+        from ui.cockpit import _FileMark
+        mark = _FileMark()
+        image = QImage(mark.size(), QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        mark.render(image)
+        inked = [image.pixelColor(x, y)
+                 for x in range(image.width()) for y in range(image.height())
+                 if image.pixelColor(x, y).alpha() > 200]
+        assert inked, "the icon painted nothing"
+        ember = QColor(tokens.EMBER)
+        assert all(abs(c.hue() - ember.hue()) <= 12 for c in inked
+                   if c.saturation() > 60), "the icon is not ember"
+        mark.deleteLater()
+
+
 class TestStepMark:
     @pytest.mark.parametrize("status", ["active", "done", "failed"])
     def test_each_mark_paints_without_a_font_glyph(self, qapp, status):
