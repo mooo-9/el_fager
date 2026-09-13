@@ -1017,6 +1017,49 @@ class TestRails:
         w.close()
 
 
+class TestSphereStage:
+    def _stage(self, call):
+        return [float(v) for v in call.split("(", 1)[1].rstrip(")").split(",")]
+
+    def _host_rect(self, w, widget):
+        from PyQt6.QtCore import QPoint
+        top_left = widget.mapToGlobal(QPoint(0, 0)) - w._orb_host.mapToGlobal(QPoint(0, 0))
+        return top_left.x(), top_left.y(), widget.width(), widget.height()
+
+    def test_the_page_is_told_the_free_space_in_the_middle_column(self, qapp):
+        # The sphere belongs between the state label and the arrows, centred
+        # on the column — not on the window, whose side panels differ in width.
+        w = _make_cockpit(qapp)
+        for size in ((1280, 760), (1536, 816)):
+            w._show_window()
+            w.resize(*size)
+            for _ in range(40):
+                qapp.processEvents()
+            sent = []
+            w._orb_js = sent.append
+            w._push_stage()
+            assert sent and sent[-1].startswith("window.orb && window.orb.setStage(")
+            x, y, width, height = self._stage(sent[-1])
+            cx, _, cw, _ = self._host_rect(w, w._centre)
+            _, chip_y, _, chip_h = self._host_rect(w, w._state_chip)
+            _, arrows_y, _, _ = self._host_rect(w, w._scrub_prev)
+            assert abs(x - (cx + cw / 2)) <= 1 and width == cw
+            assert abs((y - height / 2) - (chip_y + chip_h)) <= 1, "top of the space is not under the label"
+            assert abs((y + height / 2) - arrows_y) <= 1, "bottom of the space is not the arrows"
+        w.close()
+
+    def test_a_resize_moves_the_sphere_with_the_column(self, qapp):
+        w = _make_cockpit(qapp)
+        w._show_window()
+        sent = []
+        w._orb_js = sent.append
+        w.resize(w.width() + 200, w.height())
+        for _ in range(40):
+            qapp.processEvents()
+        assert any(call.startswith("window.orb && window.orb.setStage(") for call in sent)
+        w.close()
+
+
 class TestNormalWindow:
     """A normal window, not full screen: it sits above the taskbar, has a dark
     title bar of its own, and remembers where it was left."""

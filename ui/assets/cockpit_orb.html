@@ -35,6 +35,11 @@ let changedAt = 0;
 let bloomAt = 0;
 let raf = null;
 let running = false;
+// The free space in the Cockpit's middle column, in page pixels — centre,
+// width, and height from under the state label down to the arrows. Python
+// reports it because the side panels are not the same width, so the window's
+// centre is not the stage's. Null until told: then the window is the stage.
+let stage = null;
 
 const cur = { r: 72, g: 112, b: 255 };
 
@@ -80,8 +85,8 @@ function buildCluster(n, seed) {
   }
   return a;
 }
-const CL_A = buildCluster(150, 12345);   // warm, upper left
-const CL_B = buildCluster(130, 98765);   // pale, upper right
+const CL_A = buildCluster(260, 12345);   // warm, upper left
+const CL_B = buildCluster(230, 98765);   // pale, upper right
 
 const TILT = -0.32;                       // radians; the axis leans back left
 const sinT = Math.sin(TILT), cosT = Math.cos(TILT);
@@ -204,14 +209,19 @@ const tick = (now) => {
     LUT[k * 3] = rr; LUT[k * 3 + 1] = gg; LUT[k * 3 + 2] = bb;
   }
 
-  const cx = W / 2, cy = H / 2;
+  const cx = stage ? stage.x : W / 2, cy = stage ? stage.y : H / 2;
   const dim = ambient ? 0.34 : 1;
   // One slow breath, a bloom that swells briefly on a voice wake, and the
   // whole sphere leaning larger as the voice gets louder.
   const breath = 1 + Math.sin(t * 0.55) * 0.012;
   const since = (now - bloomAt) / 1000;
   const bloom = bloomAt && since < 1.1 ? Math.sin((1 - since / 1.1) * Math.PI) * 0.06 : 0;
-  const R = Math.min(W, H) * 0.26 * breath * (1 + bloom) * (1 + env * 0.055);
+  // It fills the stage as the reel's does: as big as the free space allows.
+  // Perspective draws the near face ~10% past R, so R leaves that margin, and
+  // room under it for the ground line above the arrows.
+  const fit = stage ? Math.max(40, Math.min(stage.h * 0.44 - 26, stage.w * 0.42))
+                    : Math.min(W, H) * 0.26;
+  const R = fit * breath * (1 + bloom) * (1 + env * 0.055);
 
   // Spin is integrated, not derived from t, so quickening it while speaking
   // does not jump the rotation.
@@ -301,17 +311,20 @@ const tick = (now) => {
       const sx = ox + dx + xr * scale * p;
       const sy = oy + dy + y0 * scale * p;
       const d = (zr + 1.6) / 3.2;
-      const a = (0.62 - d * 0.42) * dim;
+      const a = (0.85 - d * 0.42) * dim;
       if (a <= 0.02) continue;
       ctx.fillStyle = 'rgba(' + tone[0] + ',' + tone[1] + ',' + tone[2] + ',' + a.toFixed(3) + ')';
       ctx.beginPath();
-      ctx.arc(sx, sy, (1.25 - d * 0.7) * p, 0, 6.283185);
+      ctx.arc(sx, sy, (1.6 - d * 0.8) * p, 0, 6.283185);
       ctx.fill();
     }
   }
-  const clusterR = Math.min(W, H) * 0.075;
-  drawCluster(CL_A, cx - R * 1.45, cy - R * 0.86, clusterR, [235, 128, 72], 0.5, 0);
-  drawCluster(CL_B, cx + R * 1.42, cy - R * 0.92, clusterR * 0.86, [214, 226, 238], 0.42, 2.2);
+  // Over the sphere's shoulders, where the reel has them, and never out past
+  // the middle column: further out, the side panels cover them.
+  const clusterR = R * 0.38;
+  const reach = stage ? Math.min(R * 1.15, stage.w * 0.40) : R * 1.15;
+  drawCluster(CL_A, cx - reach, cy - R * 0.95, clusterR, [235, 128, 72], 0.5, 0);
+  drawCluster(CL_B, cx + reach * 0.97, cy - R * 1.00, clusterR * 0.86, [214, 226, 238], 0.42, 2.2);
 
   // ── the ground line the design keeps under the stage ───────────────────
   ctx.globalAlpha = 0.5 * dim;
@@ -320,7 +333,7 @@ const tick = (now) => {
   hg.addColorStop(0.5, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0.34)');
   hg.addColorStop(1, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0)');
   ctx.fillStyle = hg;
-  ctx.fillRect(cx - 320, cy + R + 44, 640, 1);
+  ctx.fillRect(cx - 320, cy + R * 1.12 + 12, 640, 1);   // under the drawn edge, above the arrows
   ctx.globalAlpha = 1;
 };
 
@@ -333,6 +346,7 @@ window.orb = {
     if (s !== 'idle') ambient = false;
   },
   setAmbient(on) { ambient = !!on; },
+  setStage(x, y, w, h) { stage = { x, y, w, h }; },
   bloom() { bloomAt = performance.now(); },   // voice wake only; click is silent
   start() {
     if (running) return;

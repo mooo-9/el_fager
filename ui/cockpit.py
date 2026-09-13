@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QPointF, QRect, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QApplication,
@@ -633,6 +633,7 @@ class CockpitWindow(QWidget):
 
         centre = QWidget()
         centre.setStyleSheet("background: transparent;")
+        self._centre = centre        # the orb page centres the sphere on it
         grid = QVBoxLayout(centre)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(0)
@@ -1185,6 +1186,27 @@ class CockpitWindow(QWidget):
         self._orb_ready = bool(ok)
         if ok:
             self._push_orb_state(self._current_state)
+            self._push_stage()
+
+    def _push_stage(self):
+        """Tell the page the free space in the middle column: centred on the
+        column, from under the state label down to the arrows. The side panels
+        differ in width, so the window's centre — where the sphere used to sit
+        — was 41px right of the arrows, and a height-only size ran it into
+        them once the window was maximised."""
+        origin = self._orb_host.mapTo(self, QPoint(0, 0))
+        # Through the window: the column and the orb's host are siblings in
+        # the stack, and mapTo() is only meaningful toward an ancestor.
+        column = self._centre.mapTo(self, QPoint(0, 0)) - origin
+        top = (self._state_chip.mapTo(self, QPoint(0, self._state_chip.height())) - origin).y()
+        bottom = (self._scrub_prev.mapTo(self, QPoint(0, 0)) - origin).y()
+        x = column.x() + self._centre.width() / 2
+        self._orb_js(f"window.orb && window.orb.setStage("
+                     f"{x:g}, {(top + bottom) / 2:g}, {self._centre.width()}, {bottom - top})")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._push_stage)       # once the columns have moved
 
     def _push_orb_state(self, state: str):
         if not (self._orb and self._orb_ready):

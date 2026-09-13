@@ -50,7 +50,7 @@ class TestTheApiCockpitDrivesStillExists:
     fails silently — there is no exception to catch on the Python side."""
 
     @pytest.mark.parametrize("member", [
-        "setState", "setAmbient", "bloom", "start", "stop", "ready", "state",
+        "setState", "setAmbient", "bloom", "start", "stop", "ready", "state", "setStage",
     ])
     def test_the_member_is_defined(self, script, member):
         assert re.search(rf"\b{member}\s*[({{:]", script), \
@@ -131,3 +131,22 @@ class TestMotionConstantsStayInRange:
         floor = re.search(r"return Math\.min\(1,\s*\(([\d.]+)\s*\+", script)
         assert floor, "the speech envelope's floor term moved"
         assert float(floor.group(1)) >= 0.2, "the sphere would go still between syllables"
+
+
+class TestTheSphereFillsTheStage:
+    """The sphere centres on the middle column Python reports, not on the
+    whole window, and sizes to it — the reel's fills the space between its
+    panels, with larger, brighter clouds either side."""
+
+    def test_it_centres_on_the_stage_it_is_given(self, script):
+        assert re.search(r"stage\.x", script), "the sphere ignores the stage centre"
+
+    def test_its_size_follows_the_free_space(self, script):
+        assert re.search(r"stage\.w\s*\*", script), "the sphere ignores the stage width"
+        assert re.search(r"stage\.h\s*\*", script), "the sphere ignores the stage height"
+
+    def test_the_clouds_are_denser_and_brighter(self, script):
+        counts = [int(n) for n in re.findall(r"buildCluster\((\d+),", script)]
+        assert counts and min(counts) >= 220, f"clouds too sparse: {counts}"
+        alpha = re.search(r"const a = \(([\d.]+) - d \* [\d.]+\) \* dim;", script)
+        assert alpha and float(alpha.group(1)) >= 0.8, "clouds too faint"
