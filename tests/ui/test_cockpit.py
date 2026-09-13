@@ -880,6 +880,16 @@ class TestArrows:
         assert w._scrub_value.text() == "—"
         w.close()
 
+    def test_under_the_sphere_only_the_arrows_and_the_pill(self, qapp):
+        # The reel has ‹ › and the view pill there and nothing else; the
+        # ledger stays on L and the SKILLS button, the keys on ?.
+        from PyQt6.QtWidgets import QLabel, QPushButton
+        w = _make_cockpit(qapp)
+        texts = [x.text() for x in w.findChildren((QLabel, QPushButton))]
+        assert "LEDGER" not in texts
+        assert not any("ESC CLOSE" in t for t in texts)
+        w.close()
+
     def test_the_view_pill_asks_for_the_command_center(self, qapp):
         w = _make_cockpit(qapp)
         seen = []

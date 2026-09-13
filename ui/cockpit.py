@@ -653,32 +653,12 @@ class CockpitWindow(QWidget):
         pill_row.addStretch()
         grid.addLayout(pill_row)
         grid.addSpacing(18)
+        # Nothing else under the sphere, as the reel has it: the ledger is on
+        # L and the SKILLS button, and ? lists the keys.
 
         # Tests and the state machine both read _state_label; it *is* the
         # chip's label, so the state is named once on screen, not twice.
         self._state_label = self._state_chip.label
-
-        # the ledger lives on the bottom bar, per the design
-        self._ledger_btn = QPushButton("LEDGER")
-        self._ledger_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._ledger_btn.setStyleSheet(
-            f"QPushButton {{ {_mono(10, tokens.CK_TEXT_LOW)}"
-            f" border: 1px solid {tokens.rgba('#FFFFFF', 0.10)};"
-            f" border-radius: 6px; padding: 5px 12px; }}"
-            f"QPushButton:hover {{ color: {tokens.CK_TEXT_HI};"
-            f" border-color: {tokens.rgba(tokens.CK_STATE['listening'], 0.40)}; }}"
-        )
-        self._ledger_btn.clicked.connect(self.open_ledger)
-        ledger_row = QHBoxLayout()
-        ledger_row.addStretch()
-        ledger_row.addWidget(self._ledger_btn)
-        ledger_row.addStretch()
-        grid.addLayout(ledger_row)
-
-        hint = QLabel("ESC CLOSE   ·   SPACE TALK   ·   ?  KEYS")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet(_mono(10, tokens.CK_TEXT_FAINT))
-        grid.addWidget(hint)
 
         outer.addWidget(self._build_right_rail(), 0)
         self._keymap = self._build_keymap(chrome)
