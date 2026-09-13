@@ -377,15 +377,6 @@ class TestConversation:
         assert "Gym at seven." not in outside_panel
         w.close()
 
-    def test_every_exchange_is_stacked_in_order(self, qapp):
-        w = _make_cockpit(qapp)
-        self._exchange(w, "first question", "first answer")
-        self._exchange(w, "second question", "second answer")
-        panel = self._panel(w)
-        order = [panel.index(t) for t in
-                 ("first question", "first answer", "second question", "second answer")]
-        assert order == sorted(order)
-        w.close()
 
     def test_a_short_answer_is_in_the_panel_too(self, qapp):
         w = _make_cockpit(qapp)
@@ -502,6 +493,182 @@ class TestConversation:
         w.close()
 
 
+class TestTranscriptTabs:
+    """One tab per question along the top of the TRANSCRIPT panel, as the
+    reel's panel has them; the selected tab's exchange is the one on show."""
+
+    def _exchange(self, w, heard, answer):
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", heard, "")
+        w.on_state_update("speaking", heard, answer)
+
+    def _showing(self, w):
+        from PyQt6.QtWidgets import QLabel
+        return [label.text() for label in w._reading_box.findChildren(QLabel)
+                if label.isVisibleTo(w._reading_box)]
+
+    def test_the_tabs_head_the_transcript_panel(self, qapp):
+        w = _make_cockpit(qapp)
+        assert w._reading_panel.isAncestorOf(w._tabs_scroll)
+        assert w._reading_panel.column.indexOf(w._tabs_row) == 0
+        w.close()
+
+    def test_each_question_gets_a_tab_named_for_its_topic_in_order(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "give me my daily briefing", "…")
+        self._exchange(w, "what's the weather tomorrow?", "…")
+        self._exchange(w, "Thanks.", "Any time.")
+        assert [b.text() for b in w._tab_buttons] == [
+            "Daily briefing", "Weather tomorrow", "Thanks"]
+        w.close()
+
+    def test_the_mouse_wheel_scrolls_the_tabs_sideways(self, qapp):
+        from PyQt6.QtCore import QPoint, QPointF, Qt
+        from PyQt6.QtGui import QWheelEvent
+        w = _make_cockpit(qapp)
+        w.resize(1536, 816)
+        w.show()
+        for n in range(12):
+            self._exchange(w, f"tell me about topic number {n}", "…")
+        for _ in range(20):
+            qapp.processEvents()
+        bar = w._tabs_scroll.horizontalScrollBar()
+        assert bar.maximum() > 0
+        bar.setValue(bar.maximum())
+        wheel = QWheelEvent(QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, 120),
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                            Qt.ScrollPhase.NoScrollPhase, False)
+        w._tabs_scroll.wheelEvent(wheel)
+        assert bar.value() < bar.maximum(), "wheel up should move toward the first tab"
+        w.close()
+
+    def test_hovering_a_tab_shows_the_whole_question(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "give me my daily briefing", "…")
+        assert w._tab_buttons[0].toolTip() == "give me my daily briefing"
+        w.close()
+
+    def test_a_tab_is_wide_enough_for_its_name(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "play Estanna by Fares Sokkar on Spotify", "Playing.")
+        tab = w._tab_buttons[0]
+        assert tab.width() >= tab.fontMetrics().horizontalAdvance(tab.text()) + 16
+        w.close()
+
+    def test_a_turn_with_nothing_heard_falls_back_to_its_number(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_state_update("speaking", "", "Good morning.")   # no question came first
+        assert [b.text() for b in w._tab_buttons] == ["1"]
+        w.close()
+
+
+    def test_only_the_selected_exchange_is_on_show(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "first question", "first answer")
+        self._exchange(w, "second question", "second answer")
+        assert "second answer" in self._showing(w)
+        assert "first answer" not in self._showing(w)
+
+        w._tab_buttons[0].click()
+        assert "first question" in self._showing(w)
+        assert "first answer" in self._showing(w)
+        assert "second answer" not in self._showing(w)
+        assert [b.isChecked() for b in w._tab_buttons] == [True, False]
+        w.close()
+
+    def test_asking_again_opens_the_next_tab_before_the_answer(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "first question", "first answer")
+        w._tab_buttons[0].click()
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", "second question", "")
+        assert len(w._tab_buttons) == 2
+        assert w._tab_buttons[1].isChecked()
+        assert "second question" in self._showing(w)
+        w.close()
+
+    def test_the_arrows_and_the_tabs_agree(self, qapp):
+        w = _make_cockpit(qapp)
+        for n in range(3):
+            self._exchange(w, f"question {n}", f"answer {n}")
+        w._scrub_prev.click()
+        assert w._tab_buttons[1].isChecked()
+        w._tab_buttons[0].click()
+        assert w._scrub_value.text() == "1 / 3"
+        w.close()
+
+    def test_a_long_answer_scrolls_inside_its_tab_from_the_top(self, qapp):
+        w = _make_cockpit(qapp)
+        w.resize(1536, 816)
+        w.show()
+        self._exchange(w, "brief me", "**Mail:** " + "five unread from LinkedIn. " * 80)
+        self._exchange(w, "thanks", "Any time.")
+        w._tab_buttons[0].click()
+        for _ in range(20):
+            qapp.processEvents()
+        bar = w._reading_scroll.verticalScrollBar()
+        assert bar.maximum() > 0, "a long answer should scroll"
+        assert bar.value() == 0, "it should open at its first line"
+        w.close()
+
+    def test_escape_clears_the_tabs(self, qapp):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QKeyEvent
+        from core import staging
+        staging.reset()
+        w = _make_cockpit(qapp)
+        self._exchange(w, "first question", "first answer")
+        w.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
+                                  Qt.KeyboardModifier.NoModifier))
+        assert w._tab_buttons == []
+        assert w._tabs_layout.count() == 0
+        w.close()
+
+
+class TestTopic:
+    @pytest.mark.parametrize("heard,topic", [
+        ("give me my daily briefing", "Daily briefing"),
+        ("what's the weather tomorrow?", "Weather tomorrow"),
+        ("Hey Fager, what's on my calendar today?", "Calendar today"),
+        ("Can you send an email to Ahmed please", "Send email Ahmed"),
+        ("play Estanna by Fares Sokkar on Spotify", "Play Estanna Fares"),
+        ("Thanks.", "Thanks"),
+        ("I want you to open YouTube and play the first video", "Open YouTube play"),
+    ])
+    def test_it_names_the_question_in_a_few_words(self, heard, topic):
+        from ui.cockpit import _topic
+        assert _topic(heard) == topic
+
+    @pytest.mark.parametrize("heard,topic", [
+        # Mo's own words from the logs, where filler used to crowd out the topic
+        ("Now I want you to open YouTube and play the first video", "Open YouTube play"),
+        ("and tell me what's on my calendar and the review", "Calendar review"),
+        ("No, it's by Ferris Sokhar and someone else", "Ferris Sokhar someone"),
+        ("I'm trying the new transcript, tell me how it works", "Trying new transcript"),
+    ])
+    def test_everyday_filler_does_not_crowd_out_the_topic(self, heard, topic):
+        from ui.cockpit import _topic
+        assert _topic(heard) == topic
+
+    def test_a_long_name_drops_whole_words_not_half_of_one(self):
+        from ui.cockpit import _topic
+        assert _topic("Is everything working alright?") == "Everything working"
+
+    def test_one_overlong_word_is_cut_short(self):
+        from ui.cockpit import _topic
+        from ui.cockpit import _TOPIC_MAX
+        topic = _topic("supercalifragilisticexpialidocious")
+        assert len(topic) <= _TOPIC_MAX and topic.endswith("…")
+
+    def test_a_repeated_word_is_named_once(self):
+        from ui.cockpit import _topic
+        assert _topic("Yes, I help! Yes, I help!") == "Help"
+
+    def test_nothing_but_filler_names_nothing(self):
+        from ui.cockpit import _topic
+        assert _topic("hey fager, can you please") == ""
+
+
 class TestNeverWiderThanTheScreen:
     """Mo's screen is 1536 wide. The old stage's heard line never wrapped, so
     one long sentence made the window 2007px wide and the whole Cockpit slid
@@ -594,8 +761,7 @@ class TestArrows:
         w.on_state_update("speaking", heard, answer)
 
     def _focused(self, w):
-        return [w._reading_layout.itemAt(i).widget().property("focused")
-                for i in range(w._reading_layout.count())]
+        return [button.isChecked() for button in w._tab_buttons]
 
     def test_they_sit_under_the_sphere_not_in_the_rail(self, qapp):
         w = _make_cockpit(qapp)

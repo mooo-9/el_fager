@@ -299,6 +299,51 @@ def _breakable(text: str) -> str:
     return _LONG_RUN.sub(lambda m: _BREAK_AFTER.sub("\\1\u200b", m.group(0)), text)
 
 
+# A transcript tab is named for what was asked, in a few words: the wake
+# phrase comes off the front, the words speech is padded with come out ("I
+# want you to", "can you", "tell me what's", "no, it's"), and the first three
+# left name it, as many as fit. Local and instant, so the tab has its name the
+# moment the question lands.
+_TOPIC_WAKE = sorted((tuple(p.split()) for p in (
+    "hey el fager", "hey fager", "el fager", "fager",
+)), key=len, reverse=True)
+_TOPIC_SMALL_WORDS = frozenset("""
+    a an the my me to on of for by in at and or is are am was were be been
+    please about some any it it's just now up also there here not don't
+    i i'm i'll i'd i've you you're your we he she they them
+    that that's this these those what what's whats when where how how's why who
+    do does did have has had will would can could should
+    no yes yeah yep ok okay so if then but um uh oh ah hey
+    going gonna want wanna like really actually first all with
+    tell show give let know see get got
+""".split())
+_TOPIC_MAX = 22
+
+
+def _topic(heard: str) -> str:
+    """A few words naming the question, or "" when nothing is left."""
+    words = re.findall(r"[\w']+", heard)
+    lowered = [w.lower() for w in words]
+    for wake in _TOPIC_WAKE:
+        if tuple(lowered[:len(wake)]) == wake:
+            words, lowered = words[len(wake):], lowered[len(wake):]
+            break
+    kept, seen = [], set()
+    for word, low in zip(words, lowered):
+        if low not in _TOPIC_SMALL_WORDS and low not in seen:   # "ask ask ask" once
+            kept.append(word)
+            seen.add(low)
+    kept = kept[:3]
+    if not kept:
+        return ""
+    # Whole words, as many as fit; only a single overlong word is cut.
+    while len(kept) > 1 and len(" ".join(kept)) > _TOPIC_MAX:
+        kept.pop()
+    name = " ".join(kept)
+    name = name[0].upper() + name[1:]
+    return name if len(name) <= _TOPIC_MAX else name[:_TOPIC_MAX - 1] + "…"
+
+
 def _wrapped(text: str, style: str) -> QLabel:
     """A word-wrapped label that tells its layout how tall it is — wrapped
     labels clip otherwise, the trap this project has hit before."""
@@ -310,6 +355,18 @@ def _wrapped(text: str, style: str) -> QLabel:
     label.setSizePolicy(policy)
     label.setStyleSheet(style)
     return label
+
+
+class _TabStrip(QScrollArea):
+    """The transcript's tab row. It scrolls sideways with no bar to grab, so
+    the mouse wheel does it: up goes toward the first tab, down toward the
+    newest."""
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y() or event.angleDelta().x()
+        bar = self.horizontalScrollBar()
+        bar.setValue(bar.value() - delta // 2)
+        event.accept()
 
 
 class _Panel(QWidget):
@@ -358,6 +415,7 @@ class CockpitWindow(QWidget):
         # Cockpit closes — the ledger is the durable record. _focus is the one
         # the arrows under the sphere point at, -1 while there are none.
         self._exchanges: list = []
+        self._tab_buttons: list = []
         self._focus = -1
 
     def set_wake_listener(self, listener):
@@ -659,13 +717,38 @@ class CockpitWindow(QWidget):
         # out its chat. An answer is set as labelled sections rather than one
         # block — the model reaches for "Academic:" style headings on a
         # summary, and reading that structure beats a wall of prose.
-        reading = _Panel("TRANSCRIPT")
+        reading = _Panel("")
         self._reading_panel = reading
+
+        # The reel's tab row heads the panel: one numbered tab per question,
+        # the selected one a filled pill. A long session scrolls sideways.
+        self._tabs_row = QWidget()
+        self._tabs_row.setStyleSheet("background: transparent;")
+        head = QHBoxLayout(self._tabs_row)
+        head.setContentsMargins(0, 0, 0, 4)
+        head.setSpacing(10)
+        tabs_box = QWidget()
+        tabs_box.setStyleSheet("background: transparent;")
+        self._tabs_layout = QHBoxLayout(tabs_box)
+        self._tabs_layout.setContentsMargins(0, 0, 0, 0)
+        self._tabs_layout.setSpacing(4)
+        self._tabs_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self._tabs_scroll = _TabStrip()
+        self._tabs_scroll.setWidgetResizable(True)
+        self._tabs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._tabs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._tabs_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self._tabs_scroll.viewport().setStyleSheet("background: transparent;")
+        self._tabs_scroll.setFixedHeight(30)
+        self._tabs_scroll.setWidget(tabs_box)
+        head.addWidget(self._tabs_scroll, 1)
+        reading.column.addWidget(self._tabs_row)
+
         self._reading_box = QWidget()
         self._reading_box.setStyleSheet("background: transparent;")
         self._reading_layout = QVBoxLayout(self._reading_box)
         self._reading_layout.setContentsMargins(0, 4, 10, 4)
-        self._reading_layout.setSpacing(18)
+        self._reading_layout.setSpacing(0)
         self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._reading_scroll = QScrollArea()
         self._reading_scroll.setWidgetResizable(True)
@@ -706,8 +789,27 @@ class CockpitWindow(QWidget):
         stamp = datetime.now().strftime("%I:%M %p").lstrip("0")
         self._exchanges.append([heard, "", False, stamp])
         self._reading_layout.addWidget(QWidget())      # placeholder, rendered next
-        self._focus = len(self._exchanges) - 1         # a new question takes the arrows
-        self._render_exchange(self._focus)
+        index = len(self._exchanges) - 1
+        tab = QPushButton(_topic(heard) or str(index + 1))
+        tab.setToolTip(heard)
+        tab.setCheckable(True)
+        tab.setCursor(Qt.CursorShape.PointingHandCursor)
+        tab.setStyleSheet(
+            f"QPushButton {{ color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT};"
+            f" font-size: 12px; background: transparent;"
+            f" border: none; border-radius: 12px; padding: 0; }}"
+            f"QPushButton:hover {{ color: {tokens.CK_TEXT_HI}; }}"
+            f"QPushButton:checked {{ color: {tokens.CK_TEXT_HI};"
+            f" background: {tokens.rgba(tokens.EMBER, 0.22)}; }}")
+        # A fixed size, measured once the stylesheet font applies: the strip
+        # squeezes each tab down to its minimum, which clipped the text.
+        tab.ensurePolished()
+        tab.setFixedSize(tab.fontMetrics().horizontalAdvance(tab.text()) + 24, 24)
+        tab.clicked.connect(lambda _c=False, i=index: self._on_tab_clicked(i))
+        self._tabs_layout.addWidget(tab)
+        self._tab_buttons.append(tab)
+        self._focus = index                            # a new question takes the tab
+        self._render_exchange(index)
 
     def _render_exchange(self, index: int):
         """Rebuild one exchange in place: what Mo said, the answer as labelled
@@ -719,10 +821,9 @@ class CockpitWindow(QWidget):
         """
         heard, answer, interrupted, stamp = self._exchanges[index]
         block = QWidget()
-        block.setObjectName("exchange")
-        block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        block.setStyleSheet("background: transparent;")
         rows = QVBoxLayout(block)
-        rows.setContentsMargins(12, 0, 0, 0)
+        rows.setContentsMargins(0, 0, 0, 0)
         rows.setSpacing(0)
 
         # Set to be read from a normal sitting distance: what Mo said heavy,
@@ -765,6 +866,10 @@ class CockpitWindow(QWidget):
                                            # painted over the new ones
         self._focus_exchange(self._focus)
 
+    def _on_tab_clicked(self, index: int):
+        self._focus_exchange(index)
+        self._wake_attention("ready")
+
     def _step(self, delta: int):
         """‹ goes to the exchange before, › to the one after; both stop at
         the ends."""
@@ -774,30 +879,27 @@ class CockpitWindow(QWidget):
         self._wake_attention("ready")
 
     def _focus_exchange(self, index: int):
-        """Point the arrows at one exchange: count it under the sphere, mark it
-        in the rail with an ember line, and bring it into view."""
+        """Show one exchange: its tab selected, its count under the sphere, and
+        only it in the panel, read from its first line."""
         self._focus = index
         count = self._reading_layout.count()
         for i in range(count):
-            block = self._reading_layout.itemAt(i).widget()
-            focused = i == index
-            block.setProperty("focused", focused)
-            line = tokens.rgba(tokens.EMBER, 0.7) if focused else "transparent"
-            block.setStyleSheet(
-                f"QWidget#exchange {{ background: transparent;"
-                f" border-left: 2px solid {line}; }}")
+            self._reading_layout.itemAt(i).widget().setVisible(i == index)
+        for i, tab in enumerate(self._tab_buttons):
+            tab.setChecked(i == index)
         self._scrub_value.setText(f"{index + 1} / {count}" if count else "—")
-        QTimer.singleShot(0, self._scroll_to_focus)
+        self._reading_scroll.verticalScrollBar().setValue(0)
+        QTimer.singleShot(0, self._settle_focus)
 
-    def _scroll_to_focus(self):
-        """Bring the focused exchange's first line to the top of the panel — a
-        long answer is read from its start, not its end. Looked up when it
-        runs: a close in the meantime may have emptied the panel."""
-        if 0 <= self._focus < self._reading_layout.count():
-            self._reading_layout.activate()
-            self._reading_box.adjustSize()
-            block = self._reading_layout.itemAt(self._focus).widget()
-            self._reading_scroll.verticalScrollBar().setValue(block.y())
+    def _settle_focus(self):
+        """Once laid out: the answer back at its first line, and the selected
+        tab scrolled into the strip. Looked up when it runs — a close in the
+        meantime may have emptied both."""
+        self._reading_scroll.verticalScrollBar().setValue(0)
+        if 0 <= self._focus < len(self._tab_buttons):
+            self._tabs_layout.activate()
+            self._tabs_scroll.widget().adjustSize()
+            self._tabs_scroll.ensureWidgetVisible(self._tab_buttons[self._focus], 40, 0)
 
     def _refresh_rails(self):
         """Rail content, from data already on disk — never the network."""
@@ -1252,11 +1354,13 @@ class CockpitWindow(QWidget):
 
     def _close(self):
         # The session's conversation ends with it: the next open starts empty.
-        while self._reading_layout.count():
-            item = self._reading_layout.takeAt(0)
-            if item.widget() is not None:
-                item.widget().setParent(None)
+        for layout in (self._reading_layout, self._tabs_layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget() is not None:
+                    item.widget().setParent(None)
         self._exchanges = []
+        self._tab_buttons = []
         self._focus = -1
         self._scrub_value.setText("—")
         self._notice.setText("")
