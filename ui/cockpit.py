@@ -312,8 +312,10 @@ class CockpitWindow(QWidget):
         self._orb_ready = False
         # Every exchange this session as [heard, answer, interrupted, time],
         # stacked in the TRANSCRIPT panel. Memory-only and kept whole until the
-        # Cockpit closes — the ledger is the durable record.
+        # Cockpit closes — the ledger is the durable record. _focus is the one
+        # the arrows under the sphere point at, -1 while there are none.
         self._exchanges: list = []
+        self._focus = -1
 
     def set_wake_listener(self, listener):
         self._wake_listener = listener
@@ -443,6 +445,37 @@ class CockpitWindow(QWidget):
         staged_row.addStretch()
         grid.addLayout(staged_row)
         grid.addSpacing(24)
+
+        # Under the sphere, as the reel has it: ‹ › step through the
+        # conversation in the rail, and the count says where you are in it.
+        self._scrub_value = QLabel("—")
+        self._scrub_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._scrub_value.setMinimumWidth(90)
+        self._scrub_value.setStyleSheet(_mono(11, tokens.CK_TEXT_MID, 2.0))
+        scrub = QHBoxLayout()
+        scrub.setSpacing(14)
+        scrub.addStretch()
+        arrows = []
+        for glyph, step in (("‹", -1), ("›", 1)):
+            arrow = QPushButton(glyph)
+            arrow.setCursor(Qt.CursorShape.PointingHandCursor)
+            arrow.setFixedSize(26, 26)
+            arrow.setStyleSheet(
+                f"QPushButton {{ {_mono(14, tokens.CK_TEXT_LOW, 0)}"
+                f" border: 1px solid {tokens.rgba('#FFFFFF', 0.08)};"
+                f" border-radius: 13px; }}"
+                f"QPushButton:hover {{ color: {tokens.CK_TEXT_HI};"
+                f" border-color: {tokens.rgba(tokens.EMBER, 0.45)}; }}"
+            )
+            arrow.clicked.connect(lambda _c=False, s=step: self._step(s))
+            arrows.append(arrow)
+        self._scrub_prev, self._scrub_next = arrows
+        scrub.addWidget(self._scrub_prev)
+        scrub.addWidget(self._scrub_value)
+        scrub.addWidget(self._scrub_next)
+        scrub.addStretch()
+        grid.addLayout(scrub)
+        grid.addSpacing(14)
 
         # Under the stage: the pill naming what the stage is currently showing.
         self._view_pill = QPushButton("KNOWLEDGE VIEW")
@@ -586,7 +619,7 @@ class CockpitWindow(QWidget):
         self._reading_box.setStyleSheet("background: transparent;")
         self._reading_layout = QVBoxLayout(self._reading_box)
         self._reading_layout.setContentsMargins(0, 4, 10, 4)
-        self._reading_layout.setSpacing(0)
+        self._reading_layout.setSpacing(18)
         self._reading_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._reading_scroll = QScrollArea()
         self._reading_scroll.setWidgetResizable(True)
@@ -627,7 +660,8 @@ class CockpitWindow(QWidget):
         stamp = datetime.now().strftime("%I:%M %p").lstrip("0")
         self._exchanges.append([heard, "", False, stamp])
         self._reading_layout.addWidget(QWidget())      # placeholder, rendered next
-        self._render_exchange(len(self._exchanges) - 1)
+        self._focus = len(self._exchanges) - 1         # a new question takes the arrows
+        self._render_exchange(self._focus)
 
     def _render_exchange(self, index: int):
         """Rebuild one exchange in place: what Mo said, the answer as labelled
@@ -639,9 +673,10 @@ class CockpitWindow(QWidget):
         """
         heard, answer, interrupted, stamp = self._exchanges[index]
         block = QWidget()
-        block.setStyleSheet("background: transparent;")
+        block.setObjectName("exchange")
+        block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         rows = QVBoxLayout(block)
-        rows.setContentsMargins(0, 0 if index == 0 else 18, 0, 0)
+        rows.setContentsMargins(12, 0, 0, 0)
         rows.setSpacing(0)
 
         if heard:
@@ -677,18 +712,41 @@ class CockpitWindow(QWidget):
         self._reading_layout.replaceWidget(old, block)
         old.setParent(None)                # not deleteLater: the old rows stay
                                            # painted over the new ones
-        QTimer.singleShot(0, self._follow_latest)
+        self._focus_exchange(self._focus)
 
-    def _follow_latest(self):
-        """Bring the newest exchange's first line to the top of the panel — a
+    def _step(self, delta: int):
+        """‹ goes to the exchange before, › to the one after; both stop at
+        the ends."""
+        if self._exchanges:
+            self._focus_exchange(
+                max(0, min(len(self._exchanges) - 1, self._focus + delta)))
+        self._wake_attention("ready")
+
+    def _focus_exchange(self, index: int):
+        """Point the arrows at one exchange: count it under the sphere, mark it
+        in the rail with an ember line, and bring it into view."""
+        self._focus = index
+        count = self._reading_layout.count()
+        for i in range(count):
+            block = self._reading_layout.itemAt(i).widget()
+            focused = i == index
+            block.setProperty("focused", focused)
+            line = tokens.rgba(tokens.EMBER, 0.7) if focused else "transparent"
+            block.setStyleSheet(
+                f"QWidget#exchange {{ background: transparent;"
+                f" border-left: 2px solid {line}; }}")
+        self._scrub_value.setText(f"{index + 1} / {count}" if count else "—")
+        QTimer.singleShot(0, self._scroll_to_focus)
+
+    def _scroll_to_focus(self):
+        """Bring the focused exchange's first line to the top of the panel — a
         long answer is read from its start, not its end. Looked up when it
         runs: a close in the meantime may have emptied the panel."""
-        count = self._reading_layout.count()
-        if count:
+        if 0 <= self._focus < self._reading_layout.count():
             self._reading_layout.activate()
             self._reading_box.adjustSize()
-            latest = self._reading_layout.itemAt(count - 1).widget()
-            self._reading_scroll.verticalScrollBar().setValue(latest.y())
+            block = self._reading_layout.itemAt(self._focus).widget()
+            self._reading_scroll.verticalScrollBar().setValue(block.y())
 
     def _refresh_rails(self):
         """Rail content, from data already on disk — never the network."""
@@ -1148,6 +1206,8 @@ class CockpitWindow(QWidget):
             if item.widget() is not None:
                 item.widget().setParent(None)
         self._exchanges = []
+        self._focus = -1
+        self._scrub_value.setText("—")
         self._notice.setText("")
         self._clock.stop()
         self._ambient_timer.stop()      # no timers running behind the tray

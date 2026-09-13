@@ -472,6 +472,83 @@ class TestConversation:
         assert worker.called
         w.close()
 
+
+class TestArrows:
+    """‹ › under the sphere step through the conversation in the rail."""
+
+    def _exchange(self, w, heard, answer):
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", heard, "")
+        w.on_state_update("speaking", heard, answer)
+
+    def _focused(self, w):
+        return [w._reading_layout.itemAt(i).widget().property("focused")
+                for i in range(w._reading_layout.count())]
+
+    def test_they_sit_under_the_sphere_not_in_the_rail(self, qapp):
+        w = _make_cockpit(qapp)
+        for widget in (w._scrub_prev, w._scrub_value, w._scrub_next):
+            assert not w._reading_panel.isAncestorOf(widget)
+        w.close()
+
+    def test_with_nothing_said_they_are_harmless(self, qapp):
+        w = _make_cockpit(qapp)
+        assert w._scrub_value.text() == "—"
+        w._scrub_prev.click()
+        w._scrub_next.click()
+        assert w._scrub_value.text() == "—"
+        w.close()
+
+    def test_they_step_through_the_exchanges_and_stop_at_the_ends(self, qapp):
+        w = _make_cockpit(qapp)
+        for n in range(3):
+            self._exchange(w, f"question {n}", f"answer {n}")
+        assert w._scrub_value.text() == "3 / 3"
+        w._scrub_prev.click()
+        assert w._scrub_value.text() == "2 / 3"
+        for _ in range(5):
+            w._scrub_prev.click()
+        assert w._scrub_value.text() == "1 / 3"
+        for _ in range(5):
+            w._scrub_next.click()
+        assert w._scrub_value.text() == "3 / 3"
+        w.close()
+
+    def test_the_exchange_they_point_at_is_marked_in_the_rail(self, qapp):
+        w = _make_cockpit(qapp)
+        for n in range(3):
+            self._exchange(w, f"question {n}", f"answer {n}")
+        assert self._focused(w) == [False, False, True]
+        w._scrub_prev.click()
+        assert self._focused(w) == [False, True, False]
+        w.close()
+
+    def test_a_new_question_takes_the_focus_to_itself(self, qapp):
+        w = _make_cockpit(qapp)
+        for n in range(3):
+            self._exchange(w, f"question {n}", f"answer {n}")
+        w._scrub_prev.click()
+        w._scrub_prev.click()
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", "question 3", "")
+        assert w._scrub_value.text() == "4 / 4"
+        assert self._focused(w) == [False, False, False, True]
+        w.close()
+
+    def test_an_answer_landing_keeps_the_mark(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "question", "answer")
+        w.on_state_update("interrupted", "question", "answer")
+        assert self._focused(w) == [True]
+        w.close()
+
+    def test_closing_resets_them(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "question", "answer")
+        w._close()
+        assert w._scrub_value.text() == "—"
+        w.close()
+
     def test_the_view_pill_asks_for_the_command_center(self, qapp):
         w = _make_cockpit(qapp)
         seen = []
