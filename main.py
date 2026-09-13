@@ -336,7 +336,7 @@ def main():
         return _hud_ref[0]
 
     def _get_cockpit():
-        """The design's primary full-screen surface. Also lazy — its orb is
+        """The design's primary surface. Also lazy — its orb is
         the one QWebEngine instance El Fager runs."""
         if _cockpit_ref[0] is None:
             from ui.cockpit import CockpitWindow
@@ -385,7 +385,7 @@ def main():
         signaler.hud_triggered.emit()
 
     def on_tray_cockpit(icon, item):
-        """Open the Cockpit — the design's primary full-screen surface."""
+        """Open the Cockpit — the design's primary surface."""
         signaler.cockpit_triggered.emit()
 
     def on_tray_command_center(icon, item):

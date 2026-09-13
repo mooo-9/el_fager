@@ -10,6 +10,17 @@ from unittest.mock import MagicMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def settings_file(tmp_path, monkeypatch):
+    """The Cockpit remembers its window in settings; keep that off the real
+    data/settings.json, which closing a window in a test would overwrite."""
+    import ui.overlay as overlay_mod
+    path = tmp_path / "settings.json"
+    path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
+    return path
+
+
 def _make_cockpit(qapp):
     from ui.cockpit import CockpitWindow
     w = CockpitWindow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
@@ -889,4 +900,89 @@ class TestRails:
         w = _make_cockpit(qapp)
         w._refresh_rails()
         assert w._auto_list.count() >= 1
+        w.close()
+
+
+class TestNormalWindow:
+    """A normal window, not full screen: it sits above the taskbar, has a dark
+    title bar of its own, and remembers where it was left."""
+
+    def test_it_opens_smaller_than_the_screen_and_above_the_taskbar(self, qapp):
+        from PyQt6.QtWidgets import QApplication
+        w = _make_cockpit(qapp)
+        w._show_window()
+        area = QApplication.primaryScreen().availableGeometry()
+        assert not w.isFullScreen()
+        assert area.contains(w.frameGeometry())
+        assert w.width() < area.width() or w.height() < area.height()
+        w.close()
+
+    def test_it_can_never_be_shrunk_past_what_the_layout_needs(self, qapp):
+        w = _make_cockpit(qapp)
+        w._show_window()
+        assert w.minimumWidth() >= w.minimumSizeHint().width()
+        assert w.minimumHeight() >= w.minimumSizeHint().height()
+        w.close()
+
+    def test_the_title_bar_has_minimise_maximise_and_close(self, qapp):
+        w = _make_cockpit(qapp)
+        assert {w._btn_min.toolTip(), w._btn_max.toolTip(), w._btn_close.toolTip()}             == {"Minimise", "Maximise", "Close"}
+        assert w._title_bar.isAncestorOf(w._btn_close)
+        w.close()
+
+    def test_close_hides_it_but_el_fager_keeps_running(self, qapp):
+        w = _make_cockpit(qapp)
+        w._show_window()
+        w._btn_close.click()
+        assert w.isHidden()
+        w.close()
+
+    def test_minimise_keeps_the_conversation(self, qapp):
+        w = _make_cockpit(qapp)
+        w._show_window()
+        w.on_state_update("processing", "what's the weather", "")
+        w.on_state_update("speaking", "what's the weather", "Sunny.")
+        w._btn_min.click()
+        for _ in range(20):
+            qapp.processEvents()
+        assert w.isMinimized()
+        assert len(w._tab_buttons) == 1
+        w.close()
+
+    def test_maximise_toggles(self, qapp):
+        w = _make_cockpit(qapp)
+        w._show_window()
+        w._btn_max.click()
+        for _ in range(20):
+            qapp.processEvents()
+        assert w.isMaximized()
+        w._btn_max.click()
+        for _ in range(20):
+            qapp.processEvents()
+        assert not w.isMaximized()
+        w.close()
+
+    def test_it_reopens_where_it_was_left(self, qapp, settings_file):
+        import json
+        w = _make_cockpit(qapp)
+        w._show_window()
+        w.setGeometry(120, 90, 1200, 720)
+        w._btn_close.click()
+        saved = json.loads(settings_file.read_text(encoding="utf-8"))["cockpit_geometry"]
+        assert saved == [120, 90, 1200, 720]
+        w.close()
+
+        again = _make_cockpit(qapp)
+        again._show_window()
+        assert [again.x(), again.y(), again.width(), again.height()] == [120, 90, 1200, 720]
+        again.close()
+
+    def test_a_saved_spot_off_screen_is_ignored(self, qapp, settings_file):
+        import json
+        from PyQt6.QtWidgets import QApplication
+        settings_file.write_text(json.dumps({"cockpit_geometry": [9000, 9000, 1200, 720]}),
+                                 encoding="utf-8")
+        w = _make_cockpit(qapp)
+        w._show_window()
+        assert QApplication.primaryScreen().availableGeometry().contains(w.frameGeometry())
         w.close()

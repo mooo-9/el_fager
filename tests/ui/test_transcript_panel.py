@@ -6,7 +6,19 @@ initialisation enough to crash an unrelated Qt test later in the run.
 """
 from unittest.mock import MagicMock
 
+import pytest
 from PyQt6.QtWidgets import QLabel
+
+
+@pytest.fixture(autouse=True)
+def settings_file(tmp_path, monkeypatch):
+    """The Cockpit remembers its window in settings; keep that off the real
+    data/settings.json, which closing a window in a test would overwrite."""
+    import ui.overlay as overlay_mod
+    path = tmp_path / "settings.json"
+    path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
+    return path
 
 
 def _cockpit():

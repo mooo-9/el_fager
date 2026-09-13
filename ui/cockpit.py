@@ -1,7 +1,7 @@
 """
 El Fager — the Cockpit (the design's primary surface).
 
-Full-screen void with the Ember at its centre, corner readouts on
+A dark window with the Ember at its centre, corner readouts on
 state-tinted hairlines, and one exchange spoken across the stage. The orb is
 the only web-rendered thing in El Fager: ui/assets/cockpit_orb.html carries
 the canonical tick() from "El Fager Cockpit v2.dc.html", and this window
@@ -22,8 +22,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QPointF, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QColor, QPainter, QPainterPath
+from PyQt6.QtCore import QEvent, QPointF, QRect, QUrl, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsOpacityEffect,
@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 
 from core import progress, prose, staging
 from ui import theme, tokens
-from ui.overlay import _load_settings
+from ui.overlay import _load_settings, _save_settings
 
 _CACHE = Path("data/command_center_cache.json")
 _ORB_PAGE = Path(__file__).parent / "assets" / "cockpit_orb.html"
@@ -51,6 +51,11 @@ _ATTENTION = {"ambient": 0.0, "ready": 1.0, "exchange": 0.12}
 # Settings → System offers 30s / 60s / 2m; 60 is the design's default.
 _AMBIENT_DELAYS = {"30s": 30, "60s": 60, "2m": 120}
 _AMBIENT_DEFAULT = 60
+
+# A normal window rather than full screen: this size when there is no saved
+# one, and a grab margin round the edge that resizes it.
+_DEFAULT_SIZE = (1280, 760)
+_RESIZE_MARGIN = 5
 
 # Only what this surface actually honours — a map that lists a key the
 # cockpit ignores is worse than no map.
@@ -357,6 +362,40 @@ def _wrapped(text: str, style: str) -> QLabel:
     return label
 
 
+class _TitleButton(QPushButton):
+    """– □ × for the Cockpit's own title bar. Painted, not typed: the bundled
+    face has no box glyph, and a font fallback for a window control is a
+    coin flip."""
+
+    _TIPS = {"min": "Minimise", "max": "Maximise", "close": "Close"}
+
+    def __init__(self, kind: str, parent=None):
+        super().__init__(parent)
+        self._kind = kind
+        self.setFixedSize(40, 30)
+        self.setToolTip(self._TIPS[kind])
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("background: transparent; border: none;")
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.underMouse():
+            hover = (tokens.rgba(tokens.CK_STATE["error"], 0.75) if self._kind == "close"
+                     else tokens.rgba("#FFFFFF", 0.08))
+            p.fillRect(self.rect(), QColor(hover))
+        pen = QPen(QColor(tokens.CK_TEXT_HI if self.underMouse() else tokens.CK_TEXT_MID), 1.2)
+        p.setPen(pen)
+        cx, cy = self.width() / 2, self.height() / 2
+        if self._kind == "min":
+            p.drawLine(QPointF(cx - 5, cy), QPointF(cx + 5, cy))
+        elif self._kind == "max":
+            p.drawRect(QRect(int(cx - 5), int(cy - 5), 10, 10))
+        else:
+            p.drawLine(QPointF(cx - 5, cy - 5), QPointF(cx + 5, cy + 5))
+            p.drawLine(QPointF(cx + 5, cy - 5), QPointF(cx - 5, cy + 5))
+
+
 class _TabStrip(QScrollArea):
     """The transcript's tab row. It scrolls sideways with no bar to grab, so
     the mouse wheel does it: up goes toward the first tab, down toward the
@@ -390,7 +429,7 @@ class _Panel(QWidget):
 
 
 class CockpitWindow(QWidget):
-    """Full-screen primary surface. Same integration contract as the overlay."""
+    """The design's primary surface, in a normal window. Same integration contract as the overlay."""
 
     staged_changed = pyqtSignal()
     progress_changed = pyqtSignal()
@@ -444,17 +483,32 @@ class CockpitWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        """A normal window with a dark title bar of its own. Frameless so the
+        bar can be the design's, but it keeps the minimise and maximise hints
+        so the taskbar button behaves like any other app's."""
+        self.setWindowFlags(Qt.WindowType.Window
+                            | Qt.WindowType.FramelessWindowHint
+                            | Qt.WindowType.WindowMinMaxButtonsHint)
         self.setWindowTitle("El Fager — Cockpit")
-        self.setStyleSheet(f"background: {tokens.CK_VOID};")
-        screen = QApplication.primaryScreen()
-        if screen is not None:
-            self.setGeometry(screen.geometry())
+        self.setObjectName("cockpit")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(
+            f"QWidget#cockpit {{ background: {tokens.CK_VOID};"
+            f" border: 1px solid {tokens.CK_HAIRLINE}; }}")
+        self.setMouseTracking(True)       # edge cursors before any button is down
 
     def _build_ui(self):
-        # StackAll puts the native chrome over the orb without either one
-        # clipping the other.
-        self._stack = QStackedLayout(self)
+        # The window: a grab margin for resizing, the title bar, then the
+        # stage. StackAll puts the native chrome over the orb without either
+        # one clipping the other.
+        root = QVBoxLayout(self)
+        root.setContentsMargins(*([_RESIZE_MARGIN] * 4))
+        root.setSpacing(0)
+        root.addWidget(self._build_title_bar())
+        stage = QWidget()
+        stage.setStyleSheet("background: transparent;")
+        root.addWidget(stage, 1)
+        self._stack = QStackedLayout(stage)
         self._stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
         self._stack.setContentsMargins(0, 0, 0, 0)
 
@@ -628,6 +682,30 @@ class CockpitWindow(QWidget):
 
         outer.addWidget(self._build_right_rail(), 0)
         self._keymap = self._build_keymap(chrome)
+
+    def _build_title_bar(self) -> QWidget:
+        """Name on the left, – □ × on the right; drag it to move the window,
+        double-click it to maximise."""
+        self._title_bar = QWidget()
+        self._title_bar.setStyleSheet("background: transparent;")
+        self._title_bar.installEventFilter(self)
+        row = QHBoxLayout(self._title_bar)
+        row.setContentsMargins(18, 0, 0, 0)
+        row.setSpacing(0)
+        name = QLabel("EL FAGER — COCKPIT")
+        name.setStyleSheet(_mono(10, tokens.CK_TEXT_LOW, 2.0))
+        name.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        row.addWidget(name)
+        row.addStretch()
+        self._btn_min = _TitleButton("min")
+        self._btn_min.clicked.connect(self.showMinimized)
+        self._btn_max = _TitleButton("max")
+        self._btn_max.clicked.connect(self._toggle_maximised)
+        self._btn_close = _TitleButton("close")
+        self._btn_close.clicked.connect(self._close)
+        for button in (self._btn_min, self._btn_max, self._btn_close):
+            row.addWidget(button)
+        return self._title_bar
 
     # ── Rails ─────────────────────────────────────────────────────────────
 
@@ -1013,7 +1091,7 @@ class CockpitWindow(QWidget):
         # screen is never "visible", so isVisible() would show it forever.
         showing = self._keymap.isHidden()
         if showing:
-            self._keymap.setGeometry(self.rect())
+            self._keymap.setGeometry(self._keymap.parentWidget().rect())
             self._keymap.raise_()
         self._keymap.setVisible(showing)
 
@@ -1344,12 +1422,105 @@ class CockpitWindow(QWidget):
         self._refresh_readouts()
         self._refresh_staged()
         self._refresh_steps()
-        self.showFullScreen()
-        self.raise_()
-        self.activateWindow()
+        self._show_window()
         self._clock.start()
         self._orb_js("window.orb && window.orb.start()")
         self._wake_attention("ready")
+
+    def _show_window(self):
+        """Show it where it was left, or centred above the taskbar at the
+        default size. A saved spot that no longer fits the screen — a monitor
+        unplugged, a resolution changed — is ignored rather than trusted."""
+        if not self.isVisible():
+            self.setMinimumSize(self.minimumSizeHint())
+            area = QApplication.primaryScreen().availableGeometry()
+            saved = _load_settings().get("cockpit_geometry")
+            rect = QRect(*saved) if isinstance(saved, list) and len(saved) == 4 else QRect()
+            if rect.isEmpty() or not area.contains(rect):
+                width = max(self.minimumWidth(), min(_DEFAULT_SIZE[0], area.width() - 40))
+                height = max(self.minimumHeight(), min(_DEFAULT_SIZE[1], area.height() - 40))
+                rect = QRect(area.x() + (area.width() - width) // 2,
+                             area.y() + (area.height() - height) // 2, width, height)
+            self.setGeometry(rect)
+            if _load_settings().get("cockpit_maximised"):
+                self.showMaximized()
+            else:
+                self.showNormal()
+        elif self.isMinimized():
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _save_window(self):
+        settings = _load_settings()
+        g = self.normalGeometry() if self.isMaximized() else self.geometry()
+        settings["cockpit_geometry"] = [g.x(), g.y(), g.width(), g.height()]
+        settings["cockpit_maximised"] = self.isMaximized()
+        _save_settings(settings)
+
+    def _toggle_maximised(self):
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def changeEvent(self, event):
+        # Minimised costs no GPU, the same as hidden; restored, it turns again.
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._orb_js("window.orb && window.orb." +
+                         ("stop()" if self.isMinimized() else "start()"))
+        super().changeEvent(event)
+
+    # ── Moving and resizing a frameless window ────────────────────────────
+
+    def _edges_at(self, pos) -> Qt.Edge:
+        if self.isMaximized():
+            return Qt.Edge(0)
+        m, edges = _RESIZE_MARGIN, Qt.Edge(0)
+        if pos.x() <= m:
+            edges |= Qt.Edge.LeftEdge
+        if pos.x() >= self.width() - m:
+            edges |= Qt.Edge.RightEdge
+        if pos.y() <= m:
+            edges |= Qt.Edge.TopEdge
+        if pos.y() >= self.height() - m:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
+    def mouseMoveEvent(self, event):
+        edges = self._edges_at(event.position().toPoint())
+        diagonal = (Qt.Edge.LeftEdge | Qt.Edge.TopEdge, Qt.Edge.RightEdge | Qt.Edge.BottomEdge)
+        if edges in diagonal:
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge) and edges & (Qt.Edge.TopEdge | Qt.Edge.BottomEdge):
+            self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+        elif edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif edges:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        edges = self._edges_at(event.position().toPoint())
+        if event.button() == Qt.MouseButton.LeftButton and edges and self.windowHandle():
+            # The system does the resize, so it feels like any other window's.
+            self.windowHandle().startSystemResize(edges)
+            return
+        super().mousePressEvent(event)
+
+    def eventFilter(self, obj, event):
+        if obj is getattr(self, "_title_bar", None):
+            if (event.type() == QEvent.Type.MouseButtonPress
+                    and event.button() == Qt.MouseButton.LeftButton and self.windowHandle()):
+                # A system move, so Windows snap works on the drag.
+                self.windowHandle().startSystemMove()
+                return True
+            if event.type() == QEvent.Type.MouseButtonDblClick:
+                self._toggle_maximised()
+                return True
+        return super().eventFilter(obj, event)
 
     def wake_word_activate(self):
         """Voice wake blooms; a click-open is silent."""
@@ -1372,6 +1543,8 @@ class CockpitWindow(QWidget):
         self._ambient_timer.stop()      # no timers running behind the tray
         self._keymap.setVisible(False)
         self._orb_js("window.orb && window.orb.stop()")   # no idle GPU in tray
+        if self.isVisible():
+            self._save_window()
         self.hide()
 
     def open_ledger(self):
