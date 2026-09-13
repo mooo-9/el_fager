@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core import prose
 from ui import theme, tokens
 from ui.overlay import MessageBubble, _load_settings, _save_settings
 from ui.widgets import Chip, DayArc, FlowHost, MacroBar, Sparkline, StatTile
@@ -53,6 +54,7 @@ _DATA_DIR = Path(__file__).parent.parent / "data"
 _COLUMNS = 12
 _GUTTER = tokens.S6
 _MARGIN = tokens.S8
+_RESPONSE_MAX_HEIGHT = 260    # past this a long answer scrolls in its box
 _MIN_WIDTH = 1100
 
 
@@ -355,7 +357,7 @@ class CommandCenterWindow(QWidget):
         self._card_rows: dict[str, QVBoxLayout] = {}
         self._card_texts: dict[str, str] = {}       # raw text per card (cache + diffing)
         self._pending: set[str] = set()
-        self._history: list[tuple[str, str]] = []   # (role, text) already bubbled
+        self._heard_bubbled = False                 # this turn's words are on screen
         self._signaler = _CardSignaler()
         self._signaler.card_ready.connect(self._on_card_ready)
         self._signaler.weather_ready.connect(self._on_weather_ready)
@@ -1009,13 +1011,24 @@ class CommandCenterWindow(QWidget):
         column.setSpacing(8)
 
         # Answers land above the bar so the exchange stays with the input.
+        # The bar sits outside the page's scroll area, so a long answer
+        # scrolls in its own box rather than pushing the page off the window.
         self._response_container = QWidget()
         self._response_container.setStyleSheet("background: transparent;")
         self._response_layout = QVBoxLayout(self._response_container)
         self._response_layout.setContentsMargins(0, 0, 0, 0)
         self._response_layout.setSpacing(4)
-        self._response_container.setVisible(False)
-        column.addWidget(self._response_container)
+        self._response_scroll = QScrollArea()
+        self._response_scroll.setWidgetResizable(True)
+        self._response_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._response_scroll.setStyleSheet(theme.SCROLL_AREA)
+        # The bar's border-top cascades onto the viewport and draws a stray rule.
+        self._response_scroll.viewport().setStyleSheet("background: transparent; border: none;")
+        self._response_scroll.setMaximumHeight(_RESPONSE_MAX_HEIGHT)
+        self._response_scroll.setWidget(self._response_container)
+        self._response_scroll.setVisible(False)
+        column.addWidget(self._response_scroll)
 
         # Voice first: talking is the whole bar, the keyboard is one button.
         self._voice_bar = QWidget()
@@ -1365,6 +1378,7 @@ class CommandCenterWindow(QWidget):
         spoken = echo or text
         if spoken:
             self._add_bubble("user", spoken)
+        self._heard_bubbled = bool(spoken)
         self._status_label.setText("Listening…" if text is None else "Thinking…")
 
         self._worker = PipelineWorker(
@@ -1388,10 +1402,13 @@ class CommandCenterWindow(QWidget):
 
     def _on_state_update(self, state: str, transcript: str, response: str):
         self._set_assistant_state(state)
+        if state == "listening":
+            self._heard_bubbled = False              # a new voice turn begins
         if (state == "processing" and transcript
                 and transcript not in ("Transcribing...", "Loading Whisper model...")
-                and ("user", transcript) not in self._history):
+                and not self._heard_bubbled):
             self._add_bubble("user", transcript)     # what a spoken turn heard
+            self._heard_bubbled = True
         if state == "speaking" and response:
             self._add_bubble("assistant", response)
             self._status_label.setText("")
@@ -1416,8 +1433,7 @@ class CommandCenterWindow(QWidget):
         self._set_assistant_state("error")
 
     def _add_bubble(self, role: str, text: str):
-        self._response_container.setVisible(True)
-        self._history.append((role, text))
+        self._response_scroll.setVisible(True)
         # Keep only the latest exchange visible — the overlay owns long history.
         while self._response_layout.count() > 3:
             item = self._response_layout.takeAt(0)
@@ -1426,7 +1442,7 @@ class CommandCenterWindow(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
         ts = datetime.now().strftime("%H:%M")
-        bubble = MessageBubble(role, text[:500], ts, self._response_container)
+        bubble = MessageBubble(role, prose.plain(text), ts, self._response_container)
         # MessageBubble is the overlay's widget; recolor its single label for
         # this surface rather than touching ui/overlay.py.
         label = bubble.findChild(QLabel)
@@ -1435,6 +1451,25 @@ class CommandCenterWindow(QWidget):
                 theme.BUBBLE_USER if role == "user" else theme.BUBBLE_ASSISTANT
             )
         self._response_layout.addWidget(bubble)
+        QTimer.singleShot(0, self._show_latest_bubble)
+
+    def _show_latest_bubble(self):
+        """Fit the box to the exchange, then scroll the newest bubble to its top.
+
+        A scroll area does not grow with its content — left alone it sat at
+        48px and hid the answer. Runs once laid out, so wrapped labels know
+        their height. The bubble is looked up now, not captured: an older one
+        may already have been trimmed away."""
+        width = self._response_scroll.viewport().width()
+        wanted = (self._response_layout.heightForWidth(width)
+                  if self._response_layout.hasHeightForWidth()
+                  else self._response_container.sizeHint().height())
+        self._response_scroll.setFixedHeight(min(wanted, _RESPONSE_MAX_HEIGHT))
+        item = self._response_layout.itemAt(self._response_layout.count() - 1)
+        if item is not None and item.widget() is not None:
+            # Its first line at the top: ensureWidgetVisible on a bubble taller
+            # than the box lands mid-answer and hides how it starts.
+            self._response_scroll.verticalScrollBar().setValue(item.widget().y())
 
     # ------------------------------------------------------------------ #
     #  Show / hide                                                        #

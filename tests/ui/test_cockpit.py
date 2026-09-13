@@ -359,6 +359,16 @@ class TestScrubber:
         assert w._answer.text() == ""
         w.close()
 
+    def test_the_pipeline_caption_is_not_shown_as_what_mo_said(self, qapp):
+        # When nothing was heard the error lands next to the heard line, which
+        # used to read "Transcribing..." as though Mo had said it.
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", "Transcribing...", "")
+        w.on_error("Nothing heard — please try again")
+        assert w._heard.text() == ""
+        w.close()
+
     def test_scrubbing_with_no_history_is_harmless(self, qapp):
         w = _make_cockpit(qapp)
         w._scrub(-1)

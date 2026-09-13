@@ -341,10 +341,66 @@ class TestKnowsYou:
         w.close()
 
 
+def _bubble_texts(w) -> "list[str]":
+    from PyQt6.QtWidgets import QLabel
+    from ui.overlay import MessageBubble
+    texts = []
+    for i in range(w._response_layout.count()):
+        bubble = w._response_layout.itemAt(i).widget()
+        if isinstance(bubble, MessageBubble):
+            texts.append(bubble.findChild(QLabel).text())
+    return texts
+
+
 class TestExchange:
     def test_a_spoken_turn_is_not_bubbled_twice(self, qapp):
         w = _window()
         w._on_state_update("processing", "what's on my calendar", "")
         w._on_state_update("processing", "what's on my calendar", "")
-        assert w._history.count(("user", "what's on my calendar")) == 1
+        assert _bubble_texts(w) == ["what's on my calendar"]
+        w.close()
+
+    def test_saying_the_same_thing_again_is_a_new_bubble(self, qapp):
+        # "Send it." twice in a row is two turns — the second one used to be
+        # swallowed because the words matched something already on screen.
+        w = _window()
+        for _ in range(2):
+            w._on_state_update("listening", "", "")
+            w._on_state_update("processing", "Send it.", "")
+        assert _bubble_texts(w) == ["Send it.", "Send it."]
+        w.close()
+
+    def test_a_typed_turn_is_bubbled_once(self, qapp):
+        w = _window()
+        with patch("core.pipeline.PipelineWorker"):
+            w._dispatch("what's on my calendar")
+        w._on_state_update("processing", "what's on my calendar", "")
+        assert _bubble_texts(w) == ["what's on my calendar"]
+        w.close()
+
+    def test_the_pipeline_caption_is_not_bubbled_as_speech(self, qapp):
+        w = _window()
+        w._on_state_update("processing", "Transcribing...", "")
+        assert _bubble_texts(w) == []
+        w.close()
+
+    def test_a_long_answer_is_shown_whole(self, qapp):
+        w = _window()
+        answer = "word " * 300
+        w._on_state_update("speaking", "tell me everything", answer)
+        assert _bubble_texts(w) == [answer.strip()]
+        w.close()
+
+    def test_markdown_is_read_not_printed(self, qapp):
+        w = _window()
+        w._on_state_update("speaking", "", "**Academic:** two left")
+        assert _bubble_texts(w) == ["Academic: two left"]
+        w.close()
+
+    def test_a_long_answer_scrolls_instead_of_crushing_the_window(self, qapp):
+        from PyQt6.QtWidgets import QScrollArea
+        w = _window()
+        scroll = w._response_container.parentWidget().parentWidget()
+        assert isinstance(scroll, QScrollArea)
+        assert scroll.maximumHeight() < 400
         w.close()

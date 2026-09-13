@@ -1097,7 +1097,8 @@ class CockpitWindow(QWidget):
             self._heard.setText("")
             self._answer.setText("")
             self._clear_data_moment()
-        elif state == "processing" and transcript:
+        elif (state == "processing" and transcript
+                and transcript not in ("Transcribing...", "Loading Whisper model...")):
             self._live = (transcript, "")
             self._history_pos = 0
             self._heard.setText(transcript)
