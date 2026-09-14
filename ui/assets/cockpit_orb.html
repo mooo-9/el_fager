@@ -10,15 +10,14 @@
 // ── El Fager — the Ember ─────────────────────────────────────────────────────
 // A dot-matrix sphere: points spread evenly over a sphere by the Fibonacci
 // lattice, turned about a tilted axis, drawn with depth as both size and
-// alpha so the silhouette reads dense and the far face falls away. Two
-// smaller clusters drift above it, one warm and one pale.
+// alpha so the silhouette reads dense and the far face falls away. A faint
+// ring of dust circles it, like a planet's ring.
 //
 // The sphere is blue, as the reel's is: thinking a deep blue, rest a paler one
 // with a slow, soft version of the speaking ripple. Speech is purple, so
 // talking no longer looks like resting. Listening stays cyan and error red,
 // far enough round the hue wheel from rest that a state change still reads at
-// a glance. The two
-// clusters keep their warm and pale tones — the only warmth left in the scene.
+// a glance. The ring of dust takes a paler tint of the same colour.
 //
 // Python drives it through window.orb (see ui/cockpit.py). The loop parks
 // itself whenever the window hides, so a cockpit in the tray costs no GPU.
@@ -75,20 +74,19 @@ const PTS = new Float32Array(N * 3);
   }
 })();
 
-// Two drifting clusters. Gaussian-ish scatter so they read as puffs of dust
-// rather than as second spheres competing with the centre.
-function buildCluster(n, seed) {
-  const a = new Float32Array(n * 3);
-  let s = seed;
+// The ring of dust, in place of the two clouds that sat over the sphere's
+// shoulders. Each mote keeps three numbers: where round the ring it starts,
+// where across the ring's width it sits, and how bright it is (which also sets
+// how fast it travels, so the ring never turns as one rigid disc).
+const DUST_N = 420;
+const DUST = new Float32Array(DUST_N * 3);
+(function buildDust() {
+  let s = 2468;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < n; i++) {
-    const g = () => (rnd() + rnd() + rnd() - 1.5) * 0.9;
-    a[i * 3] = g(); a[i * 3 + 1] = g() * 0.7; a[i * 3 + 2] = g();
+  for (let i = 0; i < DUST_N * 3; i += 3) {
+    DUST[i] = rnd() * 6.283185; DUST[i + 1] = rnd(); DUST[i + 2] = rnd();
   }
-  return a;
-}
-const CL_A = buildCluster(260, 12345);   // warm, upper left
-const CL_B = buildCluster(230, 98765);   // pale, upper right
+})();
 
 const TILT = -0.32;                       // radians; the axis leans back left
 const sinT = Math.sin(TILT), cosT = Math.cos(TILT);
@@ -239,10 +237,13 @@ const tick = (now) => {
   const pulse = pulseWeight * (0.5 + 0.5 * Math.sin(t * 5.0));
   const since = (now - bloomAt) / 1000;
   const bloom = bloomAt && since < 1.1 ? Math.sin((1 - since / 1.1) * Math.PI) * 0.06 : 0;
-  // It fills the stage as the reel's does: as big as the free space allows.
-  // Perspective draws the near face ~10% past R, so R leaves that margin, and
-  // room under it for the ground line above the arrows.
-  const fit = stage ? Math.max(40, Math.min(stage.h * 0.44 - 26, stage.w * 0.42))
+  // As big as the free space allows, less room at the sides for the ring of
+  // dust: the ring reaches 1.45 × fit and must end inside the column (0.48 of
+  // its width), so the width allows fit up to 0.33 of it. Filling the column
+  // instead hid the ring behind the sphere. Perspective draws the near face
+  // ~10% past R, so R leaves that margin, and room under it for the ground
+  // line above the arrows.
+  const fit = stage ? Math.max(40, Math.min(stage.h * 0.44 - 26, stage.w * 0.33))
                     : Math.min(W, H) * 0.26;
   const R = fit * breath * (1 + bloom) * (1 + env * 0.055) * (1 + pulse * 0.045);
 
@@ -264,7 +265,7 @@ const tick = (now) => {
   // two rates that do not divide into each other, so the path never settles
   // into a visible loop. A slow drift is always there so it is alive at rest;
   // speech adds the larger part of the movement on top.
-  // Only the sphere moves — the ground line and the clusters stay put, which
+  // Only the sphere moves — the ground line and the ring of dust stay put, which
   // is what makes it read as moving *within* the scene rather than the whole
   // scene sliding.
   const swayX = R * (0.020 * Math.sin(t * 0.31) + env * 0.14 * Math.sin(ripplePhase * 1.9));
@@ -323,35 +324,26 @@ const tick = (now) => {
     ctx.fill();
   }
 
-  // ── the two clusters ───────────────────────────────────────────────────
-  function drawCluster(arr, ox, oy, scale, tone, drift, phase) {
-    const n = arr.length / 3;
-    const dy = Math.sin(t * drift + phase) * 6;
-    const dx = Math.cos(t * drift * 0.7 + phase) * 5;
-    const spin = t * 0.11 + phase;
-    const cs = Math.cos(spin), sn = Math.sin(spin);
-    for (let i = 0; i < n; i++) {
-      const x0 = arr[i * 3], y0 = arr[i * 3 + 1], z0 = arr[i * 3 + 2];
-      const xr = x0 * cs - z0 * sn;
-      const zr = x0 * sn + z0 * cs;
-      const p = FOV / (FOV + zr);
-      const sx = ox + dx + xr * scale * p;
-      const sy = oy + dy + y0 * scale * p;
-      const d = (zr + 1.6) / 3.2;
-      const a = (0.85 - d * 0.42) * dim;
-      if (a <= 0.02) continue;
-      ctx.fillStyle = 'rgba(' + tone[0] + ',' + tone[1] + ',' + tone[2] + ',' + a.toFixed(3) + ')';
-      ctx.beginPath();
-      ctx.arc(sx, sy, (1.6 - d * 0.8) * p, 0, 6.283185);
-      ctx.fill();
-    }
+  // ── the ring of dust ───────────────────────────────────────────────────
+  // A tilted ring round the sphere, in a paler tint of its colour: bright on
+  // the near side, faint on the far side. It is sized from the steady fit, not
+  // from R, so the sphere swells inside it rather than dragging it along, and
+  // it never reaches past the middle column, where the side panels would cut
+  // it off.
+  const outer = stage ? Math.min(fit * 1.45, stage.w * 0.48) : fit * 1.45;
+  const inner = Math.min(fit * 1.12, outer * 0.77);
+  const dr = Math.round(R0 + (255 - R0) * 0.45);
+  const dg = Math.round(G0 + (255 - G0) * 0.45);
+  const db = Math.round(B0 + (255 - B0) * 0.45);
+  const ringY = cy - fit * 0.05;
+  for (let i = 0; i < DUST_N * 3; i += 3) {
+    const a = DUST[i] + t * 0.05 * (0.6 + DUST[i + 2]);
+    const r = inner + DUST[i + 1] * (outer - inner);
+    const near = Math.sin(a) > 0;
+    const alpha = (near ? 0.75 : 0.25) * (0.4 + 0.6 * DUST[i + 2]) * dim;
+    ctx.fillStyle = 'rgba(' + dr + ',' + dg + ',' + db + ',' + alpha.toFixed(3) + ')';
+    ctx.fillRect(cx + Math.cos(a) * r, ringY + Math.sin(a) * r * 0.30, 1.6, 1.6);
   }
-  // Over the sphere's shoulders, where the reel has them, and never out past
-  // the middle column: further out, the side panels cover them.
-  const clusterR = R * 0.38;
-  const reach = stage ? Math.min(R * 1.15, stage.w * 0.40) : R * 1.15;
-  drawCluster(CL_A, cx - reach, cy - R * 0.95, clusterR, [235, 128, 72], 0.5, 0);
-  drawCluster(CL_B, cx + reach * 0.97, cy - R * 1.00, clusterR * 0.86, [214, 226, 238], 0.42, 2.2);
 
   // ── the ground line the design keeps under the stage ───────────────────
   ctx.globalAlpha = 0.5 * dim;

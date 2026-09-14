@@ -145,7 +145,7 @@ class TestMotionConstantsStayInRange:
 class TestTheSphereFillsTheStage:
     """The sphere centres on the middle column Python reports, not on the
     whole window, and sizes to it — the reel's fills the space between its
-    panels, with larger, brighter clouds either side."""
+    panels."""
 
     def test_it_centres_on_the_stage_it_is_given(self, script):
         assert re.search(r"stage\.x", script), "the sphere ignores the stage centre"
@@ -154,23 +154,22 @@ class TestTheSphereFillsTheStage:
         assert re.search(r"stage\.w\s*\*", script), "the sphere ignores the stage width"
         assert re.search(r"stage\.h\s*\*", script), "the sphere ignores the stage height"
 
-    def test_the_clouds_are_denser_and_brighter(self, script):
-        counts = [int(n) for n in re.findall(r"buildCluster\((\d+),", script)]
-        assert counts and min(counts) >= 220, f"clouds too sparse: {counts}"
-        alpha = re.search(r"const a = \(([\d.]+) - d \* [\d.]+\) \* dim;", script)
-        assert alpha and float(alpha.group(1)) >= 0.8, "clouds too faint"
 
 
 # Runs the page's script under Node with a stub canvas that records every dot
 # drawn, so a test can ask how the sphere *moves*, not just what it declares.
 _HARNESS = r"""
 const radii = [];
-let alphaSum = 0, alphaN = 0;
+const sphereXs = [];                        // x of every dot the sphere draws
+const dust = [];                            // [x, y, style] of every speck-sized rect
+let alphaSum = 0, alphaN = 0, lastStyle = '';
 const ctx = {
-  setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, fillRect() {},
-  arc(x, y, r) { radii.push(r); },
+  setTransform() {}, clearRect() {}, beginPath() {}, fill() {},
+  fillRect(x, y, w, h) { if (w < 3) dust.push([x, y, lastStyle]); },
+  arc(x, y, r) { radii.push(r); sphereXs.push(x); },
   createLinearGradient() { return { addColorStop() {} }; },
   set fillStyle(v) {
+    lastStyle = typeof v === 'string' ? v : '';
     const m = /rgba\([^)]*,([\d.]+)\)$/.exec(v);
     if (m) { alphaSum += +m[1]; alphaN++; }
   },
@@ -188,7 +187,7 @@ globalThis.requestAnimationFrame = cb => { pending = cb; return 1; };
 globalThis.cancelAnimationFrame = () => {};
 """
 
-_DRIVER = """
+_DRIVER = r"""
 let now = 1000;
 function run(frames) { for (let i = 0; i < frames; i++) { now += 1000 / 60; const cb = pending; pending = null; cb(now); } }
 // level: fed before every frame, as the recorder does ~30 times a second;
@@ -225,6 +224,24 @@ const results = {
 };
 // The recorder stops reporting (the turn ended) but the state has not moved on yet.
 results.listeningStale = measure('listening', false, null);
+// One frame of dust, once the colour has settled; stage is [x, y, w, h] or null.
+function dustIn(state, stage) {
+  if (stage) window.orb.setStage(...stage);
+  window.orb.setState(state);
+  window.orb.setAmbient(false);
+  run(200);
+  dust.length = 0; sphereXs.length = 0;
+  run(1);
+  const rgb = dust.map(d => /rgba\((\d+),(\d+),(\d+),/.exec(d[2])).filter(Boolean)
+                  .map(m => m.slice(1).map(Number));
+  const xs = dust.map(d => d[0]);
+  return { count: dust.length, minX: Math.min(...xs), maxX: Math.max(...xs),
+           sphereMinX: Math.min(...sphereXs), sphereMaxX: Math.max(...sphereXs),
+           rgb: [0, 1, 2].map(k => rgb.reduce((a, c) => a + c[k], 0) / Math.max(1, rgb.length)) };
+}
+// A narrow middle column, 300 px wide around x = 400, as the side panels leave it.
+results.dustListening = dustIn('listening', [400, 300, 300, 500]);
+results.dustSpeaking = dustIn('speaking', null);
 console.log(JSON.stringify(results));
 """
 
@@ -292,3 +309,32 @@ class TestWorkingPulses:
     @pytest.mark.parametrize("state", ["idle", "listeningSilent"])
     def test_only_working_pulses(self, motion, state):
         assert motion[state]["swing"] < 1.1, motion[state]
+
+
+class TestRingOfDust:
+    """Mo chose a ring of dust round the sphere, in its own colour, like a
+    planet's ring, in place of the two clouds over its shoulders."""
+
+    def test_the_two_clouds_are_gone(self, script):
+        assert "buildCluster" not in script and "drawCluster" not in script
+
+    def test_there_is_a_ring_of_dust(self, motion):
+        assert motion["dustListening"]["count"] >= 300, motion["dustListening"]["count"]
+
+    def test_it_stays_inside_the_middle_column(self, motion):
+        # Past the column the side panels would cut the ring off.
+        ring = motion["dustListening"]
+        assert ring["minX"] >= 250 and ring["maxX"] <= 550, ring
+
+    def test_it_reaches_past_the_sphere_on_both_sides(self, motion):
+        # As first built, the sphere filled the column and the ring, held inside
+        # it, sat hidden behind the sphere. The sphere now leaves it room.
+        ring = motion["dustListening"]
+        assert ring["minX"] < ring["sphereMinX"] - 15, ring
+        assert ring["maxX"] > ring["sphereMaxX"] + 15, ring
+
+    def test_it_takes_the_spheres_colour(self, motion):
+        red, green, _ = motion["dustListening"]["rgb"]
+        assert green > red + 40, f"listening dust is not cyan: {motion['dustListening']['rgb']}"
+        red, green, _ = motion["dustSpeaking"]["rgb"]
+        assert red > green + 25, f"speaking dust is not purple: {motion['dustSpeaking']['rgb']}"
