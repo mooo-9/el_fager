@@ -61,6 +61,31 @@ class TestStateMapping:
         for orb_state in set(_ORB_STATE.values()):
             assert orb_state in tokens.CK_STATE
 
+    def test_the_state_colours_are_the_spheres_own(self):
+        # The chip and voice bar used the gold/orange/ash palette while the
+        # sphere is blue; Mo wanted them to match. Read the sphere's table as
+        # text so the two cannot drift apart again.
+        import re
+        from pathlib import Path
+        from ui import tokens
+        page = Path("ui/assets/cockpit_orb.html").read_text(encoding="utf-8")
+        table = re.search(r"const COLORS\s*=\s*\{(.*?)\}", page, re.S).group(1)
+        sphere = {name: "#{:02X}{:02X}{:02X}".format(int(r), int(g), int(b))
+                  for name, r, g, b in re.findall(r"(\w+):\s*\[\s*(\d+),\s*(\d+),\s*(\d+)\]", table)}
+        assert sphere, "no colours parsed out of the sphere page"
+        assert {k: v.upper() for k, v in tokens.CK_ORB.items()} == sphere
+
+    @pytest.mark.parametrize("state,orb_state", [
+        ("idle", "idle"), ("listening", "listening"), ("processing", "thinking"), ("speaking", "speaking"),
+    ])
+    def test_the_state_chip_wears_the_spheres_colour(self, qapp, state, orb_state):
+        from ui import tokens
+        w = _make_cockpit(qapp)
+        w.on_state_update(state, "", "")
+        assert f"color: {tokens.CK_ORB[orb_state]};" in w._state_chip._dot.styleSheet()
+        assert f"color: {tokens.CK_ORB[orb_state]};" in w._state_label.styleSheet()
+        w.close()
+
     def test_state_carries_a_label_not_just_a_hue(self, qapp):
         w = _make_cockpit(qapp)
         seen = set()
@@ -625,6 +650,19 @@ class TestConversation:
         inks = self._icon_inks(w)
         assert inks and all(abs(hue - listening) <= 12 for hue, saturation in inks
                             if saturation > 60), "listening mic is not the listening colour"
+        w.close()
+
+    @pytest.mark.parametrize("state,orb_state", [("processing", "thinking"), ("speaking", "speaking")])
+    def test_the_microphone_matches_the_sphere_not_the_old_gold(self, qapp, state, orb_state):
+        from PyQt6.QtGui import QColor
+        from ui import tokens
+        w = _make_cockpit(qapp)
+        w.on_state_update(state, "", "")
+        want = QColor(tokens.CK_ORB[orb_state]).hue()
+        inks = self._icon_inks(w)
+        assert inks and all(abs(hue - want) <= 12 for hue, saturation in inks
+                            if saturation > 60), f"{state} mic is not the sphere's colour"
+        assert tokens.rgba(tokens.CK_ORB[orb_state], 0.45) in w._voice_bar.styleSheet()
         w.close()
 
     def test_the_voice_bar_starts_a_turn(self, qapp):

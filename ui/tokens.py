@@ -85,6 +85,16 @@ CK_STATE = {
     "error":     "#FF5042",   # flare
 }
 
+# The sphere's own state colours (COLORS in ui/assets/cockpit_orb.html), for
+# what sits beside it and tracks its state: the state chip and the voice bar.
+CK_ORB = {
+    "idle":      "#96B4FF",   # pale blue — rest is speech turned down
+    "listening": "#38E0FF",   # cyan
+    "thinking":  "#4870FF",   # deep blue
+    "speaking":  "#96B4FF",   # pale blue
+    "error":     "#FF5042",   # flare
+}
+
 # Per-skill micro-tints — captions, receipts, and ledger dots only
 SKILL_TINT = {
     "whatsapp": "#25D366", "gmail":   "#EA6C5A", "todoist": "#E8746A",

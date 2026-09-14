@@ -244,7 +244,7 @@ class _StateChip(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         self._dot = QLabel("●")
-        self._dot.setStyleSheet(_mono(9, tokens.CK_STATE["idle"], 0))
+        self._dot.setStyleSheet(_mono(9, tokens.CK_ORB["idle"], 0))
         row.addWidget(self._dot)
         self.label = QLabel("IDLE")
         self.label.setStyleSheet(_mono(11, tokens.CK_TEXT_MID, 2.6))
@@ -1258,7 +1258,7 @@ class CockpitWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _paint_state(self, state: str):
-        color = tokens.CK_STATE.get(_ORB_STATE.get(state, "idle"), tokens.CK_STATE["idle"])
+        color = tokens.CK_ORB.get(_ORB_STATE.get(state, "idle"), tokens.CK_ORB["idle"])
         self._state_chip.set_state(_LABELS.get(state, state.upper()), color)
         self._state_label.setStyleSheet(_mono(11, color, 2.6))
         for readout in self._readouts():
