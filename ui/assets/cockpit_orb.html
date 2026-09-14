@@ -13,10 +13,11 @@
 // alpha so the silhouette reads dense and the far face falls away. Two
 // smaller clusters drift above it, one warm and one pale.
 //
-// The sphere is blue, as the reel's is: thinking a deep blue, rest and speech
-// a paler one — rest is speech turned down, the same blue and a slow, soft
-// version of its ripple. Listening stays cyan and error red, far enough round
-// the hue wheel from rest that a state change still reads at a glance. The two
+// The sphere is blue, as the reel's is: thinking a deep blue, rest a paler one
+// with a slow, soft version of the speaking ripple. Speech is purple, so
+// talking no longer looks like resting. Listening stays cyan and error red,
+// far enough round the hue wheel from rest that a state change still reads at
+// a glance. The two
 // clusters keep their warm and pale tones — the only warmth left in the scene.
 //
 // Python drives it through window.orb (see ui/cockpit.py). The loop parks
@@ -26,7 +27,7 @@ const COLORS = {
   idle:      [150, 180, 255],
   listening: [ 56, 224, 255],
   thinking:  [ 72, 112, 255],
-  speaking:  [150, 180, 255],
+  speaking:  [176,  96, 255],
   error:     [255,  80,  66],
 };
 

@@ -91,7 +91,7 @@ CK_ORB = {
     "idle":      "#96B4FF",   # pale blue — rest is speech turned down
     "listening": "#38E0FF",   # cyan
     "thinking":  "#4870FF",   # deep blue
-    "speaking":  "#96B4FF",   # pale blue
+    "speaking":  "#B060FF",   # purple
     "error":     "#FF5042",   # flare
 }
 

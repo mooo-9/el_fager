@@ -93,9 +93,18 @@ def _hue(rgb) -> float:
 class TestTheSphereIsBlue:
     """The reel's sphere is blue; El Fager's follows it (it was amber)."""
 
-    @pytest.mark.parametrize("state", ["idle", "thinking", "speaking"])
-    def test_rest_thinking_and_speech_are_blue(self, script, state):
+    @pytest.mark.parametrize("state", ["idle", "thinking"])
+    def test_rest_and_thinking_are_blue(self, script, state):
         assert 205 <= _hue(_colours(script)[state]) <= 240, f"{state} is not blue"
+
+    def test_speech_is_purple(self, script):
+        # Mo chose "speaking stands out" with a purple voice, so talking no
+        # longer looks like resting.
+        assert 260 <= _hue(_colours(script)["speaking"]) <= 285, "speaking is not purple"
+
+    def test_speech_reads_apart_from_rest(self, script):
+        colours = _colours(script)
+        assert abs(_hue(colours["idle"]) - _hue(colours["speaking"])) >= 30,             "speaking would blur into the resting blue"
 
     def test_listening_still_reads_apart_from_rest(self, script):
         colours = _colours(script)
@@ -234,12 +243,11 @@ def motion(script, tmp_path_factory) -> dict:
 
 class TestRestIsACalmerSpeech:
     """Mo liked the sphere listening and speaking but not at rest, and chose
-    for rest to look like speech turned down: the speaking blue, and a slow,
-    soft version of its ripple rather than a still dark sphere."""
+    for rest to look like speech turned down: a pale blue, and a slow, soft
+    version of the speaking ripple rather than a still dark sphere."""
 
-    def test_rest_wears_the_speaking_blue(self, script):
-        colours = _colours(script)
-        assert colours["idle"] == colours["speaking"]
+    def test_rest_is_a_pale_blue(self, script):
+        assert _colours(script)["idle"] == (150, 180, 255)
 
     def test_the_sphere_moves_at_rest(self, motion):
         # Speech swells the dots with the envelope; a still sphere at rest draws
