@@ -194,6 +194,13 @@ def play_music(query: str) -> str:
         tracks = results.get("tracks", {}).get("items", [])
         if tracks:
             sp.start_playback(device_id=dev, uris=[tracks[0]["uri"]])
+            try:
+                # Its real spelling teaches Whisper the name, if the song is kept.
+                from core import voice_learned
+                voice_learned.played(tracks[0]["name"],
+                                     [a["name"] for a in tracks[0].get("artists", [])])
+            except Exception:
+                pass                   # learning a name never stops the music
             return f"Playing: {_fmt_track(tracks[0])}"
 
         playlists = results.get("playlists", {}).get("items", [])

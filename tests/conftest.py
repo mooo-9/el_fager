@@ -17,3 +17,11 @@ def _isolated_trust_ledger(monkeypatch, tmp_path):
     reads as what El Fager did. Point it at a file of the test's own."""
     from core import ledger
     monkeypatch.setattr(ledger, "_LEDGER", tmp_path / "action_ledger.jsonl")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_voice_learned(monkeypatch, tmp_path):
+    """Songs El Fager plays teach Whisper their names, in data/voice_learned.json.
+    A test that plays a fake song must not teach Mo's real El Fager "Song 39"."""
+    from core import voice_learned
+    monkeypatch.setattr(voice_learned, "_FILE", tmp_path / "voice_learned.json")

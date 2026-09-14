@@ -73,7 +73,7 @@ _SETTINGS = Path("data/settings.json")
 # out the audio it is meant to help. ~600 characters stays well inside that.
 BIAS_PROMPT_MAX_CHARS = 600
 
-# (mtimes of the three files, prompt built from them)
+# (mtimes of the files it is built from, prompt built from them)
 _BIAS_CACHE: "tuple | None" = None
 
 
@@ -96,14 +96,21 @@ def _bias_prompt() -> str:
     written as a real sentence Mo might say, carrying the proper nouns Whisper
     otherwise guesses at, and punctuated the way a transcript should read.
 
-    Built from the profile, the contacts, and the names in Settings →
+    Built from the profile, the contacts, the names in Settings →
     `voice_vocabulary` — the artists, songs and channels Mo asks for, which
-    Whisper otherwise spells as English ("Estanna" came back as "stand").
+    Whisper otherwise spells as English ("Estanna" came back as "stand") — and
+    after them the names learned from songs El Fager played and Mo kept.
     Rebuilt when any of those files changes, so an edit applies on the next
     utterance; kept short, because a long prompt crowds out the audio.
     """
     global _BIAS_CACHE
-    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS))
+    try:
+        from core import voice_learned
+        learned = voice_learned.names()        # may promote a kept song first
+        learned_stamp = _mtime(voice_learned._FILE)
+    except Exception:
+        learned, learned_stamp = [], 0.0
+    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS), learned_stamp)
     if _BIAS_CACHE is not None and _BIAS_CACHE[0] == stamp:
         return _BIAS_CACHE[1]
 
@@ -132,15 +139,16 @@ def _bias_prompt() -> str:
     )
 
     vocabulary: list[str] = []
+    seen = set()
     try:
-        seen = set()
-        for word in _read_json(_SETTINGS).get("voice_vocabulary", []) or []:
-            word = str(word).strip()
-            if word and word.lower() not in seen:
-                seen.add(word.lower())
-                vocabulary.append(word)
+        by_hand = _read_json(_SETTINGS).get("voice_vocabulary", []) or []
     except Exception:
-        pass
+        by_hand = []
+    for word in [*by_hand, *learned]:
+        word = str(word).strip()
+        if word and word.lower() not in seen:
+            seen.add(word.lower())
+            vocabulary.append(word)
     if vocabulary:
         head = prompt[:-1] + ", then play "
         kept = []
