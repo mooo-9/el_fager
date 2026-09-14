@@ -13,12 +13,14 @@ VAD (end-of-speech detection):
 """
 
 import io
+import json
 import os
 import queue
 import re
 import threading
 import wave as _wave
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -63,7 +65,27 @@ _BACKEND_FASTER = "faster_whisper"
 _BACKEND_OPENAI = "openai_whisper"
 
 
-_BIAS_CACHE: "str | None" = None
+_PROFILE = Path("profile.json")
+_CONTACTS = Path("data/contacts.json")
+_SETTINGS = Path("data/settings.json")
+
+# Whisper keeps only the last 224 tokens of a prompt, and a long one crowds
+# out the audio it is meant to help. ~600 characters stays well inside that.
+BIAS_PROMPT_MAX_CHARS = 600
+
+# (mtimes of the three files, prompt built from them)
+_BIAS_CACHE: "tuple | None" = None
+
+
+def _read_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _bias_prompt() -> str:
@@ -74,18 +96,20 @@ def _bias_prompt() -> str:
     written as a real sentence Mo might say, carrying the proper nouns Whisper
     otherwise guesses at, and punctuated the way a transcript should read.
 
-    Built from the profile and contacts so it stays true as those change, and
-    kept short: the prompt window is small and long ones crowd out the audio.
+    Built from the profile, the contacts, and the names in Settings →
+    `voice_vocabulary` — the artists, songs and channels Mo asks for, which
+    Whisper otherwise spells as English ("Estanna" came back as "stand").
+    Rebuilt when any of those files changes, so an edit applies on the next
+    utterance; kept short, because a long prompt crowds out the audio.
     """
     global _BIAS_CACHE
-    if _BIAS_CACHE is not None:
-        return _BIAS_CACHE
+    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS))
+    if _BIAS_CACHE is not None and _BIAS_CACHE[0] == stamp:
+        return _BIAS_CACHE[1]
 
     names: list[str] = []
     try:
-        import json
-        from pathlib import Path
-        profile = json.loads(Path("profile.json").read_text(encoding="utf-8"))
+        profile = _read_json(_PROFILE)
         for key in ("name", "full_name"):
             value = (profile.get(key) or "").strip()
             if value and value not in names:
@@ -93,9 +117,7 @@ def _bias_prompt() -> str:
     except Exception:
         pass
     try:
-        import json
-        from pathlib import Path
-        contacts = json.loads(Path("data/contacts.json").read_text(encoding="utf-8"))
+        contacts = _read_json(_CONTACTS)
         for person in list(contacts)[:8]:
             person = str(person).strip()
             if person and person.lower() != "test user" and person not in names:
@@ -104,11 +126,33 @@ def _bias_prompt() -> str:
         pass
 
     who = ", ".join(names[:6]) if names else "Mo"
-    _BIAS_CACHE = (
+    prompt = (
         f"Hey El Fager, remind {who} about the review at 4 PM, "
         f"check my Todoist and my Obsidian notes, and tell me what's on my calendar."
     )
-    return _BIAS_CACHE
+
+    vocabulary: list[str] = []
+    try:
+        seen = set()
+        for word in _read_json(_SETTINGS).get("voice_vocabulary", []) or []:
+            word = str(word).strip()
+            if word and word.lower() not in seen:
+                seen.add(word.lower())
+                vocabulary.append(word)
+    except Exception:
+        pass
+    if vocabulary:
+        head = prompt[:-1] + ", then play "
+        kept = []
+        for word in vocabulary:              # the start of the list wins the room
+            if len(head) + len(", ".join(kept + [word])) + 1 > BIAS_PROMPT_MAX_CHARS:
+                break
+            kept.append(word)
+        if kept:
+            prompt = head + ", ".join(kept) + "."
+
+    _BIAS_CACHE = (stamp, prompt)
+    return prompt
 
 
 def _numpy_to_wav_bytes(audio: np.ndarray, sr: int = SAMPLE_RATE) -> bytes:
