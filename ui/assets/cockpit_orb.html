@@ -13,16 +13,17 @@
 // alpha so the silhouette reads dense and the far face falls away. Two
 // smaller clusters drift above it, one warm and one pale.
 //
-// The sphere is blue, as the reel's is: rest and thinking a deep blue, speech
-// a paler one. Listening stays cyan and error red, far enough round the hue
-// wheel from rest that a state change still reads at a glance. The two
+// The sphere is blue, as the reel's is: thinking a deep blue, rest and speech
+// a paler one — rest is speech turned down, the same blue and a slow, soft
+// version of its ripple. Listening stays cyan and error red, far enough round
+// the hue wheel from rest that a state change still reads at a glance. The two
 // clusters keep their warm and pale tones — the only warmth left in the scene.
 //
 // Python drives it through window.orb (see ui/cockpit.py). The loop parks
 // itself whenever the window hides, so a cockpit in the tray costs no GPU.
 
 const COLORS = {
-  idle:      [ 72, 112, 255],
+  idle:      [150, 180, 255],
   listening: [ 56, 224, 255],
   thinking:  [ 72, 112, 255],
   speaking:  [150, 180, 255],
@@ -41,7 +42,7 @@ let running = false;
 // centre is not the stage's. Null until told: then the window is the stage.
 let stage = null;
 
-const cur = { r: 72, g: 112, b: 255 };
+const cur = { r: 150, g: 180, b: 255 };
 
 const c = document.getElementById('orb');
 
@@ -148,6 +149,7 @@ function hsl2rgb(h, s, l) {
 // that keeps successive phrases from landing identically.
 let env = 0;
 let yawAccum = 0;
+let ripplePhase = 0;
 let lastNow = 0;
 
 // Measured over a 20s window: mean 0.51, never below 0.25, loud a quarter of
@@ -182,8 +184,10 @@ const tick = (now) => {
   // Ease the envelope toward speech while it talks, and back to still when it
   // stops. Rising fast and falling slower is what makes it read as a voice
   // rather than as a flicker. This has to settle before anything reads it.
+  // At rest it keeps a low, slow swell of its own: a still sphere read as dull.
   const speaking = aState === 'speaking' && !reduced;
-  const want = speaking ? speechTarget(t) : 0;
+  const resting = aState === 'idle' && !reduced;
+  const want = speaking ? speechTarget(t) : resting ? 0.30 + 0.10 * Math.sin(t * 0.7) : 0;
   env += (want - env) * (want > env ? 0.30 : 0.10);
   if (env < 0.001) env = 0;
 
@@ -210,7 +214,7 @@ const tick = (now) => {
   }
 
   const cx = stage ? stage.x : W / 2, cy = stage ? stage.y : H / 2;
-  const dim = ambient ? 0.34 : 1;
+  const dim = ambient ? 0.66 : 1;
   // One slow breath, a bloom that swells briefly on a voice wake, and the
   // whole sphere leaning larger as the voice gets louder.
   const breath = 1 + Math.sin(t * 0.55) * 0.012;
@@ -228,6 +232,9 @@ const tick = (now) => {
   const dt = lastNow ? Math.min(0.05, (now - lastNow) / 1000) : 0;
   lastNow = now;
   if (!reduced) yawAccum += dt * (0.17 + env * 0.30);
+  // The ripple and sway run on their own clock, at speech pace only while it
+  // speaks; at rest the same motion plays at a third of the speed.
+  if (!reduced) ripplePhase += dt * (speaking ? 1 : 0.3);
   const yaw = yawAccum;
   const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
   const FOV = 2.6;
@@ -240,8 +247,8 @@ const tick = (now) => {
   // Only the sphere moves — the ground line and the clusters stay put, which
   // is what makes it read as moving *within* the scene rather than the whole
   // scene sliding.
-  const swayX = R * (0.020 * Math.sin(t * 0.31) + env * 0.14 * Math.sin(t * 1.9));
-  const swayY = R * (0.014 * Math.sin(t * 0.23 + 1.3) + env * 0.10 * Math.sin(t * 2.7 + 0.6));
+  const swayX = R * (0.020 * Math.sin(t * 0.31) + env * 0.14 * Math.sin(ripplePhase * 1.9));
+  const swayY = R * (0.014 * Math.sin(t * 0.23 + 1.3) + env * 0.10 * Math.sin(ripplePhase * 2.7 + 0.6));
   const bx = cx + swayX, by = cy + swayY;
 
   // ── the sphere ─────────────────────────────────────────────────────────
@@ -258,8 +265,8 @@ const tick = (now) => {
 
     if (env > 0) {
       const swell = 1
-        + rip1 * Math.sin(y0 * 9.0 - t * 7.2)
-        + rip2 * Math.sin(x0 * 7.4 + z0 * 5.2 + t * 4.6);
+        + rip1 * Math.sin(y0 * 9.0 - ripplePhase * 7.2)
+        + rip2 * Math.sin(x0 * 7.4 + z0 * 5.2 + ripplePhase * 4.6);
       x0 *= swell; y0 *= swell; z0 *= swell;
     }
 

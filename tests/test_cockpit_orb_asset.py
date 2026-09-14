@@ -150,3 +150,86 @@ class TestTheSphereFillsTheStage:
         assert counts and min(counts) >= 220, f"clouds too sparse: {counts}"
         alpha = re.search(r"const a = \(([\d.]+) - d \* [\d.]+\) \* dim;", script)
         assert alpha and float(alpha.group(1)) >= 0.8, "clouds too faint"
+
+
+# Runs the page's script under Node with a stub canvas that records every dot
+# drawn, so a test can ask how the sphere *moves*, not just what it declares.
+_HARNESS = r"""
+const radii = [];
+let alphaSum = 0, alphaN = 0;
+const ctx = {
+  setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, fillRect() {},
+  arc(x, y, r) { radii.push(r); },
+  createLinearGradient() { return { addColorStop() {} }; },
+  set fillStyle(v) {
+    const m = /rgba\([^)]*,([\d.]+)\)$/.exec(v);
+    if (m) { alphaSum += +m[1]; alphaN++; }
+  },
+  get fillStyle() { return ''; },
+  globalAlpha: 1,
+};
+const canvas = { clientWidth: 800, clientHeight: 600, width: 0, height: 0, getContext: () => ctx };
+globalThis.window = globalThis;
+window.devicePixelRatio = 1;
+window.addEventListener = () => {};
+window.matchMedia = () => ({ matches: false });
+globalThis.document = { getElementById: () => canvas };
+let pending = null;
+globalThis.requestAnimationFrame = cb => { pending = cb; return 1; };
+globalThis.cancelAnimationFrame = () => {};
+"""
+
+_DRIVER = """
+let now = 1000;
+function run(frames) { for (let i = 0; i < frames; i++) { now += 1000 / 60; const cb = pending; pending = null; cb(now); } }
+function measure(state, ambient) {
+  window.orb.setState(state);
+  window.orb.setAmbient(ambient);
+  run(240);                                   // let colour and envelope settle
+  radii.length = 0; alphaSum = 0; alphaN = 0;
+  run(180);
+  return { radius: radii.reduce((a, b) => a + b, 0) / radii.length, alpha: alphaSum / alphaN };
+}
+console.log(JSON.stringify({
+  idle: measure('idle', false),
+  thinking: measure('thinking', false),
+  speaking: measure('speaking', false),
+  ambient: measure('idle', true),
+}));
+"""
+
+
+@pytest.fixture(scope="module")
+def motion(script, tmp_path_factory) -> dict:
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    import json
+    js = tmp_path_factory.mktemp("orb") / "motion.js"
+    js.write_text(_HARNESS + script + _DRIVER, encoding="utf-8")
+    result = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+class TestRestIsACalmerSpeech:
+    """Mo liked the sphere listening and speaking but not at rest, and chose
+    for rest to look like speech turned down: the speaking blue, and a slow,
+    soft version of its ripple rather than a still dark sphere."""
+
+    def test_rest_wears_the_speaking_blue(self, script):
+        colours = _colours(script)
+        assert colours["idle"] == colours["speaking"]
+
+    def test_the_sphere_moves_at_rest(self, motion):
+        # Speech swells the dots with the envelope; a still sphere at rest draws
+        # them exactly as thinking (which stays still) does.
+        assert motion["idle"]["radius"] > motion["thinking"]["radius"] * 1.03, motion
+
+    def test_rest_is_calmer_than_speech(self, motion):
+        assert motion["speaking"]["radius"] > motion["idle"]["radius"] * 1.03, motion
+
+    def test_the_quiet_fade_keeps_two_thirds_of_the_light(self, motion):
+        # Ambient used to dim to a third, which read as dull; two-thirds still
+        # says "resting" without the sphere going dark.
+        ratio = motion["ambient"]["alpha"] / motion["idle"]["alpha"]
+        assert 0.55 <= ratio <= 0.75, motion
