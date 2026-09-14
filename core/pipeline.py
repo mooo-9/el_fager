@@ -5,7 +5,7 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from core import turn_profile
+from core import ducking, turn_profile
 from core.brain import Brain
 from core.memory import Memory
 from core.voice_in import VoiceInput
@@ -156,9 +156,12 @@ class PipelineWorker(QThread):
                     turn_profile.begin(f"voice turn {turn}")
                     self.state_update.emit("listening", "", "")
                     turn_profile.start("record")
-                    audio = self.voice_in.record_audio(
-                        start_timeout_sec=self._listen_window(turn)
-                    )
+                    # Other apps' audio drops while the mic is open, so it
+                    # hears Mo and not the song El Fager just put on.
+                    with ducking.ducked():
+                        audio = self.voice_in.record_audio(
+                            start_timeout_sec=self._listen_window(turn)
+                        )
                     turn_profile.end("record")
                     if self._cancelled.is_set():
                         break

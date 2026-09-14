@@ -76,7 +76,7 @@ class TestRepetitionLoops:
         assert _join_speech_segments("en", [(looped, 0.1)]) == ""
 
     @pytest.mark.parametrize("real", [
-        # Mo repeating himself on purpose — the loop check must leave these be
+        # Mo repeating a phrase on purpose — the loop check must leave these be
         "I only talk English and Arabic That's not even a language that I speak "
         "I told you how are you in Arabic How are you, Fager? How are you?",
         "أريد أن أضعه في To Do List أريد أن أضعه في To Do List ثاني حاجة أريد أن "

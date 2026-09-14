@@ -181,3 +181,48 @@ class TestEndPhrase:
     ])
     def test_normal_speech_is_not_end(self, text):
         assert _is_end_phrase(text) is False
+
+
+class TestThePipelineDucksWhileItRecords:
+    def test_audio_is_low_during_recording_and_back_before_thinking(self, monkeypatch):
+        import numpy as np
+        from core import ducking
+
+        state = {"ducked": False}
+        seen = {}
+
+        class Ducked:
+            def __enter__(self):
+                state["ducked"] = True
+
+            def __exit__(self, *exc):
+                state["ducked"] = False
+                return False
+
+        monkeypatch.setattr(ducking, "ducked", Ducked)
+
+        class VoiceIn:
+            def __init__(self):
+                self.left = 1
+
+            def is_ready(self):
+                return True
+
+            def record_audio(self, start_timeout_sec=None):
+                seen.setdefault("record", []).append(state["ducked"])
+                if self.left:
+                    self.left -= 1
+                    return np.ones(16000, dtype=np.float32)
+                return None
+
+            def transcribe(self, audio):
+                seen["transcribe"] = state["ducked"]
+                return "what's the weather"
+
+            def stop_recording(self):
+                pass
+
+        worker = PipelineWorker(VoiceIn(), FakeBrain(), FakeVoiceOut(), FakeMemory())
+        worker.run()
+        assert seen["record"] and all(seen["record"]), "recording was not ducked"
+        assert seen["transcribe"] is False, "music should be back before thinking"
