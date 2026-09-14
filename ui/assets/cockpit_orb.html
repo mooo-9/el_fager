@@ -150,6 +150,9 @@ function hsl2rgb(h, s, l) {
 let env = 0;
 let yawAccum = 0;
 let ripplePhase = 0;
+// How far into its working pulse the sphere is, 0..1, eased so the pulse
+// fades in and out with the state rather than starting on a hard beat.
+let pulseWeight = 0;
 // How loud Mo is while it listens, 0..1, reported by the recorder about 30
 // times a second, and the frame time it last arrived. A level that stops
 // arriving counts as silence, so the sphere never sits swollen.
@@ -229,6 +232,10 @@ const tick = (now) => {
   // One slow breath, a bloom that swells briefly on a voice wake, and the
   // whole sphere leaning larger as the voice gets louder.
   const breath = 1 + Math.sin(t * 0.55) * 0.012;
+  // While it works it pulses steadily, about once a second: a swell and a
+  // brightening on each beat, whatever else is going on.
+  pulseWeight += ((aState === 'thinking' && !reduced ? 1 : 0) - pulseWeight) * 0.08;
+  const pulse = pulseWeight * (0.5 + 0.5 * Math.sin(t * 5.0));
   const since = (now - bloomAt) / 1000;
   const bloom = bloomAt && since < 1.1 ? Math.sin((1 - since / 1.1) * Math.PI) * 0.06 : 0;
   // It fills the stage as the reel's does: as big as the free space allows.
@@ -236,7 +243,7 @@ const tick = (now) => {
   // room under it for the ground line above the arrows.
   const fit = stage ? Math.max(40, Math.min(stage.h * 0.44 - 26, stage.w * 0.42))
                     : Math.min(W, H) * 0.26;
-  const R = fit * breath * (1 + bloom) * (1 + env * 0.055);
+  const R = fit * breath * (1 + bloom) * (1 + env * 0.055) * (1 + pulse * 0.045);
 
   // Spin is integrated, not derived from t, so quickening it while speaking
   // does not jump the rotation.
@@ -295,7 +302,7 @@ const tick = (now) => {
     // Depth carries both size and alpha: the near face is bright and fat,
     // the far face is a faint dusting seen through the front.
     const d = (zz + 1) / 2;                 // 0 near … 1 far
-    const a = (0.92 - d * 0.74) * dim * (1 + env * 0.30);
+    const a = (0.92 - d * 0.74) * dim * (1 + env * 0.30) * (1 + pulse * 0.40);
     if (a <= 0.02) continue;
     const rad = (1.55 - d * 0.95) * p * (1 + env * 0.22);
 

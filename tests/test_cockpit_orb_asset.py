@@ -187,11 +187,24 @@ function run(frames) { for (let i = 0; i < frames; i++) { now += 1000 / 60; cons
 function measure(state, ambient, level = null) {
   window.orb.setState(state);
   window.orb.setAmbient(ambient);
-  const feed = frames => { for (let i = 0; i < frames; i++) { if (level !== null) window.orb.setLevel(level); run(1); } };
+  const frames = [];                          // mean dot alpha, frame by frame
+  const feed = n => {
+    for (let i = 0; i < n; i++) {
+      if (level !== null) window.orb.setLevel(level);
+      const sum = alphaSum, count = alphaN;
+      run(1);
+      frames.push((alphaSum - sum) / (alphaN - count));
+    }
+  };
   feed(240);                                  // let colour and envelope settle
-  radii.length = 0; alphaSum = 0; alphaN = 0;
+  radii.length = 0; alphaSum = 0; alphaN = 0; frames.length = 0;
   feed(180);
-  return { radius: radii.reduce((a, b) => a + b, 0) / radii.length, alpha: alphaSum / alphaN };
+  // swing: brightest frame over dimmest; beats: rises through the mean
+  const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+  let beats = 0;
+  for (let i = 1; i < frames.length; i++) if (frames[i - 1] < mean && frames[i] >= mean) beats++;
+  return { radius: radii.reduce((a, b) => a + b, 0) / radii.length, alpha: alphaSum / alphaN,
+           swing: Math.max(...frames) / Math.min(...frames), beats };
 }
 const results = {
   idle: measure('idle', false),
@@ -255,3 +268,19 @@ class TestListeningFollowsTheVoice:
 
     def test_a_level_that_stops_arriving_does_not_hold_it_swollen(self, motion):
         assert motion["listeningStale"]["radius"] < motion["thinking"]["radius"] * 1.01, motion
+
+
+class TestWorkingPulses:
+    """Mo asked for a steady pulse while it works: the sphere breathes in and
+    out and brightens on each beat, the same whatever else is going on."""
+
+    def test_it_pulses_while_thinking(self, motion):
+        assert motion["thinking"]["swing"] > 1.2, motion["thinking"]
+
+    def test_the_pulse_is_steady_about_once_a_second(self, motion):
+        # Three seconds are measured: a beat a second is two to four rises.
+        assert 2 <= motion["thinking"]["beats"] <= 4, motion["thinking"]
+
+    @pytest.mark.parametrize("state", ["idle", "listeningSilent"])
+    def test_only_working_pulses(self, motion, state):
+        assert motion[state]["swing"] < 1.1, motion[state]
