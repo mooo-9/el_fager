@@ -42,6 +42,31 @@ ORPHEUS_VOICE_EN    = os.getenv("TTS_VOICE_EN", "daniel")
 # ── Edge TTS fallback voice ─────────────────────────────────────────────────────
 EDGE_VOICE_EN       = os.getenv("EDGE_VOICE_EN", "en-US-GuyNeural")
 
+# ── Groq's daily voice limit ────────────────────────────────────────────────────
+# Orpheus allows 3,600 tokens a day on the free tier. Past it every request is
+# a 429, and asking anyway cost ~1.6 s a sentence before Edge could start —
+# for the hours until the limit reset. Once Groq says it is limited, Edge
+# speaks straight away until the time Groq gave.
+GROQ_TTS_DEFAULT_COOLDOWN = 10 * 60      # when a 429 names no time at all
+_groq_tts_until = 0.0                    # time.time() before which Groq is skipped
+_RETRY_IN_RE = re.compile(
+    r"try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?", re.IGNORECASE)
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _retry_in_seconds(message: str) -> "int | None":
+    """Seconds out of Groq's "Please try again in 8h25m36s", rounded up."""
+    import math
+    m = _RETRY_IN_RE.search(message or "")
+    if not m or not any(m.groups()):
+        return None
+    hours, minutes, seconds = m.groups()
+    total = int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds or 0)
+    return math.ceil(total)
+
 _EMOJI_RE = re.compile(
     r"[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001FA00-\U0001FAFF"
     r"\U0000FE00-\U0000FE0F\U00002300-\U000023FF\U00002B00-\U00002BFF]+"
@@ -237,7 +262,7 @@ class VoiceOutput:
         groq_key = os.getenv("GROQ_API_KEY", "").strip()
 
         # ── 1. Try Groq Orpheus (skip if user chose edge in settings) ───────
-        use_groq = self._backend != "edge"
+        use_groq = self._backend != "edge" and _now() >= _groq_tts_until
         if use_groq and groq_key and not groq_key.startswith("gsk_xxx"):
             path = self._synth_groq(text)
             if path:
@@ -250,13 +275,16 @@ class VoiceOutput:
 
     def _synth_groq(self, text: str) -> "str | None":
         """Returns a temp WAV path on success, None on any failure (caller falls through)."""
+        global _groq_tts_until
         try:
             from core import groq_client
             client = groq_client.get()
             if client is None:
                 return None            # caller falls through to Edge TTS
 
-            response = client.audio.speech.create(
+            # No SDK retries: falling through to Edge for this sentence is the
+            # retry, and two more attempts only tripled the wait before it.
+            response = client.with_options(max_retries=0).audio.speech.create(
                 model=ORPHEUS_MODEL_EN,
                 voice=ORPHEUS_VOICE_EN,
                 input=text,
@@ -269,7 +297,17 @@ class VoiceOutput:
 
         except Exception as e:
             err = str(e)
-            if "model_terms_required" in err or "terms" in err.lower():
+            if getattr(e, "status_code", None) == 429:
+                wait = _retry_in_seconds(err)
+                if wait is None:
+                    try:
+                        wait = int(float(e.response.headers.get("retry-after", "")))
+                    except (AttributeError, TypeError, ValueError):
+                        wait = GROQ_TTS_DEFAULT_COOLDOWN
+                _groq_tts_until = _now() + wait
+                print(f"[El Fager] Groq TTS is rate-limited; speaking with Edge for "
+                      f"{wait // 3600}h{wait % 3600 // 60:02d}m.")
+            elif "model_terms_required" in err or "terms" in err.lower():
                 url = ORPHEUS_MODEL_EN
                 print(
                     f"[El Fager] Groq Orpheus English TTS needs one-time terms acceptance.\n"
