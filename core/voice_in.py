@@ -88,6 +88,111 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
+def _vocabulary() -> "list[str]":
+    """Every name Whisper should know, in priority order: Settings →
+    voice_vocabulary, then names learned from songs played and kept, then
+    Spotify Liked Songs. Case-insensitive repeats dropped."""
+    try:
+        by_hand = _read_json(_SETTINGS).get("voice_vocabulary", []) or []
+    except Exception:
+        by_hand = []
+    try:
+        from core import voice_learned
+        learned = voice_learned.names()
+    except Exception:
+        learned = []
+    try:
+        from core import voice_liked
+        liked = voice_liked.names()
+    except Exception:
+        liked = []
+    out, seen = [], set()
+    for word in [*by_hand, *learned, *liked]:
+        word = str(word).strip()
+        if word and word.lower() not in seen:
+            seen.add(word.lower())
+            out.append(word)
+    return out
+
+
+# ── Correcting near-misses of known names ─────────────────────────────────────
+# Even with a name in the hint, Whisper writes what it hears: "Abusif" for
+# Abyusif, "Hussain Yasser" for Hussein Yasser. A stretch of the transcript
+# close enough to a known name becomes the name. Tuned against a real Groq run
+# (12 of 17 misses repaired) and all 670 of Mo's logged sentences, where it
+# changed only 5 — each a real fix. 0.75 also turned "RZA", a real artist, into
+# Erzaa; below that, everyday phrases start turning into names.
+NAME_MATCH_MIN = 0.8
+NAME_MIN_LETTERS = 5           # "TRRR" would match "Try"
+_SELF = ("I", "I'm", "I'll", "I'd", "I've")
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _correct_names(text: str, vocabulary: "list[str]") -> str:
+    """Replace near-misses of vocabulary names in a transcript with the names.
+
+    Only a stretch Whisper itself capitalised is considered — it capitalises
+    what it takes for a name, and leaves "at the end of the day" lowercase, so
+    that phrase never becomes The Weeknd. A stretch already holding the exact
+    name is left alone, and of close candidates the one nearest the name's
+    length wins, so "Eby Yusif" becomes Abyusif rather than "Eby Abyusif".
+    """
+    from difflib import SequenceMatcher
+
+    names = [n for n in vocabulary if len(_squash(n)) >= NAME_MIN_LETTERS]
+    tokens = list(re.finditer(r"[A-Za-z0-9']+", text))
+    if not names or not tokens:
+        return text
+
+    def plain(span) -> str:
+        return " ".join(t.group(0) for t in span).lower()
+
+    def named(span) -> bool:
+        return any(t is not tokens[0] and t.group(0) not in _SELF and t.group(0)[0].isupper()
+                   for t in span)
+
+    found = []                                   # (score, start, end, name)
+    for name in names:
+        target, words = _squash(name), name.split()
+        exact = " ".join(words).lower()
+        candidates = []
+        for size in sorted({max(1, len(words) - 1), len(words), len(words) + 1}):
+            for i in range(len(tokens) - size + 1):
+                span = tokens[i:i + size]
+                if any(plain(span[a:b]) == exact
+                       for a in range(size) for b in range(a + 1, size + 1)):
+                    continue                     # the name is already there
+                if not named(span):
+                    continue
+                raw = _squash(text[span[0].start():span[-1].end()])
+                matcher = SequenceMatcher(None, raw, target)
+                # Cheap upper bounds first: most stretches are nowhere near.
+                if matcher.real_quick_ratio() < NAME_MATCH_MIN or matcher.quick_ratio() < NAME_MATCH_MIN:
+                    continue
+                score = matcher.ratio()
+                if score >= NAME_MATCH_MIN:
+                    candidates.append((score, abs(len(raw) - len(target)), span, raw))
+        if not candidates:
+            continue
+        top = max(c[0] for c in candidates)
+        close = [c for c in candidates if c[0] >= top - 0.05]
+        close.sort(key=lambda c: (c[1], -c[0]))  # nearest the name's length
+        score, _, span, _ = close[0]
+        found.append((score, span[0].start(), span[-1].end(), name))
+
+    found.sort(reverse=True)
+    kept = []
+    for score, start, end, name in found:
+        if all(end <= a or start >= b for _, a, b, _ in kept):
+            kept.append((score, start, end, name))
+    for _, start, end, name in sorted(kept, key=lambda k: k[1], reverse=True):
+        text = text[:start] + name + text[end:]
+    return text
+
+
 def _bias_prompt() -> str:
     """A sample utterance in the style we want back.
 
@@ -106,17 +211,12 @@ def _bias_prompt() -> str:
     """
     global _BIAS_CACHE
     try:
-        from core import voice_learned
-        learned = voice_learned.names()        # may promote a kept song first
-        learned_stamp = _mtime(voice_learned._FILE)
+        from core import voice_learned, voice_liked
+        voice_learned.names()                  # may promote a kept song first
+        name_stamps = (_mtime(voice_learned._FILE), _mtime(voice_liked._FILE))
     except Exception:
-        learned, learned_stamp = [], 0.0
-    try:
-        from core import voice_liked
-        liked, liked_stamp = voice_liked.names(), _mtime(voice_liked._FILE)
-    except Exception:
-        liked, liked_stamp = [], 0.0
-    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS), learned_stamp, liked_stamp)
+        name_stamps = (0.0, 0.0)
+    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS), *name_stamps)
     if _BIAS_CACHE is not None and _BIAS_CACHE[0] == stamp:
         return _BIAS_CACHE[1]
 
@@ -144,17 +244,7 @@ def _bias_prompt() -> str:
         f"check my Todoist and my Obsidian notes, and tell me what's on my calendar."
     )
 
-    vocabulary: list[str] = []
-    seen = set()
-    try:
-        by_hand = _read_json(_SETTINGS).get("voice_vocabulary", []) or []
-    except Exception:
-        by_hand = []
-    for word in [*by_hand, *learned, *liked]:
-        word = str(word).strip()
-        if word and word.lower() not in seen:
-            seen.add(word.lower())
-            vocabulary.append(word)
+    vocabulary = _vocabulary()
     if vocabulary:
         head = prompt[:-1] + ", then play "
         kept = []
@@ -463,10 +553,17 @@ class VoiceInput:
         audio = _normalise(audio)
 
         if self._backend == _BACKEND_GROQ:
-            return self._transcribe_groq(audio)
-        if self._backend == _BACKEND_FASTER:
-            return self._transcribe_faster(audio)
-        return self._transcribe_openai(audio)
+            text = self._transcribe_groq(audio)
+        elif self._backend == _BACKEND_FASTER:
+            text = self._transcribe_faster(audio)
+        else:
+            text = self._transcribe_openai(audio)
+        if not text:
+            return text
+        try:
+            return _correct_names(text, _vocabulary())   # "Abusif" → Abyusif
+        except Exception:
+            return text                                   # a correction never costs the words
 
     def _transcribe_groq(self, audio: np.ndarray) -> str:
         try:
