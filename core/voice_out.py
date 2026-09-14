@@ -5,7 +5,8 @@ Text-to-speech with automatic backend selection (best available wins):
                          English: canopylabs/orpheus-v1-english
                          Requires GROQ_API_KEY + one-time terms acceptance:
                            https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english
-  2. Edge TTS          — Microsoft neural voices, free, always available
+  2. Edge TTS          — Microsoft neural voices, free, needs the internet
+  3. Windows SAPI      — the voice built into Windows, works offline
 
 Voice customisation (.env):
   TTS_VOICE_EN  — Orpheus English voice  (default: daniel)
@@ -51,6 +52,34 @@ GROQ_TTS_DEFAULT_COOLDOWN = 10 * 60      # when a 429 names no time at all
 _groq_tts_until = 0.0                    # time.time() before which Groq is skipped
 _RETRY_IN_RE = re.compile(
     r"try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?", re.IGNORECASE)
+
+
+# ── Windows' offline voice ──────────────────────────────────────────────────────
+# The last resort when Groq and Edge both need a network that isn't there.
+# SAPI directly through comtypes, not pyttsx3: pyttsx3 hung on its second
+# sentence when driven from a thread, and the pipeline speaks from threads.
+_SAPI_PREFERRED = ("David", "Zira", "Hazel")     # closest to Edge's Guy first
+
+
+def _sapi_voice_name() -> "str | None":
+    """The English SAPI voice to speak with, or None if there is none."""
+    try:
+        import comtypes
+        import comtypes.client
+        try:
+            comtypes.CoInitialize()
+        except OSError:
+            pass
+        voices = comtypes.client.CreateObject("SAPI.SpVoice").GetVoices()
+        names = [voices.Item(i).GetDescription() for i in range(voices.Count)]
+    except Exception:
+        return None
+    english = [n for n in names if "English" in n]
+    for preferred in _SAPI_PREFERRED:
+        for name in english:
+            if preferred in name:
+                return name
+    return english[0] if english else None
 
 
 def _now() -> float:
@@ -269,7 +298,12 @@ class VoiceOutput:
                 return path
 
         # ── 2. Fall back to Edge TTS ─────────────────────────────────────
-        return self._synth_edge(text)
+        path = self._synth_edge(text)
+        if path:
+            return path
+
+        # ── 3. No network: Windows' own voice ────────────────────────────
+        return self._synth_sapi(text)
 
     # ── Groq Orpheus ────────────────────────────────────────────────────────────
 
@@ -330,6 +364,41 @@ class VoiceOutput:
             return tmp.name
         except Exception as e:
             print(f"[El Fager] Edge TTS error: {e}")
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+            return None
+
+    # ── Windows SAPI (offline) ──────────────────────────────────────────────────
+
+    def _synth_sapi(self, text: str) -> "str | None":
+        """Returns a temp WAV path from Windows' built-in voice, None on failure."""
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp.close()
+        try:
+            import comtypes
+            import comtypes.client
+            try:
+                comtypes.CoInitialize()        # the pipeline speaks from a QThread
+            except OSError:
+                pass
+            voice = comtypes.client.CreateObject("SAPI.SpVoice")
+            wanted = _sapi_voice_name()
+            voices = voice.GetVoices()
+            for i in range(voices.Count):
+                if voices.Item(i).GetDescription() == wanted:
+                    voice.Voice = voices.Item(i)
+                    break
+            stream = comtypes.client.CreateObject("SAPI.SpFileStream")
+            stream.Open(tmp.name, 3)           # SSFMCreateForWrite
+            voice.AudioOutputStream = stream
+            voice.Speak(text)
+            stream.Close()
+            print("[El Fager] No network voice; speaking with Windows' offline voice.")
+            return tmp.name
+        except Exception as e:
+            print(f"[El Fager] Offline voice error: {e}")
             try:
                 os.unlink(tmp.name)
             except OSError:
