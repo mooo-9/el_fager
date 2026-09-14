@@ -80,6 +80,9 @@ class PipelineWorker(QThread):
     state_update = pyqtSignal(str, str, str)
     done = pyqtSignal()
     error = pyqtSignal(str)
+    # The answer so far, re-sent each time a sentence goes to the voice, so
+    # the transcript fills in as it is spoken instead of all at once.
+    answer_text = pyqtSignal(str)
 
     def __init__(
         self,
@@ -246,7 +249,7 @@ class PipelineWorker(QThread):
         turn_profile.end("memory")
 
         sent_q: "queue.Queue[str | None]" = queue.Queue()
-        state = {"buf": ""}
+        state = {"buf": "", "said": ""}
         streamed = threading.Event()
         spoke_state = {"emitted": False}
         first_token = [0.0]
@@ -264,6 +267,8 @@ class PipelineWorker(QThread):
                     spoke_state["emitted"] = True
                     self.state_update.emit("speaking", transcript, "")
                 sent_q.put(s)
+                state["said"] = f"{state['said']} {s}".strip()
+                self.answer_text.emit(state["said"])
 
         # Barge-in: listen while it talks, and cut the moment Mo talks over it.
         from core import barge_in as _barge_in
@@ -298,6 +303,8 @@ class PipelineWorker(QThread):
             if tail:
                 streamed.set()
                 sent_q.put(tail)
+                state["said"] = f"{state['said']} {tail}".strip()
+                self.answer_text.emit(state["said"])
             sent_q.put(None)  # end-of-stream sentinel — speaker exits after draining
 
         self.memory.store_conversation_summary(transcript, response)

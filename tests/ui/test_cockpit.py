@@ -455,6 +455,17 @@ class TestConversation:
         from PyQt6.QtWidgets import QLabel
         return [label.text() for label in w._reading_box.findChildren(QLabel)]
 
+    def test_answer_shows_in_its_tab_while_it_is_still_being_spoken(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", "plan my day", "")
+        w.on_answer_text("Gym at seven.")
+        assert "Gym at seven." in self._panel(w)
+        w.on_answer_text("Gym at seven. Lecture at noon.")
+        assert "Gym at seven. Lecture at noon." in self._panel(w)
+        assert len(w._exchanges) == 1
+        w.close()
+
     def test_automations_sit_above_the_conversation_which_takes_the_height(self, qapp):
         w = _make_cockpit(qapp)
         rail = w._reading_panel.parentWidget().layout()

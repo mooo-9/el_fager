@@ -1540,6 +1540,15 @@ class CockpitWindow(QWidget):
         self._wake_attention("exchange" if state != "idle" else "ready")
 
     @pyqtSlot(str)
+    def on_answer_text(self, text: str):
+        """The answer so far, redrawn in its tab as each sentence is spoken;
+        the final "speaking" update still sets the whole reply."""
+        if not self._exchanges:
+            self._add_exchange("")
+        self._exchanges[-1][1] = text
+        self._render_exchange(len(self._exchanges) - 1)
+
+    @pyqtSlot(str)
     def on_error(self, message: str):
         self._current_state = "error"
         self._notice.setText(_breakable(message))
@@ -1746,6 +1755,7 @@ class CockpitWindow(QWidget):
             text_input=text_input,
         )
         self._worker.state_update.connect(self.on_state_update)
+        self._worker.answer_text.connect(self.on_answer_text)
         self._worker.done.connect(self.on_pipeline_done)
         self._worker.error.connect(self.on_error)
         if self._wake_listener:

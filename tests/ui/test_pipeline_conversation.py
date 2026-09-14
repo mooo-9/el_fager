@@ -143,6 +143,18 @@ class TestStreamingSpeech:
         # flushed after chat() returns. The full reply is NOT re-spoken.
         assert w.voice_out.spoken == ["First sentence.", "Second sentence."]
 
+    def test_answer_text_grows_as_each_sentence_is_spoken(self, qapp):
+        w = PipelineWorker(
+            voice_in=FakeVoiceIn(["hello"]),
+            brain=StreamingFakeBrain(),
+            voice_out=FakeVoiceOut(),
+            memory=FakeMemory(),
+        )
+        seen = []
+        w.answer_text.connect(seen.append)
+        w.run()
+        assert seen == ["First sentence.", "First sentence. Second sentence."]
+
     def test_non_streaming_brain_falls_back_to_full_speak(self, qapp):
         w = _worker(["hello"])
         w.run()
