@@ -55,6 +55,12 @@ class TestWhatIsKept:
         clock["t"] += voice_learned.KEEP_SECONDS + 1
         assert voice_learned.names() == ["Tawsen"]
 
+    def test_punctuation_trailing_a_title_is_trimmed(self, clock):
+        # Spotify's title is "Estanna," — in the hint that read "Estanna,, Tawsen".
+        voice_learned.played("Estanna,", ["Tawsen"])
+        clock["t"] += voice_learned.KEEP_SECONDS + 1
+        assert voice_learned.names() == ["Estanna", "Tawsen"]
+
     def test_the_newest_come_first_and_repeats_move_up(self, clock):
         for title, artist in (("One", "A"), ("Two", "B"), ("One", "A")):
             voice_learned.played(title, [artist])

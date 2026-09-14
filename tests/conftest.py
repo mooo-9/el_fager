@@ -25,3 +25,11 @@ def _isolated_voice_learned(monkeypatch, tmp_path):
     A test that plays a fake song must not teach Mo's real El Fager "Song 39"."""
     from core import voice_learned
     monkeypatch.setattr(voice_learned, "_FILE", tmp_path / "voice_learned.json")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_voice_liked(monkeypatch, tmp_path):
+    """Names read from Mo's Liked Songs live in data/voice_liked.json; a test's
+    fake library must never replace them."""
+    from core import voice_liked
+    monkeypatch.setattr(voice_liked, "_FILE", tmp_path / "voice_liked.json")

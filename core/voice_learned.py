@@ -63,7 +63,7 @@ def played(title: str, artists: "list[str]") -> None:
     whatever was pending before it — replaced already — is dropped."""
     names, seen = [], set()
     for name in [title, *artists]:
-        name = str(name or "").strip()
+        name = str(name or "").strip().rstrip(",.;:").strip()   # Spotify has "Estanna,"
         if name and _latin(name) and name.lower() not in seen:
             seen.add(name.lower())
             names.append(name)

@@ -473,6 +473,10 @@ def main():
         from tools.clipboard_history_tool import start_clipboard_monitor
         start_clipboard_monitor()
 
+        # Names from Spotify Liked Songs for Whisper's hint, read once a day
+        from core import voice_liked
+        voice_liked.start()
+
         # Proactive scheduler
         from core.scheduler import _set_instance
         from core.defaults import seed_default_schedules

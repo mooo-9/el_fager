@@ -99,7 +99,8 @@ def _bias_prompt() -> str:
     Built from the profile, the contacts, the names in Settings →
     `voice_vocabulary` — the artists, songs and channels Mo asks for, which
     Whisper otherwise spells as English ("Estanna" came back as "stand") — and
-    after them the names learned from songs El Fager played and Mo kept.
+    after them the names learned from songs El Fager played and Mo kept, then
+    the names from Mo's Spotify Liked Songs.
     Rebuilt when any of those files changes, so an edit applies on the next
     utterance; kept short, because a long prompt crowds out the audio.
     """
@@ -110,7 +111,12 @@ def _bias_prompt() -> str:
         learned_stamp = _mtime(voice_learned._FILE)
     except Exception:
         learned, learned_stamp = [], 0.0
-    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS), learned_stamp)
+    try:
+        from core import voice_liked
+        liked, liked_stamp = voice_liked.names(), _mtime(voice_liked._FILE)
+    except Exception:
+        liked, liked_stamp = [], 0.0
+    stamp = (_mtime(_PROFILE), _mtime(_CONTACTS), _mtime(_SETTINGS), learned_stamp, liked_stamp)
     if _BIAS_CACHE is not None and _BIAS_CACHE[0] == stamp:
         return _BIAS_CACHE[1]
 
@@ -144,7 +150,7 @@ def _bias_prompt() -> str:
         by_hand = _read_json(_SETTINGS).get("voice_vocabulary", []) or []
     except Exception:
         by_hand = []
-    for word in [*by_hand, *learned]:
+    for word in [*by_hand, *learned, *liked]:
         word = str(word).strip()
         if word and word.lower() not in seen:
             seen.add(word.lower())
