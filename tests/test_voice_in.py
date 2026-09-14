@@ -189,3 +189,109 @@ class TestForcedEnglish:
         audio = np.zeros(16000, dtype=np.float32)
         assert voice._transcribe_openai(audio) == ""
         assert fake.calls == ["en"]
+
+
+# ── How loud the mic is, for the Cockpit's sphere ─────────────────────────
+
+class TestSpeechLevel:
+    """Mo chose for the sphere to swell with their voice while it listens, so
+    the recorder reports a 0..1 loudness for every slice of audio it takes."""
+
+    def _tone(self, rms):
+        # A sine's RMS is its amplitude over root two.
+        t = np.arange(512) / 16000
+        return (np.sin(2 * np.pi * 220 * t) * rms * np.sqrt(2)).astype(np.float32)
+
+    def test_silence_is_still(self):
+        from core.voice_in import speech_level
+        assert speech_level(np.zeros(512, dtype=np.float32)) == 0.0
+
+    def test_the_speech_threshold_sits_low_in_the_range(self):
+        # RMS_THRESHOLD (0.01, -40 dBFS) is where the recorder counts speech:
+        # it should move the sphere, but only a little.
+        from core.voice_in import RMS_THRESHOLD, speech_level
+        assert 0.2 <= speech_level(self._tone(RMS_THRESHOLD)) <= 0.45
+
+    def test_a_loud_voice_is_full_and_never_past_it(self):
+        from core.voice_in import speech_level
+        assert speech_level(self._tone(0.15)) == 1.0
+        assert speech_level(np.ones(512, dtype=np.float32)) == 1.0
+
+    def test_louder_is_never_less(self):
+        from core.voice_in import speech_level
+        levels = [speech_level(self._tone(r)) for r in (0.004, 0.01, 0.02, 0.04, 0.08)]
+        assert levels == sorted(levels) and len(set(levels)) == len(levels)
+
+
+class _FakeStream:
+    """sounddevice.InputStream that plays back chunks instead of a mic."""
+
+    def __init__(self, chunks, feed_on_enter, **kwargs):
+        self._chunks = list(chunks)
+        self._feed_on_enter = feed_on_enter
+        self.callback = kwargs["callback"]
+
+    def feed_one(self):
+        if self._chunks:
+            self.callback(self._chunks.pop(0).reshape(-1, 1), 0, None, None)
+
+    def __enter__(self):
+        if self._feed_on_enter:
+            while self._chunks:
+                self.feed_one()
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestRecordingReportsLoudness:
+    def _speech_then_silence(self, size):
+        loud = np.full(size, 0.05, dtype=np.float32)
+        quiet = np.zeros(size, dtype=np.float32)
+        return [loud] * 3 + [quiet] * 60
+
+    def _rms_recorder(self, voice, monkeypatch):
+        import core.voice_in as vi
+        chunks = self._speech_then_silence(int(vi.SAMPLE_RATE * vi.RMS_CHUNK_SEC))
+        stream = {}
+
+        def make(**kw):
+            stream["s"] = _FakeStream(chunks, feed_on_enter=False, **kw)
+            return stream["s"]
+
+        monkeypatch.setattr(vi.sd, "InputStream", make)
+        monkeypatch.setattr(vi.sd, "sleep", lambda ms: stream["s"].feed_one())
+        voice._vad_model = None
+        voice._stop_flag = vi.threading.Event()
+
+    def test_the_vad_recorder_reports_every_chunk(self, voice, monkeypatch):
+        import torch
+        import core.voice_in as vi
+        chunks = self._speech_then_silence(vi.VAD_CHUNK)
+        monkeypatch.setattr(vi.sd, "InputStream",
+                            lambda **kw: _FakeStream(chunks, feed_on_enter=True, **kw))
+
+        class Vad:
+            def reset_states(self):
+                pass
+
+            def __call__(self, frame, sr):
+                return torch.tensor(1.0 if frame.abs().max() > 0 else 0.0)
+
+        voice._vad_model = Vad()
+        voice._stop_flag = vi.threading.Event()
+        levels = []
+        assert voice.record_audio(on_level=levels.append) is not None
+        assert levels[:3] == [vi.speech_level(chunks[0])] * 3 and levels[0] > 0.5
+        assert levels[3] == 0.0
+
+    def test_the_rms_fallback_reports_every_chunk(self, voice, monkeypatch):
+        self._rms_recorder(voice, monkeypatch)
+        levels = []
+        assert voice.record_audio(on_level=levels.append) is not None
+        assert levels[0] > 0.5 and levels[3] == 0.0
+
+    def test_recording_without_a_listener_still_works(self, voice, monkeypatch):
+        self._rms_recorder(voice, monkeypatch)
+        assert voice.record_audio() is not None

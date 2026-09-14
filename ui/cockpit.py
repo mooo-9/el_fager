@@ -1539,6 +1539,13 @@ class CockpitWindow(QWidget):
         # An exchange dims the readouts to 12%: the exchange owns the screen.
         self._wake_attention("exchange" if state != "idle" else "ready")
 
+    @pyqtSlot(float)
+    def on_mic_level(self, level: float):
+        """How loud Mo is while it listens; the sphere swells with it. A level
+        that lands after the turn has moved on is dropped."""
+        if self._current_state == "listening":
+            self._orb_js(f"window.orb && window.orb.setLevel({level:.3f})")
+
     @pyqtSlot(str)
     def on_answer_text(self, text: str):
         """The answer so far, redrawn in its tab as each sentence is spoken;
@@ -1756,6 +1763,7 @@ class CockpitWindow(QWidget):
         )
         self._worker.state_update.connect(self.on_state_update)
         self._worker.answer_text.connect(self.on_answer_text)
+        self._worker.mic_level.connect(self.on_mic_level)
         self._worker.done.connect(self.on_pipeline_done)
         self._worker.error.connect(self.on_error)
         if self._wake_listener:

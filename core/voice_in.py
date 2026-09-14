@@ -42,6 +42,13 @@ RMS_CHUNK_SEC = 0.1
 RMS_THRESHOLD = 0.01
 RMS_SILENCE_SEC = 1.5     # RMS can't tell soft speech from silence — keep a margin
 
+# Loudness for the Cockpit's sphere to swell with while it listens: at the
+# floor it is still, at full it swells most. The floor sits under
+# RMS_THRESHOLD (-40 dBFS) so speech always moves it; full is a raised voice
+# close to the mic.
+LEVEL_FLOOR_DB = -50.0
+LEVEL_FULL_DB = -20.0
+
 # Hallucination guards.
 # El Fager listens in English only, so transcription is forced to English.
 # Because the decode is forced, the backend echoes "en" back and the language
@@ -323,6 +330,18 @@ def _is_repetition_loop(text: str) -> bool:
     return bool(words) and len(looped) / len(words) > LOOP_COVERAGE_MAX
 
 
+def speech_level(chunk: np.ndarray) -> float:
+    """How loud one slice of mic audio is, 0..1, on a decibel scale so a
+    quiet voice still moves the sphere and a loud one cannot overshoot."""
+    if chunk.size == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(np.square(chunk, dtype=np.float64))))
+    if rms <= 0.0:
+        return 0.0
+    db = 20.0 * np.log10(rms)
+    return float(min(1.0, max(0.0, (db - LEVEL_FLOOR_DB) / (LEVEL_FULL_DB - LEVEL_FLOOR_DB))))
+
+
 def _normalise(audio: np.ndarray) -> np.ndarray:
     """Peak-normalise to 90 % FS so quiet recordings are easier to transcribe."""
     peak = np.abs(audio).max()
@@ -416,19 +435,23 @@ class VoiceInput:
 
     # ── Recording ──────────────────────────────────────────────────────────────
 
-    def record_audio(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def record_audio(self, start_timeout_sec: float | None = None,
+                     on_level=None) -> "np.ndarray | None":
         """
         Record until the speaker is truly done talking.
         Uses Silero VAD if loaded, otherwise falls back to RMS silence detection.
         start_timeout_sec: give up (return None) if speech hasn't started within
         this many seconds — used by conversation mode's follow-up window.
+        on_level: called with speech_level() of every chunk as it arrives, on
+        this (the recording) thread.
         """
         self._stop_flag.clear()
         if self._vad_model is not None:
-            return self._record_vad(start_timeout_sec)
-        return self._record_rms(start_timeout_sec)
+            return self._record_vad(start_timeout_sec, on_level)
+        return self._record_rms(start_timeout_sec, on_level)
 
-    def _record_vad(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def _record_vad(self, start_timeout_sec: float | None = None,
+                    on_level=None) -> "np.ndarray | None":
         """
         Neural end-of-speech via Silero VAD.
         Stops only after END_SILENCE_SEC of frames the model says aren't speech.
@@ -470,6 +493,8 @@ class VoiceInput:
                     continue
 
                 chunks.append(chunk)
+                if on_level:
+                    on_level(speech_level(chunk))
 
                 with torch.no_grad():
                     prob = self._vad_model(
@@ -494,7 +519,8 @@ class VoiceInput:
         trim = max(len(chunks) - end_frames + trail_frames, 1)
         return np.concatenate(chunks[:trim]).flatten()
 
-    def _record_rms(self, start_timeout_sec: float | None = None) -> "np.ndarray | None":
+    def _record_rms(self, start_timeout_sec: float | None = None,
+                    on_level=None) -> "np.ndarray | None":
         """RMS fallback — 2.5 s silence window, 100 ms chunks."""
         chunk_size = int(SAMPLE_RATE * RMS_CHUNK_SEC)
         silence_needed = int(RMS_SILENCE_SEC / RMS_CHUNK_SEC)
@@ -521,6 +547,8 @@ class VoiceInput:
                 if not chunks:
                     continue
                 rms = float(np.sqrt(np.mean(chunks[-1] ** 2)))
+                if on_level:
+                    on_level(speech_level(chunks[-1]))
                 if rms >= RMS_THRESHOLD:
                     speech_started = True
                     consec_silence = 0

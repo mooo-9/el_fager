@@ -50,7 +50,7 @@ class TestTheApiCockpitDrivesStillExists:
     fails silently — there is no exception to catch on the Python side."""
 
     @pytest.mark.parametrize("member", [
-        "setState", "setAmbient", "bloom", "start", "stop", "ready", "state", "setStage",
+        "setState", "setAmbient", "bloom", "start", "stop", "ready", "state", "setStage", "setLevel",
     ])
     def test_the_member_is_defined(self, script, member):
         assert re.search(rf"\b{member}\s*[({{:]", script), \
@@ -182,20 +182,28 @@ globalThis.cancelAnimationFrame = () => {};
 _DRIVER = """
 let now = 1000;
 function run(frames) { for (let i = 0; i < frames; i++) { now += 1000 / 60; const cb = pending; pending = null; cb(now); } }
-function measure(state, ambient) {
+// level: fed before every frame, as the recorder does ~30 times a second;
+// null feeds nothing.
+function measure(state, ambient, level = null) {
   window.orb.setState(state);
   window.orb.setAmbient(ambient);
-  run(240);                                   // let colour and envelope settle
+  const feed = frames => { for (let i = 0; i < frames; i++) { if (level !== null) window.orb.setLevel(level); run(1); } };
+  feed(240);                                  // let colour and envelope settle
   radii.length = 0; alphaSum = 0; alphaN = 0;
-  run(180);
+  feed(180);
   return { radius: radii.reduce((a, b) => a + b, 0) / radii.length, alpha: alphaSum / alphaN };
 }
-console.log(JSON.stringify({
+const results = {
   idle: measure('idle', false),
   thinking: measure('thinking', false),
   speaking: measure('speaking', false),
   ambient: measure('idle', true),
-}));
+  listeningSilent: measure('listening', false, 0),
+  listeningLoud: measure('listening', false, 0.8),
+};
+// The recorder stops reporting (the turn ended) but the state has not moved on yet.
+results.listeningStale = measure('listening', false, null);
+console.log(JSON.stringify(results));
 """
 
 
@@ -233,3 +241,17 @@ class TestRestIsACalmerSpeech:
         # says "resting" without the sphere going dark.
         ratio = motion["ambient"]["alpha"] / motion["idle"]["alpha"]
         assert 0.55 <= ratio <= 0.75, motion
+
+
+class TestListeningFollowsTheVoice:
+    """Mo chose for the sphere to swell and ripple with their voice while it
+    listens, and to settle when they pause."""
+
+    def test_silence_leaves_it_still(self, motion):
+        assert motion["listeningSilent"]["radius"] < motion["thinking"]["radius"] * 1.01, motion
+
+    def test_a_loud_voice_swells_it(self, motion):
+        assert motion["listeningLoud"]["radius"] > motion["thinking"]["radius"] * 1.03, motion
+
+    def test_a_level_that_stops_arriving_does_not_hold_it_swollen(self, motion):
+        assert motion["listeningStale"]["radius"] < motion["thinking"]["radius"] * 1.01, motion

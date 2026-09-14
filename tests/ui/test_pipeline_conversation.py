@@ -23,8 +23,10 @@ class FakeVoiceIn:
     def is_ready(self):
         return True
 
-    def record_audio(self, start_timeout_sec=None):
+    def record_audio(self, start_timeout_sec=None, on_level=None):
         self.timeouts.append(start_timeout_sec)
+        if on_level:
+            on_level(0.5)
         if self._utterances:
             return np.ones(16000, dtype=np.float32)
         return None
@@ -220,7 +222,7 @@ class TestThePipelineDucksWhileItRecords:
             def is_ready(self):
                 return True
 
-            def record_audio(self, start_timeout_sec=None):
+            def record_audio(self, start_timeout_sec=None, on_level=None):
                 seen.setdefault("record", []).append(state["ducked"])
                 if self.left:
                     self.left -= 1
@@ -238,3 +240,14 @@ class TestThePipelineDucksWhileItRecords:
         worker.run()
         assert seen["record"] and all(seen["record"]), "recording was not ducked"
         assert seen["transcribe"] is False, "music should be back before thinking"
+
+
+class TestMicLevel:
+    def test_the_recorders_loudness_is_passed_on_while_listening(self):
+        # The Cockpit's sphere swells with Mo's voice; the worker is the only
+        # thing between the recorder's thread and the window.
+        worker = _worker(["hello"])
+        heard = []
+        worker.mic_level.connect(heard.append)
+        worker.run()
+        assert heard and heard[0] == 0.5

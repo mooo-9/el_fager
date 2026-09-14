@@ -83,6 +83,9 @@ class PipelineWorker(QThread):
     # The answer so far, re-sent each time a sentence goes to the voice, so
     # the transcript fills in as it is spoken instead of all at once.
     answer_text = pyqtSignal(str)
+    # How loud Mo is, 0..1, for every slice of audio while the mic is open,
+    # so the Cockpit's sphere can swell with the voice it is hearing.
+    mic_level = pyqtSignal(float)
 
     def __init__(
         self,
@@ -163,7 +166,8 @@ class PipelineWorker(QThread):
                     # hears Mo and not the song El Fager just put on.
                     with ducking.ducked():
                         audio = self.voice_in.record_audio(
-                            start_timeout_sec=self._listen_window(turn)
+                            start_timeout_sec=self._listen_window(turn),
+                            on_level=self.mic_level.emit,
                         )
                     turn_profile.end("record")
                     if self._cancelled.is_set():

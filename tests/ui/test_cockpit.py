@@ -1146,6 +1146,38 @@ class TestSphereStage:
         w.close()
 
 
+class TestSphereHearsYou:
+    """While it listens, the sphere swells with how loud Mo is."""
+
+    def test_the_loudness_reaches_the_sphere_while_listening(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        sent = []
+        w._orb_js = sent.append
+        w.on_mic_level(0.42)
+        assert sent == ["window.orb && window.orb.setLevel(0.420)"]
+        w.close()
+
+    @pytest.mark.parametrize("state", ["idle", "processing", "speaking"])
+    def test_a_late_level_does_not_move_it_once_listening_is_over(self, qapp, state):
+        # Signals from the recorder's thread can land after the state moved on.
+        w = _make_cockpit(qapp)
+        w.on_state_update(state, "", "")
+        sent = []
+        w._orb_js = sent.append
+        w.on_mic_level(0.9)
+        assert sent == []
+        w.close()
+
+    def test_each_turn_wires_the_recorder_to_the_sphere(self, qapp):
+        from unittest.mock import patch
+        w = _make_cockpit(qapp)
+        with patch("core.pipeline.PipelineWorker") as worker:
+            w._start_pipeline()
+        worker.return_value.mic_level.connect.assert_called_once_with(w.on_mic_level)
+        w.close()
+
+
 class TestNormalWindow:
     """A normal window, not full screen: it sits above the taskbar, has a dark
     title bar of its own, and remembers where it was left."""
