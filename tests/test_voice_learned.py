@@ -147,3 +147,35 @@ class TestSpotifyReportsWhatItPlays:
         monkeypatch.setattr(spotify_tool, "_get_device", lambda sp: "device")
         assert spotify_tool.play_music("estanna").startswith("Playing: Estanna")
 
+
+class TestPeopleMoContacts:
+    """Names of people Mo WhatsApps or emails are learned at once — a sent
+    message is already confirmed, there is no wrong pick to wait out."""
+
+    def test_a_contacted_name_is_learned_straight_away(self, clock):
+        voice_learned.contacted("Yasmeen Adam")
+        assert voice_learned.names() == ["Yasmeen Adam"]
+
+    def test_arabic_names_are_kept(self, clock):
+        voice_learned.contacted("العائله")
+        assert voice_learned.names() == ["العائله"]
+
+    def test_newest_first_and_repeats_move_up(self, clock):
+        for name in ("Seif Magdy", "Yasmeen Adam", "seif magdy"):
+            voice_learned.contacted(name)
+        assert voice_learned.names() == ["seif magdy", "Yasmeen Adam"]
+
+    def test_people_come_before_songs_and_neither_pushes_the_other_out(self, clock):
+        voice_learned.played("Estanna", ["Tawsen"])
+        clock["t"] += voice_learned.KEEP_SECONDS + 1
+        for i in range(voice_learned.MAX_NAMES + 5):
+            voice_learned.contacted(f"Person {i}")
+        learned = voice_learned.names()
+        assert learned[0] == f"Person {voice_learned.MAX_NAMES + 4}"
+        assert "Estanna" in learned and "Tawsen" in learned
+        assert len([n for n in learned if n.startswith("Person")]) == voice_learned.MAX_NAMES
+
+    def test_blank_and_bare_numbers_are_not_names(self, clock):
+        for name in ("", "  ", "+201001234567", "201001234567"):
+            voice_learned.contacted(name)
+        assert voice_learned.names() == []

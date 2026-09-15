@@ -91,7 +91,7 @@ If Gmail not set up, tell Mo to enable Gmail API in Google Cloud Console then sa
 WhatsApp tools: prepare_whatsapp_message, send_whatsapp_to_number, confirm_whatsapp_send, add_whatsapp_contact, delete_whatsapp_contact, list_whatsapp_contacts.
 When Mo wants to send a WhatsApp message to a saved contact — call prepare_whatsapp_message first (shows draft), then call confirm_whatsapp_send ONLY when Mo explicitly says yes/send/go ahead. Same confirm pattern as email.
 When Mo says "send WhatsApp to [phone number]" without naming a contact — use send_whatsapp_to_number instead.
-prepare_whatsapp_message reaches every contact and group in Mo's WhatsApp by name — no number needed. If it lists several matching chats, ask Mo which one. If nothing matches, offer send_whatsapp_to_number or add_whatsapp_contact.
+prepare_whatsapp_message reaches every contact and group in Mo's WhatsApp by name — no number needed. Many are saved in Arabic script, and Mo's speech always reaches you in English letters, so also pass contact_name_arabic with the name as it would be written in Arabic. If it lists several matching chats, ask Mo which one. If nothing matches, offer send_whatsapp_to_number or add_whatsapp_contact.
 When Mo says "delete WhatsApp contact [name]" or "remove [name] from WhatsApp" — use delete_whatsapp_contact.
 Notion tools: search_notion, read_notion_page, append_to_notion, create_notion_page.
 page_id can be the last segment of a Notion URL or a bare UUID — pass either form directly.
@@ -765,7 +765,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "prepare_whatsapp_message",
-        "description": "Stage a WhatsApp message to any contact or group saved in Mo's WhatsApp, by name, for Mo to confirm before sending. If several chats match, it lists them instead of staging — ask Mo which one and call again with that exact name. After staging, wait for Mo to say 'yes send it' then call confirm_staged_action.",
+        "description": "Stage a WhatsApp message to any contact or group saved in Mo's WhatsApp, by name, for Mo to confirm before sending. Many chats are saved in Arabic script, and Mo's speech always reaches you in English letters, so always also give contact_name_arabic: the same name written in Arabic as it would be saved (e.g. 'أحمد' for Ahmed, 'د محمد طه' for Doctor Mohamed Taha). When the name is also a word with a meaning, give both the sound-alike and the translation separated by ' | ' (e.g. 'كينجز | الملوك' for Kings, 'فاميلي | العائلة' for family). These are searched only if the English spelling finds nothing. If several chats match, it lists them instead of staging — ask Mo which one and call again with that exact name. After staging, wait for Mo to say 'yes send it' then call confirm_staged_action.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -773,12 +773,16 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "The contact's or group's name as Mo said it (first name is fine)"
                 },
+                "contact_name_arabic": {
+                    "type": "string",
+                    "description": "The same name in Arabic script, as Mo might have saved it in WhatsApp (e.g. 'أحمد' for Ahmed, 'العائلة' for family). Give it whenever the name or group could be saved in Arabic; it's searched only if the English spelling finds nothing."
+                },
                 "message": {
                     "type": "string",
                     "description": "The WhatsApp message text to send"
                 }
             },
-            "required": ["contact_name", "message"]
+            "required": ["contact_name", "contact_name_arabic", "message"]
         }
     },
     {
@@ -5156,7 +5160,8 @@ class Brain:
             elif name == "prepare_whatsapp_message":
                 from tools import whatsapp_tool
                 return whatsapp_tool.prepare_whatsapp_message(
-                    tool_input["contact_name"], tool_input["message"]
+                    tool_input["contact_name"], tool_input["message"],
+                    contact_name_arabic=tool_input.get("contact_name_arabic"),
                 )
             elif name == "confirm_whatsapp_send":
                 from tools import whatsapp_tool

@@ -17,6 +17,7 @@ Send flow mirrors Gmail:
 import ctypes
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.parse
@@ -126,6 +127,35 @@ def _find_contact(name: str) -> tuple[str, str] | tuple[None, None]:
     return None, None
 
 
+# Spellings WhatsApp's own search already treats as one letter: a name saved
+# as "العائله" is found by "العائلة", and "امازون" finds "أمازون".
+_ARABIC_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ة": "ه", "ى": "ي"})
+_TASHKEEL = re.compile("[\u064B-\u0652\u0640]")        # vowel marks, tatweel
+_JOINED = ("وال", "ال", "و")                              # "and", "the", written onto the word
+
+
+# "Doctor" is saved as "د" as often as it is spelled out.
+_TITLES = {"دكتور": "د", "دكتوره": "د"}
+
+
+def _name_words(text: str) -> list[str]:
+    words = _TASHKEEL.sub("", text).translate(_ARABIC_FOLD).casefold().split()
+    words = [w.rstrip(".") for w in words]
+    return [_TITLES.get(w, w) for w in words if w]
+
+
+def _bare(word: str) -> str:
+    """The word without an Arabic "و" or "ال" joined to its front."""
+    for lead in _JOINED:
+        if word.startswith(lead) and len(word) - len(lead) >= 2:
+            return word[len(lead):]
+    return word
+
+
+def _starts(word: str, prefix: str) -> bool:
+    return word.startswith(prefix) or _bare(word).startswith(_bare(prefix))
+
+
 def _pick_chat(query: str, titles: list[str]) -> tuple["str | None", list[str]]:
     """Which of WhatsApp's search results the spoken name means.
 
@@ -135,15 +165,24 @@ def _pick_chat(query: str, titles: list[str]) -> tuple["str | None", list[str]]:
     single such chat is chosen. WhatsApp's search also matches numbers and
     profile text, so results that don't match by name are dropped.
     """
-    q = query.casefold().split()
+    q = _name_words(query)
     matches = [t for t in titles
-               if all(any(w.startswith(p) for w in t.casefold().split()) for p in q)]
+               if all(any(_starts(w, p) for w in _name_words(t)) for p in q)]
     for t in matches:
-        if t.casefold().split() == q:
+        if [_bare(w) for w in _name_words(t)] == [_bare(p) for p in q]:
             return t, [m for m in matches if m != t]
     if len(matches) == 1:
         return matches[0], []
     return None, matches
+
+
+def _learn_name(name: str) -> None:
+    """Someone Mo messaged is a name Whisper should know."""
+    try:
+        from core import voice_learned
+        voice_learned.contacted(name)
+    except Exception:
+        pass                  # learning a name never gets in the way of a send
 
 
 # ── Send helpers ──────────────────────────────────────────────────────────────
@@ -200,19 +239,32 @@ def _wait_for_whatsapp_focus(timeout: float = 8.0) -> bool:
 
 # ── Send flow ─────────────────────────────────────────────────────────────────
 
-def prepare_whatsapp_message(contact_name: str, message: str) -> str:
+def _search_chats(name: str) -> list:
+    from tools import whatsapp_desktop
+    try:
+        return whatsapp_desktop.find_chats(name)
+    except Exception as e:
+        print(f"[El Fager] WhatsApp Desktop search failed: {e}")
+        return []
+
+
+def prepare_whatsapp_message(contact_name: str, message: str,
+                             contact_name_arabic: "str | None" = None) -> str:
     """
     Stage a WhatsApp message for confirmation.
     Looks the name up among Mo's WhatsApp chats first, then data/contacts.json.
+    Whisper writes every name in English letters, so a chat saved in Arabic is
+    looked up by contact_name_arabic when the English spelling finds nothing.
     """
-    from tools import whatsapp_desktop
-
-    try:
-        chats = whatsapp_desktop.find_chats(contact_name)
-    except Exception as e:
-        print(f"[El Fager] WhatsApp Desktop search failed: {e}")
-        chats = []
-    chosen, others = _pick_chat(contact_name, [c.title for c in chats])
+    # Arabic spellings come as alternatives — "كينجز | الملوك" — because a name
+    # can be saved as it sounds or as it means; each is tried until one lands.
+    spellings = [contact_name] + [
+        a.strip() for a in (contact_name_arabic or "").split("|") if a.strip()]
+    for query in spellings:
+        chats = _search_chats(query)
+        chosen, others = _pick_chat(query, [c.title for c in chats])
+        if chosen or others:
+            break
     if chosen:
         photo = next(c.photo for c in chats if c.title == chosen)
         # Near misses ("Seif Magdy" beside "Seif") aren't listed: any mention
@@ -221,7 +273,7 @@ def prepare_whatsapp_message(contact_name: str, message: str) -> str:
         return _stage_pending(chosen, None, message, photo=photo)
     if others:
         return (
-            f"Several WhatsApp chats match '{contact_name}': "
+            f"Several WhatsApp chats match '{query}': "
             f"{', '.join(others[:6])}. Nothing is staged — read these names "
             f"to Mo and ask which one."
         )
@@ -278,6 +330,7 @@ def confirm_whatsapp_send() -> str:
             staging.resolve("failed")
             return f"[WhatsApp: not sent to {name} — {e}]"
         staging.resolve("sent", f"whatsapp → {name} · sent")
+        _learn_name(name)
         return f"Sent to {name} on WhatsApp"
 
     # Phone for URI: digits only, no leading +
@@ -309,6 +362,7 @@ def confirm_whatsapp_send() -> str:
             # Only here did the message actually leave — anything below is a
             # hand-off to Mo, so it clears the stage without writing a receipt.
             staging.resolve("sent", f"whatsapp → {name} · sent")
+            _learn_name(name)
             return f"Sent to {name}"
         else:
             staging.resolve("handoff")

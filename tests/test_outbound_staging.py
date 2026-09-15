@@ -222,3 +222,46 @@ class TestGmailNeverHangs:
 
         assert g.get_gmail_service() == "service"
         assert built["http"].http.timeout == g.HTTP_TIMEOUT_SEC
+
+
+class TestGmailTeachesWhisperNames:
+    def test_sending_to_a_named_address_learns_the_name(self, gmail):
+        from core import voice_learned
+        g, _ = gmail
+        g.send_message("Mohab Mohamed <mohab@example.com>", "hi", "hello")
+        assert voice_learned.names() == []
+        g.confirm_send_message()
+        assert voice_learned.names() == ["Mohab Mohamed"]
+
+    def test_a_bare_address_teaches_nothing(self, gmail):
+        from core import voice_learned
+        g, _ = gmail
+        g.send_message("mohab@example.com", "hi", "hello")
+        g.confirm_send_message()
+        assert voice_learned.names() == []
+
+    def test_opening_an_email_learns_the_senders_name(self, monkeypatch):
+        from core import voice_learned
+        import tools.gmail_tool as g
+
+        message = {"payload": {"headers": [
+            {"name": "From", "value": "أحمد عادل <ahmed@example.com>"},
+            {"name": "Subject", "value": "hi"}], "mimeType": "text/plain",
+            "body": {"data": ""}}, "snippet": "hello"}
+
+        class Call:
+            def __init__(self, result): self.result = result
+            def execute(self): return self.result
+
+        class Messages:
+            def get(self, **kwargs): return Call(message)
+            def modify(self, **kwargs): return Call({})
+
+        class Service:
+            def users(self): return self
+            def messages(self): return Messages()
+
+        monkeypatch.setattr(g, "GMAIL_AVAILABLE", True)
+        monkeypatch.setattr(g, "get_gmail_service", lambda: Service())
+        g.read_message("m1")
+        assert voice_learned.names() == ["أحمد عادل"]

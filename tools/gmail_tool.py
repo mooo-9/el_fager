@@ -132,6 +132,19 @@ def _fmt_date(date_str: str) -> str:
         return date_str[:16] if date_str else "unknown date"
 
 
+def _learn_name(address: str) -> None:
+    """The name on "Ahmed Adel <ahmed@...>" is one Whisper should know. A bare
+    address has none, and its local part isn't a name anyone says."""
+    try:
+        from email.utils import parseaddr
+        from core import voice_learned
+        name = parseaddr(address or "")[0].strip().strip('"')
+        if name:
+            voice_learned.contacted(name)
+    except Exception:
+        pass                  # learning a name never gets in the way of email
+
+
 def _encode_mime(msg) -> str:
     """Encode a MIME message as URL-safe base64 for the Gmail API."""
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -220,6 +233,7 @@ def read_message(msg_id: str) -> str:
         )
         hdrs    = msg.get("payload", {}).get("headers", [])
         sender  = _get_header(hdrs, "From")
+        _learn_name(sender)
         to      = _get_header(hdrs, "To")
         subject = _get_header(hdrs, "Subject") or "(no subject)"
         date    = _fmt_date(_get_header(hdrs, "Date"))
@@ -324,6 +338,7 @@ def confirm_send_message() -> str:
         service.users().messages().send(userId="me", body=send_body).execute()
         _pending_send.clear()
         staging.resolve("sent", f"gmail → {pending['to']} · sent")
+        _learn_name(pending["to"])
         return f"Sent to {pending['to']} — Subject: {pending['subject']}"
 
     except Exception as e:

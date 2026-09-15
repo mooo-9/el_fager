@@ -15,10 +15,17 @@ def wa(monkeypatch, tmp_path):
     import tools.whatsapp_tool as w
     import tools.whatsapp_desktop as wd
 
-    chats: dict = {"list": [], "photos": {}}
+    chats: dict = {"list": [], "photos": {}, "by_query": {}}
     sent: list = []
-    monkeypatch.setattr(wd, "find_chats", lambda q: [
-        wd.Chat(t, chats["photos"].get(t)) for t in chats["list"]])
+    searched: list = []
+
+    def find_chats(q):
+        searched.append(q)
+        titles = chats["by_query"].get(q, chats["list"])
+        return [wd.Chat(t, chats["photos"].get(t)) for t in titles]
+
+    monkeypatch.setattr(wd, "find_chats", find_chats)
+    chats["searched"] = searched
     monkeypatch.setattr(wd, "send", lambda title, msg: sent.append((title, msg)))
     monkeypatch.setattr(w, "CONTACTS_PATH", tmp_path / "contacts.json")
     # The number path must never fire from these tests.
@@ -57,6 +64,85 @@ class TestPickingTheChat:
     def test_a_word_inside_a_name_isnt_a_match(self):
         from tools.whatsapp_tool import _pick_chat
         assert _pick_chat("mo", ["Honda", "Baba", "Ammo"]) == (None, [])
+
+
+class TestArabicSavedChats:
+    """Whisper writes every name in English letters, so a chat saved as
+    "العائله" was out of reach. The model passes the Arabic spelling too, and
+    matching allows the spellings WhatsApp's own search treats as the same."""
+
+    @pytest.mark.parametrize("arabic, titles, picked", [
+        ("العائلة", ["العائله"], "العائله"),                 # ة / ه
+        ("امازون", ["تحقق أمازون"], "تحقق أمازون"),          # أ / ا
+        ("عطاره", ["ماركت وعطارة سما"], "ماركت وعطارة سما"),  # the "و" in front
+        ("عائلة", ["العائله"], "العائله"),                   # the "ال" in front
+        ("محمد طه", ["د محمد طه عظام", "مركز د. محمود زكريا للأسنان"], "د محمد طه عظام"),
+        ("دكتور محمد طه", ["د محمد طه عظام"], "د محمد طه عظام"),   # "Doctor" saved as "د"
+        ("د. محمد طه", ["د محمد طه عظام"], "د محمد طه عظام"),
+    ])
+    def test_arabic_spellings_match(self, arabic, titles, picked):
+        from tools.whatsapp_tool import _pick_chat
+        assert _pick_chat(arabic, titles)[0] == picked
+
+    def test_a_different_arabic_name_does_not_match(self):
+        from tools.whatsapp_tool import _pick_chat
+        assert _pick_chat("محمد", ["مركز د. محمود زكريا للأسنان"]) == (None, [])
+
+    def test_the_arabic_spelling_finds_a_chat_the_english_one_cant(self, wa):
+        w, _, chats, sent = wa
+        chats["by_query"] = {"family": [], "العائلة": ["العائله"]}
+        chats["photos"] = {"العائله": b"family-png"}
+        w.prepare_whatsapp_message("family", "dinner at 8", contact_name_arabic="العائلة")
+        action = staging.current()
+        assert action.target == "العائله" and action.photo == b"family-png"
+        assert sent == []
+
+    def test_the_arabic_search_is_skipped_when_english_already_found_it(self, wa):
+        w, _, chats, _ = wa
+        chats["by_query"] = {"Yasmeen": ["Yasmeen Adam"]}
+        w.prepare_whatsapp_message("Yasmeen", "hi", contact_name_arabic="ياسمين")
+        assert chats["searched"] == ["Yasmeen"]
+        assert staging.current().target == "Yasmeen Adam"
+
+    def test_each_arabic_spelling_is_tried_in_turn(self, wa):
+        # "Kings" can be saved as it sounds or as it means: "كينجز" or "الملوك".
+        w, _, chats, _ = wa
+        chats["by_query"] = {"Kings": [], "كينجز": [], "الملوك": ["الملوك only"]}
+        w.prepare_whatsapp_message("Kings", "match at 9",
+                                   contact_name_arabic="كينجز | الملوك")
+        assert chats["searched"] == ["Kings", "كينجز", "الملوك"]
+        assert staging.current().target == "الملوك only"
+
+    def test_several_arabic_matches_ask(self, wa):
+        w, _, chats, _ = wa
+        chats["by_query"] = {"Mohamed": [], "محمد": ["د محمد طه عظام", "محمد علي"]}
+        out = w.prepare_whatsapp_message("Mohamed", "hi", contact_name_arabic="محمد")
+        assert staging.current() is None
+        assert "د محمد طه عظام" in out and "محمد علي" in out
+
+
+class TestLearningNames:
+    def test_a_sent_whatsapp_teaches_whisper_the_name(self, wa):
+        from core import voice_learned
+        w, _, chats, _ = wa
+        chats["list"] = ["Yasmeen Adam"]
+        w.prepare_whatsapp_message("yasmeen", "on my way")
+        assert voice_learned.names() == []          # drafting alone isn't contact
+        w.confirm_whatsapp_send()
+        assert voice_learned.names() == ["Yasmeen Adam"]
+
+    def test_a_failed_send_teaches_nothing(self, wa, monkeypatch):
+        from core import voice_learned
+        w, wd, chats, _ = wa
+        chats["list"] = ["Yasmeen Adam"]
+        w.prepare_whatsapp_message("yasmeen", "on my way")
+
+        def fails(title, msg):
+            raise wd.WhatsAppDesktopError("didn't open")
+
+        monkeypatch.setattr(wd, "send", fails)
+        w.confirm_whatsapp_send()
+        assert voice_learned.names() == []
 
 
 class TestDrafting:
@@ -149,3 +235,13 @@ class TestConfirming:
         assert "not sent" in out.lower() and "didn't open" in out
         assert staging.current() is None
         assert staging.receipts() == []
+
+
+def test_the_model_is_made_to_give_the_arabic_spelling():
+    """The slimmed tool list drops parameter descriptions, so the model saw a
+    bare optional field and mostly left it out. It's required, and the tool's
+    own description — which survives slimming — says what it's for."""
+    from core.brain import _SLIM_TOOLS
+    tool = next(t for t in _SLIM_TOOLS if t["name"] == "prepare_whatsapp_message")
+    assert "contact_name_arabic" in tool["input_schema"]["required"]
+    assert "Arabic" in tool["description"]

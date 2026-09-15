@@ -10,8 +10,12 @@ song first and is corrected within a minute; learning those would teach
 Whisper the mistakes. So a played song waits here as pending, and becomes a
 learned name only once KEEP_SECONDS pass without another song replacing it.
 
-Names in Arabic script are kept as Spotify spells them, alongside the
-Latin ones.
+People are learned too: the chats Mo sends WhatsApp messages to and the
+names on emails he sends or opens. A sent message is already confirmed, so
+those are learned at once, into their own list that songs never push out.
+
+Names in Arabic script are kept as Spotify, WhatsApp and Gmail spell them,
+alongside the Latin ones.
 """
 import json
 import threading
@@ -70,8 +74,20 @@ def played(title: str, artists: "list[str]") -> None:
         _save(data)
 
 
+def contacted(name: str) -> None:
+    """Mo just messaged or emailed this person, or opened their email."""
+    name = str(name or "").strip()
+    if not name or name.lstrip("+").replace(" ", "").isdigit():
+        return                        # a bare number isn't a name to say
+    with _lock:
+        data = _load()
+        rest = [n for n in data.get("people", []) if n.lower() != name.lower()]
+        data["people"] = ([name] + rest)[:MAX_NAMES]
+        _save(data)
+
+
 def names() -> "list[str]":
-    """The learned names, newest first."""
+    """The learned names: people first, then songs, each newest first."""
     with _lock:
         data = _load()
         if _promote(data):
@@ -79,4 +95,6 @@ def names() -> "list[str]":
                 _save(data)
             except OSError:
                 pass
-        return list(data.get("names", []))
+        people = list(data.get("people", []))
+        seen = {n.lower() for n in people}
+        return people + [n for n in data.get("names", []) if n.lower() not in seen]
