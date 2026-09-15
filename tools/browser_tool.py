@@ -108,18 +108,23 @@ def browser_click(selector_or_text: str) -> str:
     with _lock:
         try:
             _ensure_browser()
-            # Try CSS/XPath selector first
-            try:
+
+            def as_selector():
                 _page.click(selector_or_text, timeout=5000)
                 return f"Clicked: {selector_or_text}"
-            except Exception:
-                pass
-            # Fall back to visible text match
-            try:
+
+            def as_text():
                 _page.get_by_text(selector_or_text, exact=False).first.click(timeout=5000)
                 return f"Clicked element with text: '{selector_or_text}'"
-            except Exception:
-                pass
+
+            # Plain words are almost always link or button text: tried as a
+            # selector first, "Gezira Island" waited out 5 s before matching.
+            css_like = any(ch in selector_or_text for ch in "#.[]=:>/*")
+            for attempt in ((as_selector, as_text) if css_like else (as_text, as_selector)):
+                try:
+                    return attempt()
+                except Exception:
+                    pass
             return f"[Element not found: '{selector_or_text}']"
         except Exception as e:
             return f"[browser_click failed: {e}]"
@@ -197,12 +202,25 @@ def browser_fill_form(fields: dict) -> str:
 
 
 def browser_submit(selector: str) -> str:
-    """Click a submit button or element to submit a form."""
+    """Submit a form: press Enter in a text field, or click a button."""
     with _lock:
         try:
             _ensure_browser()
-            _page.click(selector, timeout=5000)
-            _page.wait_for_load_state("networkidle", timeout=10000)
+            element = _page.locator(selector).first
+            kind = element.evaluate(
+                "el => ({tag: el.tagName.toLowerCase(), type: (el.type || '').toLowerCase()})")
+            # Clicking a search box submits nothing — it was the natural thing
+            # to pass for "search Wikipedia for X".
+            typing = kind["tag"] == "textarea" or (
+                kind["tag"] == "input" and kind["type"] not in ("submit", "button", "image"))
+            if typing:
+                element.press("Enter", timeout=5000)
+            else:
+                element.click(timeout=5000)
+            try:
+                _page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass   # busy pages (YouTube) never settle; the submit still went
             return f"Submitted via: {selector} — Now at: {_page.url}"
         except Exception as e:
             return f"[browser_submit failed: {e}]"
@@ -260,7 +278,10 @@ def browser_back() -> str:
     with _lock:
         try:
             _ensure_browser()
-            _page.go_back(timeout=10000)
+            try:
+                _page.go_back(wait_until="commit", timeout=10000)
+            except Exception:
+                pass   # a page restored from cache fires no load event; it's back
             return f"Went back. Now at: {_page.url}"
         except Exception as e:
             return f"[browser_back failed: {e}]"
