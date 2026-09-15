@@ -357,14 +357,17 @@ class TestYouTubeSearch:
 class TestYouTubeLatest:
     def test_opens_the_newest_video(self):
         with patch.object(yt, "_channel_id", return_value="UCfM3zsQsOnfWNUppiycmBuw"), \
+             patch.object(yt, "_search_channels", return_value=[]) as searched, \
              patch.object(yt.httpx, "get", return_value=_response(text=_FEED_XML)), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             result = yt.youtube_latest("@linkinpark")
         opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
         assert "Numb" in result
+        searched.assert_not_called()          # a handle that works needs no search
 
     def test_unknown_channel_opens_a_search(self):
         with patch.object(yt, "_channel_id", return_value=None), \
+             patch.object(yt, "_search_channels", return_value=[]), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             result = yt.youtube_latest("some channel")
         assert "results?search_query=" in opened.call_args.args[0]
@@ -372,10 +375,55 @@ class TestYouTubeLatest:
 
     def test_unreadable_feed_opens_the_channel(self):
         with patch.object(yt, "_channel_id", return_value="UCfM3zsQsOnfWNUppiycmBuw"), \
+             patch.object(yt, "_search_channels", return_value=[]), \
              patch.object(yt.httpx, "get", return_value=_response(status=404)), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             yt.youtube_latest("@linkinpark")
         assert opened.call_args.args[0].endswith("/videos")
+
+
+_EMPTY_FEED = """<?xml version="1.0"?><feed><title>erzaa</title></feed>"""
+
+
+class TestYouTubeLatestFindsTheRightChannel:
+    """"Erzaa" resolved to @Erzaa — a different channel with no videos — and
+    "Marwan Moussa" guessed @MarwanMoussa, which doesn't exist. YouTube's own
+    channel search finds both."""
+
+    def _feeds(self, by_channel):
+        def get(url, **kwargs):
+            for cid, text in by_channel.items():
+                if cid in url:
+                    return _response(text=text)
+            return _response(status=404)
+        return get
+
+    def test_an_empty_channel_falls_through_to_one_that_has_videos(self):
+        feeds = {"UCemptyemptyemptyempty": _EMPTY_FEED, "UCrealrealrealrealreal": _FEED_XML}
+        with patch.object(yt, "_channel_id", return_value="UCemptyemptyemptyempty"), \
+             patch.object(yt, "_search_channels", return_value=["UCrealrealrealrealreal"]), \
+             patch.object(yt.httpx, "get", side_effect=self._feeds(feeds)), \
+             patch("tools.comet_tool.open_url", return_value=True) as opened:
+            result = yt.youtube_latest("Erzaa")
+        opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
+        assert "Numb" in result
+
+    def test_a_name_with_no_handle_is_found_by_search(self):
+        feeds = {"UCrealrealrealrealreal": _FEED_XML}
+        with patch.object(yt, "_channel_id", return_value=None), \
+             patch.object(yt, "_search_channels", return_value=["UCrealrealrealrealreal"]), \
+             patch.object(yt.httpx, "get", side_effect=self._feeds(feeds)), \
+             patch("tools.comet_tool.open_url", return_value=True) as opened:
+            yt.youtube_latest("Marwan Moussa")
+        opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
+
+    def test_channel_search_reads_channel_ids_in_order(self):
+        html = ('{"channelRenderer":{"channelId":"UCaaaaaaaaaaaaaaaaaaaaaa","title":{"simpleText":"A"}}}'
+                '{"channelRenderer":{"channelId":"UCbbbbbbbbbbbbbbbbbbbbbb","title":{"simpleText":"B"}}}')
+        with patch.object(yt.httpx, "get", return_value=_response(text=html)) as get:
+            assert yt._search_channels("marwan moussa") == [
+                "UCaaaaaaaaaaaaaaaaaaaaaa", "UCbbbbbbbbbbbbbbbbbbbbbb"]
+        assert "sp=EgIQAg" in get.call_args.args[0]      # YouTube's "channels only" filter
 
 
 class TestWebSearchOpensComet:
@@ -435,3 +483,12 @@ class TestBrainDispatch:
         with patch(target, return_value="done") as fn:
             assert brain._dispatch_tool(tool, args) == "done"
         fn.assert_called_once()
+
+
+def test_feed_titles_are_unescaped_so_they_read_aloud_cleanly():
+    # '"Over Each Other" Live' came back as '&quot;Over Each Other&quot; Live'.
+    feed = ('<feed><title>Linkin Park</title><entry><yt:videoId>kXYiU_JCYtU</yt:videoId>'
+            '<title>&quot;Over Each Other&quot; Live &amp; Loud</title></entry></feed>')
+    with patch.object(yt.httpx, "get", return_value=_response(text=feed)):
+        assert yt._newest_in_feed("UCfM3zsQsOnfWNUppiycmBuw") == (
+            "kXYiU_JCYtU", '"Over Each Other" Live & Loud')
