@@ -26,13 +26,14 @@ _owned = True              # False when attached to Mo's own running Comet
 def _reset_browser_state():
     """Teardown browser objects without raising (used when thread changes).
 
-    When attached to Mo's Comet we only close the tab we opened — closing his
-    context or browser would end his session.
+    When attached to Mo's Comet nothing is closed, not even the tab we opened:
+    it holds what he asked for, and the model calls browser_close when it's
+    done. Stopping Playwright only disconnects from his browser.
     """
     global _playwright, _browser, _context, _page, _owner_thread, _owned
-    teardown = [(_page, "close")]
+    teardown = []
     if _owned:
-        teardown += [(_context, "close"), (_browser, "close")]
+        teardown = [(_page, "close"), (_context, "close"), (_browser, "close")]
     for obj, method in teardown:
         if obj is not None:
             try:
@@ -241,10 +242,13 @@ def browser_scroll(direction: str = "down", amount: int = 3) -> str:
 
 
 def browser_close() -> str:
-    """Close the browser and clean up all resources."""
+    """Let go of the browser. Mo's own Comet and its tabs stay open."""
     with _lock:
         try:
+            attached = _page is not None and not _owned
             _reset_browser_state()
+            if attached:
+                return "Done with the browser — your Comet and its tabs stay open."
             return "Browser closed."
         except Exception as e:
             _reset_browser_state()

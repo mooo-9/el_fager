@@ -133,3 +133,38 @@ def test_run_continues_when_vault_creds_found():
     assert injected is not None, "_get_action not called with injected_creds on login retry"
     assert injected["username"] == "mo"
     assert injected["password"] == "secret"
+
+
+def test_a_finished_task_leaves_his_comet_tab_open():
+    """Mo found the video he wanted, then El Fager closed it."""
+    agent = BrowserAgent()
+    mock_page = MagicMock()
+    mock_page.url = "https://www.youtube.com/watch?v=x"
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_browser = MagicMock()
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    with patch.object(agent, "_get_action", return_value=_done("Playing it.")), \
+         patch("time.sleep"), \
+         patch("playwright.sync_api.sync_playwright") as mock_pw, \
+         patch("tools.comet_tool.automation_context",
+               return_value=(mock_browser, mock_context, False)):
+        mock_pw.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+        assert agent.run("play the video") == "Playing it."
+
+    mock_page.close.assert_not_called()
+    mock_browser.close.assert_not_called()
+
+
+def test_it_says_so_when_his_comet_cant_be_used():
+    from tools.comet_tool import CometUnavailable
+    agent = BrowserAgent()
+    with patch("playwright.sync_api.sync_playwright") as mock_pw, \
+         patch("tools.comet_tool.automation_context",
+               side_effect=CometUnavailable("Close Comet so I can reopen it signed in.")):
+        mock_pw.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+        assert "reopen it signed in" in agent.run("check gmail")
+

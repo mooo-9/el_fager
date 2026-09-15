@@ -62,6 +62,7 @@ def _no_real_comet(monkeypatch):
         raise RuntimeError("launching a real browser is off in tests")
 
     monkeypatch.setattr(comet_tool, "subprocess",
-                        type("NoSubprocess", (), {"Popen": staticmethod(blocked)}))
+                        type("NoSubprocess", (), {"Popen": staticmethod(blocked),
+                                                  "run": staticmethod(blocked)}))
     monkeypatch.setattr(comet_tool, "webbrowser",
                         type("NoBrowser", (), {"open": staticmethod(blocked)}))
