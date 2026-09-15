@@ -9,8 +9,7 @@ vocabulary and the names learned from songs played (core/voice_in.py).
 
 Reading uses the library login from scripts/spotify_library_login.py and
 never prompts: without it nothing happens. A failed read keeps the last
-summary. Names in non-Latin script are skipped, as the transcription is
-forced to English.
+summary. Names in Arabic script are kept as Spotify spells them.
 """
 import json
 import threading
@@ -33,10 +32,6 @@ def _now() -> float:
     return time.time()
 
 
-def _latin(name: str) -> bool:
-    return all(ord(ch) < 0x0250 or not ch.isalpha() for ch in name)
-
-
 def _client():
     from tools import spotify_tool
     return spotify_tool.get_library_client()
@@ -50,7 +45,7 @@ def summarise(items: list, recent: int = RECENT_SONGS, artists: int = TOP_ARTIST
     for t in tracks[:recent]:
         for name in [t.get("name", ""), *(a.get("name", "") for a in t.get("artists", []))]:
             name = str(name).strip().rstrip(",.;:").strip()
-            if name and _latin(name) and name.lower() not in seen:
+            if name and name.lower() not in seen:
                 seen.add(name.lower())
                 newest.append(name)
 
@@ -58,7 +53,7 @@ def summarise(items: list, recent: int = RECENT_SONGS, artists: int = TOP_ARTIST
     for position, t in enumerate(tracks):
         for a in t.get("artists", []):
             name = str(a.get("name", "")).strip().rstrip(",.;:").strip()
-            if name and _latin(name):
+            if name:
                 counts[name] += 1
                 first_seen.setdefault(name, position)
     ranked = sorted(counts, key=lambda n: (-counts[n], first_seen[n]))

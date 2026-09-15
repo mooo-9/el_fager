@@ -10,8 +10,8 @@ song first and is corrected within a minute; learning those would teach
 Whisper the mistakes. So a played song waits here as pending, and becomes a
 learned name only once KEEP_SECONDS pass without another song replacing it.
 
-Names in non-Latin script are skipped: the transcription is forced to
-English, and an Arabic spelling in the hint cannot help it.
+Names in Arabic script are kept as Spotify spells them, alongside the
+Latin ones.
 """
 import json
 import threading
@@ -27,10 +27,6 @@ _lock = threading.Lock()
 
 def _now() -> float:
     return time.time()
-
-
-def _latin(name: str) -> bool:
-    return all(ord(ch) < 0x0250 or not ch.isalpha() for ch in name)
 
 
 def _load() -> dict:
@@ -64,7 +60,7 @@ def played(title: str, artists: "list[str]") -> None:
     names, seen = [], set()
     for name in [title, *artists]:
         name = str(name or "").strip().rstrip(",.;:").strip()   # Spotify has "Estanna,"
-        if name and _latin(name) and name.lower() not in seen:
+        if name and name.lower() not in seen:
             seen.add(name.lower())
             names.append(name)
     with _lock:

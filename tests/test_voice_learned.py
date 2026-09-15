@@ -50,10 +50,11 @@ class TestKeptSongsAreLearned:
 
 
 class TestWhatIsKept:
-    def test_names_in_arabic_script_are_skipped(self, clock):
+    def test_names_in_arabic_script_are_kept(self, clock):
+        # Mo wants his Arabic song names in the hint as Spotify spells them.
         voice_learned.played("إستنى", ["Tawsen", "فارس سكر"])
         clock["t"] += voice_learned.KEEP_SECONDS + 1
-        assert voice_learned.names() == ["Tawsen"]
+        assert voice_learned.names() == ["إستنى", "Tawsen", "فارس سكر"]
 
     def test_punctuation_trailing_a_title_is_trimmed(self, clock):
         # Spotify's title is "Estanna," — in the hint that read "Estanna,, Tawsen".
@@ -145,3 +146,4 @@ class TestSpotifyReportsWhatItPlays:
         monkeypatch.setattr(spotify_tool, "get_spotify", lambda: FakeSpotify())
         monkeypatch.setattr(spotify_tool, "_get_device", lambda sp: "device")
         assert spotify_tool.play_music("estanna").startswith("Playing: Estanna")
+

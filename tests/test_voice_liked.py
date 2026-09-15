@@ -56,10 +56,11 @@ class TestSummary:
         items = [track("A", "Newer"), track("B", "Older"), track("C", "Newer"), track("D", "Older")]
         assert voice_liked.summarise(items, recent=0, artists=1)["artists"] == ["Newer"]
 
-    def test_arabic_script_names_and_empty_rows_are_skipped(self):
+    def test_arabic_script_names_are_kept_and_empty_rows_skipped(self):
+        # Mo wants his Arabic song names in the hint as Spotify spells them.
         items = [track("إستنى", "Tawsen"), {"track": None}, track("Ghareeb", "شهاب")]
         summary = voice_liked.summarise(items, recent=3, artists=3)
-        assert "إستنى" not in summary["recent"] and "شهاب" not in summary["artists"]
+        assert "إستنى" in summary["recent"] and "شهاب" in summary["artists"]
         assert "Tawsen" in summary["recent"] and "Ghareeb" in summary["recent"]
 
     def test_punctuation_trailing_a_title_is_trimmed(self):
