@@ -91,7 +91,7 @@ If Gmail not set up, tell Mo to enable Gmail API in Google Cloud Console then sa
 WhatsApp tools: prepare_whatsapp_message, send_whatsapp_to_number, confirm_whatsapp_send, add_whatsapp_contact, delete_whatsapp_contact, list_whatsapp_contacts.
 When Mo wants to send a WhatsApp message to a saved contact — call prepare_whatsapp_message first (shows draft), then call confirm_whatsapp_send ONLY when Mo explicitly says yes/send/go ahead. Same confirm pattern as email.
 When Mo says "send WhatsApp to [phone number]" without naming a contact — use send_whatsapp_to_number instead.
-Contact names support partial case-insensitive match. If contact not found, offer to add them with add_whatsapp_contact or send directly to a number with send_whatsapp_to_number.
+prepare_whatsapp_message reaches every contact and group in Mo's WhatsApp by name — no number needed. If it lists several matching chats, ask Mo which one. If nothing matches, offer send_whatsapp_to_number or add_whatsapp_contact.
 When Mo says "delete WhatsApp contact [name]" or "remove [name] from WhatsApp" — use delete_whatsapp_contact.
 Notion tools: search_notion, read_notion_page, append_to_notion, create_notion_page.
 page_id can be the last segment of a Notion URL or a bare UUID — pass either form directly.
@@ -762,13 +762,13 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "prepare_whatsapp_message",
-        "description": "Stage a WhatsApp message to a saved contact for Mo to confirm before sending. After calling this, wait for Mo to say 'yes send it' then call confirm_whatsapp_send.",
+        "description": "Stage a WhatsApp message to any contact or group saved in Mo's WhatsApp, by name, for Mo to confirm before sending. If several chats match, it lists them instead of staging — ask Mo which one and call again with that exact name. After staging, wait for Mo to say 'yes send it' then call confirm_staged_action.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "contact_name": {
                     "type": "string",
-                    "description": "Name of the contact (partial match supported)"
+                    "description": "The contact's or group's name as Mo said it (first name is fine)"
                 },
                 "message": {
                     "type": "string",

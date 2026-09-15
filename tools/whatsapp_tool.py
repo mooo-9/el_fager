@@ -1,7 +1,9 @@
 """
 WhatsApp tool — Phase 4A.
 
-Sends messages via the whatsapp:// URI scheme (opens WhatsApp Desktop).
+Reaches any chat saved in Mo's WhatsApp by name, through WhatsApp Desktop
+(tools/whatsapp_desktop.py). Raw numbers, and names WhatsApp doesn't know, go
+via the whatsapp:// URI scheme (opens WhatsApp Desktop).
 No third-party account required — uses Mo's personal WhatsApp.
 
 Contacts are stored in data/contacts.json: {"Name": "+201XXXXXXXXX"}
@@ -124,10 +126,32 @@ def _find_contact(name: str) -> tuple[str, str] | tuple[None, None]:
     return None, None
 
 
+def _pick_chat(query: str, titles: list[str]) -> tuple["str | None", list[str]]:
+    """Which of WhatsApp's search results the spoken name means.
+
+    Returns (chosen, the other name matches). A full-name match wins outright
+    so "Seif" can reach the chat saved as just "Seif" beside "Seif Magdy";
+    otherwise every spoken word has to start a word of the name, and only a
+    single such chat is chosen. WhatsApp's search also matches numbers and
+    profile text, so results that don't match by name are dropped.
+    """
+    q = query.casefold().split()
+    matches = [t for t in titles
+               if all(any(w.startswith(p) for w in t.casefold().split()) for p in q)]
+    for t in matches:
+        if t.casefold().split() == q:
+            return t, [m for m in matches if m != t]
+    if len(matches) == 1:
+        return matches[0], []
+    return None, matches
+
+
 # ── Send helpers ──────────────────────────────────────────────────────────────
 
-def _stage_pending(display_name: str, phone: str, message: str) -> str:
-    """Stage a message and return the preview string."""
+def _stage_pending(display_name: str, phone: "str | None", message: str,
+                   photo: "bytes | None" = None) -> str:
+    """Stage a message and return the preview string. phone=None means the
+    chat is reached by its name in WhatsApp Desktop."""
     from core import staging
 
     _pending.clear()
@@ -145,10 +169,11 @@ def _stage_pending(display_name: str, phone: str, message: str) -> str:
         expires_at=_pending["expires_at"],
         confirm=confirm_whatsapp_send,
         cancel=_pending.clear,
+        photo=photo,
     )
     preview = message if len(message) <= 80 else message[:77] + "..."
     return (
-        f"Ready to send to {display_name} ({phone}):\n"
+        f"Ready to send to {display_name} ({phone or 'WhatsApp chat'}):\n"
         f"  \"{preview}\"\n"
         f"Say 'yes send it' to confirm."
     )
@@ -178,8 +203,29 @@ def _wait_for_whatsapp_focus(timeout: float = 8.0) -> bool:
 def prepare_whatsapp_message(contact_name: str, message: str) -> str:
     """
     Stage a WhatsApp message for confirmation.
-    Looks up contact by name substring, stores pending send.
+    Looks the name up among Mo's WhatsApp chats first, then data/contacts.json.
     """
+    from tools import whatsapp_desktop
+
+    try:
+        chats = whatsapp_desktop.find_chats(contact_name)
+    except Exception as e:
+        print(f"[El Fager] WhatsApp Desktop search failed: {e}")
+        chats = []
+    chosen, others = _pick_chat(contact_name, [c.title for c in chats])
+    if chosen:
+        photo = next(c.photo for c in chats if c.title == chosen)
+        # Near misses ("Seif Magdy" beside "Seif") aren't listed: any mention
+        # of them had the model asking Mo to pick while the card already showed
+        # the draft. The card's photo and full name are the check instead.
+        return _stage_pending(chosen, None, message, photo=photo)
+    if others:
+        return (
+            f"Several WhatsApp chats match '{contact_name}': "
+            f"{', '.join(others[:6])}. Nothing is staged — read these names "
+            f"to Mo and ask which one."
+        )
+
     display_name, phone = _find_contact(contact_name)
     if phone is None:
         return (
@@ -223,6 +269,16 @@ def confirm_whatsapp_send() -> str:
     phone = _pending["phone"]
     message = _pending["message"]
     _pending.clear()
+
+    if phone is None:
+        from tools import whatsapp_desktop
+        try:
+            whatsapp_desktop.send(name, message)
+        except Exception as e:
+            staging.resolve("failed")
+            return f"[WhatsApp: not sent to {name} — {e}]"
+        staging.resolve("sent", f"whatsapp → {name} · sent")
+        return f"Sent to {name} on WhatsApp"
 
     # Phone for URI: digits only, no leading +
     phone_digits = "".join(c for c in phone if c.isdigit())

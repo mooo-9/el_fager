@@ -218,6 +218,25 @@ class TestStagedAction:
         staging.reset()
         w.close()
 
+    def test_the_recipients_photo_sits_beside_the_message(self, qapp):
+        """So Mo can see it is going to the right person before he says yes."""
+        from core import staging
+        from tests.ui.test_overlay import _png
+        staging.reset()
+        w = _make_cockpit(qapp)
+        staging.stage(medium="whatsapp", target="Yasmeen Adam", body="on my way",
+                      photo=_png())
+        w._refresh_staged()
+        assert w._staged_photo.isVisibleTo(w)
+        assert not w._staged_photo.pixmap().isNull()
+        assert "Yasmeen Adam" in w._staged.text() and "on my way" in w._staged.text()
+        staging.stage(medium="gmail", target="mo@x.com", body="hi")
+        w._refresh_staged()
+        assert w._staged.isVisibleTo(w)
+        assert not w._staged_photo.isVisibleTo(w)
+        staging.reset()
+        w.close()
+
     def test_it_clears_when_the_action_resolves(self, qapp):
         from core import staging
         staging.reset()

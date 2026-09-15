@@ -33,3 +33,17 @@ def _isolated_voice_liked(monkeypatch, tmp_path):
     fake library must never replace them."""
     from core import voice_liked
     monkeypatch.setattr(voice_liked, "_FILE", tmp_path / "voice_liked.json")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_whatsapp(monkeypatch):
+    """Drafting a WhatsApp message searches Mo's real WhatsApp Desktop, and a
+    confirm clicks and types into it. No test may do either — a test that
+    needs them replaces these stubs with its own."""
+    from tools import whatsapp_desktop
+
+    def blocked(*args, **kwargs):
+        raise whatsapp_desktop.WhatsAppDesktopError("real WhatsApp is off in tests")
+
+    monkeypatch.setattr(whatsapp_desktop, "find_chats", blocked)
+    monkeypatch.setattr(whatsapp_desktop, "send", blocked)

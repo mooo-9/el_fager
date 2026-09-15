@@ -124,7 +124,45 @@ class TestExchangePhases:
         w.close()
 
 
+def _png(color="#3a7", size=48) -> bytes:
+    from PyQt6.QtCore import QBuffer, QIODevice
+    from PyQt6.QtGui import QColor, QImage
+    image = QImage(size, size, QImage.Format.Format_RGB32)
+    image.fill(QColor(color))
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, "PNG")
+    return bytes(buffer.data())
+
+
 class TestStagedAction:
+    def test_the_recipients_photo_sits_beside_the_message(self, qapp):
+        """So Mo can see it is going to the right person before he says yes."""
+        from core import staging
+        staging.reset()
+        w = _make_overlay(qapp)
+        staging.stage(medium="whatsapp", target="Yasmeen Adam", body="on my way",
+                      photo=_png())
+        w._refresh_staged()
+        assert w._staged_photo.isVisibleTo(w)
+        assert not w._staged_photo.pixmap().isNull()
+        staging.stage(medium="gmail", target="a@b.c", body="hi")
+        w._refresh_staged()
+        assert not w._staged_photo.isVisibleTo(w)
+        staging.reset()
+        w.close()
+
+    def test_a_photo_that_wont_load_just_leaves_the_photo_out(self, qapp):
+        from core import staging
+        staging.reset()
+        w = _make_overlay(qapp)
+        staging.stage(medium="whatsapp", target="Omar", body="hi", photo=b"not a png")
+        w._refresh_staged()
+        assert w._staged_card.isVisibleTo(w)
+        assert not w._staged_photo.isVisibleTo(w)
+        staging.reset()
+        w.close()
+
     def test_the_card_appears_when_something_is_armed(self, qapp):
         from core import staging
         staging.reset()

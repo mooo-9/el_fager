@@ -38,6 +38,9 @@ class StagedAction:
     body: str
     subject: "str | None" = None
     expires_at: "datetime | None" = None
+    # PNG of the recipient's profile photo, shown beside the draft so Mo can
+    # see who it's going to. In memory only — never written to disk.
+    photo: "bytes | None" = field(default=None, repr=False)
     confirm: "Callable[[], str] | None" = field(default=None, repr=False)
     cancel: "Callable[[], None] | None" = field(default=None, repr=False)
     staged_at: datetime = field(default_factory=datetime.now)

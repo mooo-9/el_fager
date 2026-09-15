@@ -40,7 +40,9 @@ from PyQt6.QtGui import (
     QKeyEvent,
     QLinearGradient,
     QPainter,
+    QPainterPath,
     QPen,
+    QPixmap,
     QRadialGradient,
 )
 from PyQt6.QtWidgets import (
@@ -98,6 +100,28 @@ def _load_settings() -> dict:
 def _save_settings(data: dict) -> None:
     _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def round_photo(png: "bytes | None", size: int, ratio: float) -> "QPixmap | None":
+    """A profile photo clipped to a circle, sharp at the screen's scale.
+    None when there's no photo or it won't load."""
+    source = QPixmap()
+    if not png or not source.loadFromData(png):
+        return None
+    side = max(1, round(size * ratio))
+    scaled = source.scaled(side, side, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                           Qt.TransformationMode.SmoothTransformation)
+    out = QPixmap(side, side)
+    out.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    clip = QPainterPath()
+    clip.addEllipse(QRectF(0, 0, side, side))
+    painter.setClipPath(clip)
+    painter.drawPixmap((side - scaled.width()) // 2, (side - scaled.height()) // 2, scaled)
+    painter.end()
+    out.setDevicePixelRatio(ratio)
+    return out
 
 
 def _align_left(label: QLabel) -> None:
@@ -693,7 +717,15 @@ class OverlayWindow(QWidget):
         head.addStretch()
         box.addLayout(head)
 
-        # the body reads in the target medium's own shape
+        # the body reads in the target medium's own shape, beside the
+        # recipient's photo when there is one
+        body_row = QHBoxLayout()
+        body_row.setSpacing(10)
+        self._staged_photo = QLabel("")
+        self._staged_photo.setFixedSize(40, 40)
+        self._staged_photo.setStyleSheet("border: none; background: transparent;")
+        self._staged_photo.setVisible(False)
+        body_row.addWidget(self._staged_photo, 0, Qt.AlignmentFlag.AlignTop)
         self._staged_body = QLabel("")
         self._staged_body.setWordWrap(True)
         self._staged_body.setStyleSheet(
@@ -702,7 +734,8 @@ class OverlayWindow(QWidget):
             f" border: 1px solid {tokens.rgba('#FFFFFF', 0.07)};"
             f" border-radius: 10px; padding: 9px 12px;"
         )
-        box.addWidget(self._staged_body)
+        body_row.addWidget(self._staged_body, 1)
+        box.addLayout(body_row)
 
         actions = QHBoxLayout()
         actions.setSpacing(7)
@@ -864,6 +897,10 @@ class OverlayWindow(QWidget):
             self._staged_target.setText(action.target)
             _align_left(self._staged_body)
             self._staged_body.setText(action.body)
+            photo = round_photo(action.photo, 40, self.devicePixelRatioF())
+            if photo is not None:
+                self._staged_photo.setPixmap(photo)
+            self._staged_photo.setVisible(photo is not None)
             self._staged_send.setText(self._VERBS.get(action.medium, "Send"))
             self._staged_send.setEnabled(True)
             self._staged_hint.setText(

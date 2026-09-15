@@ -26,6 +26,7 @@ pygame-ce>=2.5.7
 
 # Global hotkey
 keyboard>=0.13.5
+comtypes>=1.4.0
 
 # Vector memory
 chromadb>=1.5.9

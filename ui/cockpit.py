@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import (
 
 from core import progress, prose, staging
 from ui import theme, tokens
-from ui.overlay import _load_settings, _save_settings
+from ui.overlay import _load_settings, _save_settings, round_photo
 
 _CACHE = Path("data/command_center_cache.json")
 _ORB_PAGE = Path(__file__).parent / "assets" / "cockpit_orb.html"
@@ -723,13 +723,26 @@ class CockpitWindow(QWidget):
         # the armed action anchors just above the bottom bar, never clipped
         grid.addStretch()
 
+        # The card: who it's going to (their photo, when the medium has one)
+        # beside what will be sent.
+        self._staged_card = QWidget()
+        self._staged_card.setObjectName("stagedCard")
+        self._staged_card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._staged_card.setMaximumWidth(620)
+        self._staged_card.setVisible(False)
+        card_row = QHBoxLayout(self._staged_card)
+        card_row.setContentsMargins(16, 13, 16, 13)
+        card_row.setSpacing(14)
+        self._staged_photo = QLabel("")
+        self._staged_photo.setFixedSize(56, 56)
+        self._staged_photo.setVisible(False)
+        card_row.addWidget(self._staged_photo, 0, Qt.AlignmentFlag.AlignVCenter)
         self._staged = QLabel("")
         self._staged.setWordWrap(True)
-        self._staged.setMaximumWidth(620)
-        self._staged.setVisible(False)
+        card_row.addWidget(self._staged, 1)
         staged_row = QHBoxLayout()
         staged_row.addStretch()
-        staged_row.addWidget(self._staged)
+        staged_row.addWidget(self._staged_card)
         staged_row.addStretch()
         grid.addLayout(staged_row)
         grid.addSpacing(24)
@@ -1503,18 +1516,25 @@ class CockpitWindow(QWidget):
         self._refresh_receipts()   # a send clears the stage and writes one
         action = staging.current()
         if action is None:
-            self._staged.setVisible(False)
+            self._staged_card.setVisible(False)
             return
         self._staged.setText(
             f"{action.medium.upper()} → {action.target}\n{action.body}"
         )
+        self._staged_card.setStyleSheet(
+            f"QWidget#stagedCard {{ background: {tokens.CK_CARD};"
+            f" border: 1px solid {tokens.rgba(tokens.CK_STATE['speaking'], 0.45)};"
+            f" border-radius: 14px; }}"
+        )
         self._staged.setStyleSheet(
             f"color: {tokens.CK_TEXT_HI}; font-family: {theme.FONT}; font-size: 14px;"
-            f" background: {tokens.CK_CARD};"
-            f" border: 1px solid {tokens.rgba(tokens.CK_STATE['speaking'], 0.45)};"
-            f" border-radius: 14px; padding: 13px 16px;"
+            f" background: transparent; border: none;"
         )
-        self._staged.setVisible(True)
+        photo = round_photo(action.photo, 56, self.devicePixelRatioF())
+        if photo is not None:
+            self._staged_photo.setPixmap(photo)
+        self._staged_photo.setVisible(photo is not None)
+        self._staged_card.setVisible(True)
 
     @pyqtSlot(str, str, str)
     def on_state_update(self, state: str, transcript: str, response: str):
