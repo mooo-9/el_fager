@@ -511,6 +511,19 @@ def main():
         from tools.macro_tool import set_speak_callback as _macro_speak_cb
         _macro_speak_cb(voice_out.speak)
 
+        # Spotify warm-up: refresh the token and find a device in the
+        # background so the first "play X" doesn't pay for it. No-op until
+        # Spotify has been authorised once.
+        from tools.spotify_tool import warm_up as _spotify_warm_up
+        _spotify_warm_up()
+
+        # Comet: start it minimised with its debugging port before Mo opens it
+        # himself — a Comet he starts has no port, and Chromium can't add one
+        # to a live process, which would leave browser automation logged out
+        # all session.
+        from tools.comet_tool import autostart as _comet_autostart
+        _comet_autostart()
+
         # Read-only LAN dashboard (phone-viewable status page)
         from core.dashboard import start_dashboard
         start_dashboard()

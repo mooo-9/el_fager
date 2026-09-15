@@ -1006,6 +1006,8 @@ class OverlayWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _update_status_bar(self):
+        if not self.isVisible():
+            return
         indicators = []
 
         # Pomodoro
