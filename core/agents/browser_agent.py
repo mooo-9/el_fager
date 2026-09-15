@@ -104,7 +104,13 @@ class BrowserAgent(BaseAgent):
                     }
                     continue
 
-                self._execute(page, result.get("action", {}))
+                try:
+                    self._execute(page, result.get("action", {}))
+                except Exception as e:
+                    # A stale selector used to end the whole task; the next
+                    # step sees what went wrong and can try another way.
+                    reason = (str(e).splitlines() or ["unknown error"])[0][:160]
+                    history.append(f"That action failed ({reason}) — try a different selector or approach.")
                 time.sleep(self.STEP_DELAY)
 
             close_up()

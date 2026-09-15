@@ -168,3 +168,29 @@ def test_it_says_so_when_his_comet_cant_be_used():
         mock_pw.return_value.__exit__ = MagicMock(return_value=False)
         assert "reopen it signed in" in agent.run("check gmail")
 
+
+def test_a_failed_action_is_reported_to_the_next_step_not_raised():
+    """A stale selector ("input#search" on YouTube) raised out of run() and
+    ended the whole task instead of letting the model try another way."""
+    agent = BrowserAgent()
+    click = {"status": "continue", "message": "Clicking search",
+             "action": {"type": "click", "selector": "input#search"}}
+    mock_page = MagicMock()
+    mock_page.url = "https://www.youtube.com"
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_page.click.side_effect = RuntimeError("Timeout 5000ms exceeded")
+    mock_page.get_by_text.return_value.first.click.side_effect = RuntimeError("Timeout 5000ms exceeded")
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    with patch.object(agent, "_get_action", side_effect=[click, _done("Found it.")]) as get_action, \
+         patch("time.sleep"), \
+         patch("playwright.sync_api.sync_playwright") as mock_pw, \
+         patch("tools.comet_tool.automation_context",
+               return_value=(MagicMock(), mock_context, False)):
+        mock_pw.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+        assert agent.run("search youtube") == "Found it."
+
+    history = get_action.call_args_list[1].args[4]
+    assert any("failed" in step.lower() for step in history)
