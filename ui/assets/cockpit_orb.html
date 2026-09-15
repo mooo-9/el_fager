@@ -345,15 +345,33 @@ const tick = (now) => {
     ctx.fillRect(cx + Math.cos(a) * r, ringY + Math.sin(a) * r * 0.30, 1.6, 1.6);
   }
 
-  // ── the ground line the design keeps under the stage ───────────────────
-  ctx.globalAlpha = 0.5 * dim;
-  const hg = ctx.createLinearGradient(cx - 320, 0, cx + 320, 0);
-  hg.addColorStop(0, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0)');
-  hg.addColorStop(0.5, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0.34)');
-  hg.addColorStop(1, 'rgba(' + R0 + ',' + G0 + ',' + B0 + ',0)');
+  // ── the floor: a pool of light and the ground line ─────────────────────
+  // A soft pool of the sphere's own light on the floor beneath it, swelling
+  // with its voice and its working pulse, and the ground line through it.
+  // Both sit at a steady height from fit rather than R, so the floor holds
+  // still while the sphere swells above it, and the line spans the column it
+  // is given, under the drawn edge and above the arrows.
+  const floorY = cy + fit * 1.12 + 12;
+  const rgb = R0 + ',' + G0 + ',' + B0;
+  ctx.save();
+  ctx.translate(cx, floorY);
+  ctx.scale(1, 0.14);
+  const poolR = fit * 1.3 * (1 + env * 0.15 + pulse * 0.08);
+  const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, poolR);
+  pool.addColorStop(0, 'rgba(' + rgb + ',' + ((0.26 + env * 0.14 + pulse * 0.10) * dim).toFixed(3) + ')');
+  pool.addColorStop(1, 'rgba(' + rgb + ',0)');
+  ctx.fillStyle = pool;
+  ctx.beginPath();
+  ctx.arc(0, 0, poolR, 0, 6.283185);
+  ctx.fill();
+  ctx.restore();
+  const half = stage ? stage.w * 0.46 : 320;
+  const hg = ctx.createLinearGradient(cx - half, 0, cx + half, 0);
+  hg.addColorStop(0, 'rgba(' + rgb + ',0)');
+  hg.addColorStop(0.5, 'rgba(' + rgb + ',' + (0.4 * dim).toFixed(3) + ')');
+  hg.addColorStop(1, 'rgba(' + rgb + ',0)');
   ctx.fillStyle = hg;
-  ctx.fillRect(cx - 320, cy + R * 1.12 + 12, 640, 1);   // under the drawn edge, above the arrows
-  ctx.globalAlpha = 1;
+  ctx.fillRect(cx - half, floorY, half * 2, 1);
 };
 
 // ── the API Python drives ────────────────────────────────────────────────────

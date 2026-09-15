@@ -162,12 +162,20 @@ _HARNESS = r"""
 const radii = [];
 const sphereXs = [];                        // x of every dot the sphere draws
 const dust = [];                            // [x, y, style] of every speck-sized rect
-let alphaSum = 0, alphaN = 0, lastStyle = '';
+const lines = [];                           // [x, y, w] of every hairline-thin wide rect
+const pools = [];                           // colour stops of every radial gradient
+let alphaSum = 0, alphaN = 0, lastStyle = '', scaled = false;
 const ctx = {
   setTransform() {}, clearRect() {}, beginPath() {}, fill() {},
-  fillRect(x, y, w, h) { if (w < 3) dust.push([x, y, lastStyle]); },
-  arc(x, y, r) { radii.push(r); sphereXs.push(x); },
+  save() {}, translate() {}, scale() { scaled = true; }, restore() { scaled = false; },
+  fillRect(x, y, w, h) {
+    if (w < 3) dust.push([x, y, lastStyle]);
+    else if (h <= 2 && w > 50) lines.push([x, y, w]);
+  },
+  // Arcs drawn under a scale are shapes (the pool), not sphere dots.
+  arc(x, y, r) { if (scaled) return; radii.push(r); sphereXs.push(x); },
   createLinearGradient() { return { addColorStop() {} }; },
+  createRadialGradient() { const g = []; pools.push(g); return { addColorStop(o, c) { g.push(c); } }; },
   set fillStyle(v) {
     lastStyle = typeof v === 'string' ? v : '';
     const m = /rgba\([^)]*,([\d.]+)\)$/.exec(v);
@@ -189,7 +197,16 @@ globalThis.cancelAnimationFrame = () => {};
 
 _DRIVER = r"""
 let now = 1000;
-function run(frames) { for (let i = 0; i < frames; i++) { now += 1000 / 60; const cb = pending; pending = null; cb(now); } }
+// Dust is only ever read from the last frame, and the floor only while
+// keepFloor is set; clearing them each frame keeps the run fast.
+let keepFloor = false;
+function run(frames) {
+  for (let i = 0; i < frames; i++) {
+    dust.length = 0;
+    if (!keepFloor) { lines.length = 0; pools.length = 0; }
+    now += 1000 / 60; const cb = pending; pending = null; cb(now);
+  }
+}
 // level: fed before every frame, as the recorder does ~30 times a second;
 // null feeds nothing.
 function measure(state, ambient, level = null) {
@@ -242,6 +259,30 @@ function dustIn(state, stage) {
 // A narrow middle column, 300 px wide around x = 400, as the side panels leave it.
 results.dustListening = dustIn('listening', [400, 300, 300, 500]);
 results.dustSpeaking = dustIn('speaking', null);
+// Two seconds of the floor under the sphere: where the line is drawn each
+// frame, and how bright the centre of the pool of light is.
+function groundIn(state, stage) {
+  window.orb.setStage(...stage);
+  window.orb.setState(state);
+  window.orb.setAmbient(false);
+  run(200);
+  lines.length = 0; pools.length = 0;
+  keepFloor = true;
+  run(120);
+  keepFloor = false;
+  const alphas = pools.map(g => g.length && /,([\d.]+)\)$/.exec(g[0])).filter(Boolean).map(m => +m[1]);
+  return {
+    lineYs: lines.map(l => l[1]),
+    lineMinX: Math.min(...lines.map(l => l[0])),
+    lineMaxRight: Math.max(...lines.map(l => l[0] + l[2])),
+    lineWidth: Math.max(...lines.map(l => l[2])),
+    poolAlpha: alphas.reduce((a, b) => a + b, 0) / Math.max(1, alphas.length),
+    poolSwing: alphas.length ? Math.max(...alphas) / Math.min(...alphas) : 0,
+  };
+}
+results.groundRest = groundIn('idle', [400, 300, 300, 500]);
+results.groundThinking = groundIn('thinking', [400, 300, 300, 500]);
+results.groundSpeaking = groundIn('speaking', [400, 300, 300, 500]);
 console.log(JSON.stringify(results));
 """
 
@@ -253,7 +294,7 @@ def motion(script, tmp_path_factory) -> dict:
     import json
     js = tmp_path_factory.mktemp("orb") / "motion.js"
     js.write_text(_HARNESS + script + _DRIVER, encoding="utf-8")
-    result = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=60)
+    result = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -338,3 +379,29 @@ class TestRingOfDust:
         assert green > red + 40, f"listening dust is not cyan: {motion['dustListening']['rgb']}"
         red, green, _ = motion["dustSpeaking"]["rgb"]
         assert red > green + 25, f"speaking dust is not purple: {motion['dustSpeaking']['rgb']}"
+
+
+class TestPoolOfLight:
+    """Mo chose a soft pool of the sphere's light on the floor beneath it,
+    swelling with the voice and the working pulse, over a bare hairline."""
+
+    def test_there_is_a_pool_of_light(self, motion):
+        assert motion["groundRest"]["poolAlpha"] > 0.1, motion["groundRest"]
+
+    def test_it_swells_with_the_voice(self, motion):
+        assert motion["groundSpeaking"]["poolAlpha"] > motion["groundRest"]["poolAlpha"] * 1.05, \
+            (motion["groundRest"], motion["groundSpeaking"])
+
+    def test_it_pulses_while_working(self, motion):
+        assert motion["groundThinking"]["poolSwing"] > 1.2, motion["groundThinking"]
+
+    def test_the_line_holds_still_while_the_sphere_swells(self, motion):
+        # It was placed from the swelling radius, so it bobbed with every syllable.
+        ys = motion["groundSpeaking"]["lineYs"]
+        assert ys and max(ys) - min(ys) < 0.5, (min(ys), max(ys))
+
+    def test_the_line_spans_the_column_it_is_given(self, motion):
+        # It was a fixed 640 px, running under the side panels in a narrow column.
+        ground = motion["groundSpeaking"]
+        assert ground["lineMinX"] >= 250 and ground["lineMaxRight"] <= 550, ground
+        assert ground["lineWidth"] >= 240, ground
