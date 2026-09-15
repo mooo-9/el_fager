@@ -14,7 +14,7 @@ Checks implemented:
   • Evening expense nudge (nothing logged today)
   • Weekly review prompt (Friday / Saturday evening)
   • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
-  • Nightly backtest after US market close, alert only on metric regression
+  • Transcription-quality alert when too many of today's turns are gibberish
 """
 
 import json
@@ -167,7 +167,6 @@ class ProactiveEngine:
         self._check_battery()               # all hours
         self._check_prayer_times()          # all waking hours
         self._check_upcoming_events()       # all waking hours
-        self._check_price_alerts()          # all waking hours
         self._check_autonomous_tasks()      # all waking hours
         self._check_missions()              # all waking hours
 
@@ -179,14 +178,12 @@ class ProactiveEngine:
             self._check_oauth_tokens()
             self._check_skill_proposals()
 
-        if hour == 23:
-            self._check_nightly_backtest()
-
         if 19 <= hour <= 22:
             self._check_journal()
             self._check_expenses()
             self._check_budget_exceeded()
             self._check_api_budget()
+            self._check_transcription_quality()
 
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
             self._check_weekly_review()
@@ -274,8 +271,12 @@ class ProactiveEngine:
     def _check_upcoming_events(self) -> None:
         """Remind Mo of a calendar event starting in 5–20 minutes."""
         try:
-            from tools.calendar_tool import list_calendar_events
-            text  = list_calendar_events("today")
+            # The function is list_events; list_calendar_events is the brain's
+            # tool name for it, not an importable symbol. This raised
+            # ImportError into the swallow below on every cycle since the
+            # initial commit, so this check has never once run.
+            from tools.calendar_tool import list_events
+            text  = list_events("today")
             now   = datetime.now()
             today = date.today().isoformat()
             # Match time formats: "10:30 AM", "14:30", "10:30am"
@@ -284,7 +285,9 @@ class ProactiveEngine:
                 h    = int(m.group(1))
                 mins = int(m.group(2))
                 ampm = (m.group(3) or "").upper()
-                title = m.group(4).strip()
+                # _format_event appends a duration — "Standup (30 min)" —
+                # which does not belong in a spoken reminder.
+                title = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(4).strip())
                 if ampm == "PM" and h != 12:
                     h += 12
                 elif ampm == "AM" and h == 12:
@@ -296,8 +299,10 @@ class ProactiveEngine:
                     if not self._cooldown(key, 2):
                         self._deliver(f"Mo, '{title}' starts in {int(delta_min)} minutes.")
                         self._hud_notify(7, f"'{title}' in ", f"{int(delta_min)} min", "", "CALENDAR")
-        except Exception:
-            pass
+        except Exception as e:
+            # Reported, not swallowed: a silent except is what let a broken
+            # import hide here for two months.
+            print(f"[Proactive] event check error: {e}")
 
     def _check_deadlines(self) -> None:
         """Alert when a memorised deadline is today or tomorrow."""
@@ -409,18 +414,6 @@ class ProactiveEngine:
         self._deliver(
             "Mo, good time for your weekly review. Ask me for a 'weekly report' when ready."
         )
-
-    def _check_price_alerts(self) -> None:
-        """Check stock price alerts every cycle — deliver immediately when triggered."""
-        try:
-            from tools.stocks_tool import check_price_alerts
-            messages = check_price_alerts()
-            for msg in messages:
-                self._deliver(msg, remote=True)
-                # Show in HUD Stocks scene banner (whole message as highlight)
-                self._hud_notify(5, "", msg, "", "MARKET")
-        except Exception:
-            pass
 
     def _check_overdue_invoices(self) -> None:
         """Morning sweep — alert if any sent invoices are past due date."""
@@ -697,53 +690,51 @@ class ProactiveEngine:
         except Exception as e:
             print(f"[Proactive] skill proposal check error: {e}")
 
-    _GATE_MIN_SHARPE = 1.0
-    _GATE_MAX_DRAWDOWN = 15.0
+    # Scripts Mo never speaks (Hangul, Hebrew, Cyrillic, CJK, Thai) plus the
+    # Icelandic eth/thorn Whisper hallucinates on silence.
+    _GARBAGE_RE = re.compile(r"[가-힯֐-׿Ѐ-ӿ一-鿿฀-๿ðþÞÐ]")
+    _GARBAGE_MAX_PCT = 10.0
+    _GARBAGE_MIN_TURNS = 5
 
-    def _check_nightly_backtest(self) -> None:
-        """Nightly (11 PM Cairo, after US close): re-run the full backtest and
-        speak up only when a symbol's gate metric regressed."""
-        if self._cooldown("nightly_backtest", 20):
+    def _check_transcription_quality(self) -> None:
+        """Evening: warn when too many of today's user turns contain scripts
+        Mo doesn't speak — the biggest silent failure (mic/VAD/Whisper) made
+        visible."""
+        if self._cooldown("transcription_quality", 20):
             return
         try:
-            results_path = Path("data/backtest_results.json")
-            previous: dict = {}
-            if results_path.exists():
-                try:
-                    previous = json.loads(results_path.read_text(encoding="utf-8"))
-                except Exception:
-                    previous = {}
-
-            from tools.backtest_tool import run_full_backtest
-            run_full_backtest()  # refreshes data/backtest_results.json
-
-            if not results_path.exists():
+            fpath = Path("data/conversations") / f"{date.today().isoformat()}.jsonl"
+            if not fpath.exists():
+                self._reset_cooldown("transcription_quality")
                 return
-            current = json.loads(results_path.read_text(encoding="utf-8"))
-
-            regressions = []
-            for symbol, stats in current.items():
-                if symbol.startswith("_") or not isinstance(stats, dict):
+            turns = garbage = 0
+            for line in fpath.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
                     continue
-                sharpe = stats.get("sharpe_ratio", 0)
-                drawdown = stats.get("max_drawdown_pct", 0)
-                ret = stats.get("total_return_pct", 0)
-                prev = previous.get(symbol) or {}
-                if drawdown > self._GATE_MAX_DRAWDOWN:
-                    regressions.append(f"{symbol} drawdown {drawdown:.1f}%")
-                elif prev.get("sharpe_ratio", 0) >= self._GATE_MIN_SHARPE > sharpe:
-                    regressions.append(f"{symbol} Sharpe fell to {sharpe:.2f}")
-                elif prev.get("total_return_pct", 0) > 0 > ret:
-                    regressions.append(f"{symbol} return went negative ({ret:.1f}%)")
-
-            if regressions:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if entry.get("role") != "user":
+                    continue
+                turns += 1
+                if self._GARBAGE_RE.search(entry.get("content", "")):
+                    garbage += 1
+            if turns < self._GARBAGE_MIN_TURNS:
+                self._reset_cooldown("transcription_quality")
+                return
+            pct = 100 * garbage / turns
+            if pct > self._GARBAGE_MAX_PCT:
                 self._deliver(
-                    "Nightly backtest warning -- " + " | ".join(regressions[:3])
-                    + ". Review before the next trading session.",
-                    remote=True,
+                    f"Mo, {garbage} of your {turns} voice messages today "
+                    f"({pct:.0f}%) came through as gibberish. Check the mic or "
+                    f"say a test sentence — Whisper may be mishearing you."
                 )
-        except Exception as e:
-            print(f"[Proactive] nightly backtest error: {e}")
+            else:
+                self._reset_cooldown("transcription_quality")
+        except Exception:
+            pass
 
     def _check_rest_day(self) -> None:
         """Suggest rest after 4 consecutive training days."""

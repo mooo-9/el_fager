@@ -25,14 +25,41 @@ def web_search(query: str, max_results: int = 5) -> str:
         return f"[web_search failed: {e}]"
 
 
+# Wikipedia refuses anonymous and browser-pretending clients alike and wants
+# contact details — the same identity tools/wikipedia_tool.py already sends.
+# Every other site gets a plain browser User-Agent, so Mo's details go nowhere
+# they aren't required.
+_WIKI_UA = "ElFager/1.0 (mohabmohamed154@gmail.com)"
+_BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
+
+
 def fetch_page(url: str, max_chars: int = 3000) -> str:
     try:
         import httpx
         from bs4 import BeautifulSoup
-        resp = httpx.get(url, timeout=8, follow_redirects=True)
+        host = urllib.parse.urlparse(url).hostname or ""
+        wiki = host.endswith(("wikipedia.org", "wikimedia.org"))
+        headers = {"User-Agent": _WIKI_UA if wiki else _BROWSER_UA,
+                   "Accept-Language": "en-US,en;q=0.9"}
+        resp = httpx.get(url, headers=headers, timeout=8, follow_redirects=True)
+        if resp.status_code >= 400:
+            return (f"[fetch failed: HTTP {resp.status_code} — the site blocks automated "
+                    f"reading; open it in Comet for Mo instead]")
         soup = BeautifulSoup(resp.text, "html.parser")
-        paragraphs = [p.get_text(strip=True) for p in soup.find_all("p") if p.get_text(strip=True)]
+        # A separator keeps words apart across inline tags: "the<a>capital</a>"
+        # read as "thecapital".
+        paragraphs = [" ".join(p.get_text(" ", strip=True).split()) for p in soup.find_all("p")]
+        paragraphs = [p for p in paragraphs if p]
         text = "\n\n".join(paragraphs)
+        if len(text) < 200:
+            # Plenty of pages (prices, stats, listings) keep their text out of
+            # <p>; those read as empty. Take the page's visible text instead.
+            for tag in soup(["script", "style", "noscript", "svg", "nav", "footer", "header"]):
+                tag.decompose()
+            visible = " ".join(soup.get_text(" ", strip=True).split())
+            if len(visible) > len(text):
+                text = visible
         if len(text) > max_chars:
             text = text[:max_chars] + "\n[... truncated]"
         return text if text else "[No readable content found]"

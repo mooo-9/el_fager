@@ -185,7 +185,7 @@ def _pid_alive(pid: int) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_python(code: str, timeout: int = 30) -> str:
-    """Run arbitrary Python code in an isolated subprocess. Arabic/Unicode safe."""
+    """Run arbitrary Python code in an isolated subprocess. Unicode safe."""
     if not code.strip():
         return "No code provided."
     try:

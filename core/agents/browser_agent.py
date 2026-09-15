@@ -50,21 +50,23 @@ class BrowserAgent(BaseAgent):
         history: list[str] = []
 
         with sync_playwright() as p:
-            from tools.comet_tool import automation_context
-            # Attached to Mo's own Comet, `owned` is False: close only our tab,
-            # never his browser.
-            browser, context, owned = automation_context(p, headless=False)
+            from tools.comet_tool import CometUnavailable, automation_context
+            try:
+                browser, context, owned = automation_context(p, headless=False)
+            except CometUnavailable as e:
+                return str(e)
             page = context.new_page()
             page.set_viewport_size({"width": 1280, "height": 800})
 
             def close_up():
-                try:
-                    page.close()
-                except Exception:
-                    pass
-                if owned:
+                # In Mo's own Comet (`owned` False) the tab stays: it holds what
+                # he asked for — he found his video and then watched it close.
+                # Leaving the with-block only disconnects from his browser.
+                if not owned:
+                    return
+                for obj in (page, browser):
                     try:
-                        browser.close()
+                        obj.close()
                     except Exception:
                         pass
 
@@ -102,7 +104,13 @@ class BrowserAgent(BaseAgent):
                     }
                     continue
 
-                self._execute(page, result.get("action", {}))
+                try:
+                    self._execute(page, result.get("action", {}))
+                except Exception as e:
+                    # A stale selector used to end the whole task; the next
+                    # step sees what went wrong and can try another way.
+                    reason = (str(e).splitlines() or ["unknown error"])[0][:160]
+                    history.append(f"That action failed ({reason}) — try a different selector or approach.")
                 time.sleep(self.STEP_DELAY)
 
             close_up()
@@ -132,7 +140,7 @@ class BrowserAgent(BaseAgent):
             else ""
         )
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-sonnet-5",
             max_tokens=512,
             system=_VISION_SYSTEM,
             messages=[

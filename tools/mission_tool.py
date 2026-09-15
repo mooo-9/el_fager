@@ -15,7 +15,6 @@ def start_mission(goal: str, steps: str) -> str:
     """Create a mission. steps: newline- or semicolon-separated ordered steps.
     A step starting with '&' is independent of the PREVIOUS step and runs in
     the same cycle (parallel group)."""
-    from core.missions import ForbiddenMissionError
     raw = steps.replace(";", "\n").splitlines()
     step_list: list[str] = []
     group_list: list[int] = []
@@ -36,9 +35,6 @@ def start_mission(goal: str, steps: str) -> str:
         group_list.append(group)
     try:
         mission = _mgr().create(goal, step_list, groups=group_list)
-    except ForbiddenMissionError:
-        return ("I cannot start that mission -- it includes live-trading "
-                "confirmation steps, which stay manual by design.")
     except ValueError as e:
         return str(e)
     return (f"Mission '{goal}' started with {len(mission['steps'])} steps. "

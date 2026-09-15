@@ -6,7 +6,7 @@ bridges Python state into the running React component via a JS fiber walk.
 
 Scene indices (match the design's bottom nav order):
   0 Boot  1 Standby  2 Voice  3 Vision  4 Devices
-  5 Stocks  6 Inbox  7 Agenda  8 Memory  9 Briefing
+  5 (unused — was Stocks)  6 Inbox  7 Agenda  8 Memory  9 Briefing
   10 Food  11 Gym
 """
 
@@ -28,13 +28,12 @@ _ASSETS = Path(__file__).parent / "assets"
 _HUD_HTML = _ASSETS / "hud.html"
 _CACHE_DIR = Path(__file__).parent.parent / "data" / "web_cache"
 
-# Scene indices
+# Scene indices (index 5 is the design's retired stocks scene — never routed to)
 SCENE_BOOT = 0
 SCENE_STANDBY = 1
 SCENE_VOICE = 2
 SCENE_VISION = 3
 SCENE_DEVICES = 4
-SCENE_STOCKS = 5
 SCENE_INBOX = 6
 SCENE_AGENDA = 7
 SCENE_MEMORY = 8
@@ -72,26 +71,6 @@ _BRIDGE_JS = r"""
           v.voiceReply  = _logic.state.voiceReply  || '';
           v.voiceCaption = _logic.state.voiceCaption || '';
           return v;
-        };
-
-        // ── Stocks scene: patch buildMarket to use real Alpaca data ────────
-        var origBM = _logic.buildMarket.bind(_logic);
-        _logic.buildMarket = function() {
-          var base = origBM();
-          var mkt = _logic.state._market;
-          if (!mkt || !mkt.length) return base;
-          mkt.forEach(function(h) {
-            var val = (h.price || 0) * (h.shares || 0);
-            var pct = h.prevClose ? (h.price / h.prevClose - 1) * 100 : 0;
-            base['px_'  + h.key] = '$' + (h.price || 0).toFixed(2);
-            base['val_' + h.key] = (h.shares || 0) + ' sh · $' + Math.round(val).toLocaleString('en-US');
-            base['pct_' + h.key] = (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(1) + '%';
-          });
-          if (_logic.state._portfolioValue) {
-            base.pv = '$' + Math.round(_logic.state._portfolioValue).toLocaleString('en-US');
-          }
-          if (_logic.state._dayLine) { base.dayLine = _logic.state._dayLine; }
-          return base;
         };
 
         // ── Proactive banner: patch buildProactive to use Python messages ──
@@ -142,11 +121,7 @@ _BRIDGE_JS = r"""
           return base;
         };
 
-        // Replay any queued market / proactive / nutri calls that arrived early
-        if (_pendingMarket) {
-          var pm = _pendingMarket; _pendingMarket = null;
-          _applyMarket(pm.stocks, pm.pv, pm.dayLine);
-        }
+        // Replay any queued proactive / nutri calls that arrived early
         var pendingScenes = Object.keys(_pendingPro);
         if (pendingScenes.length) {
           pendingScenes.forEach(function(sc) {
@@ -194,17 +169,8 @@ _BRIDGE_JS = r"""
   }
 
   // Pending queues for calls that arrive before _logic is captured.
-  var _pendingMarket = null;          // { stocks, pv, dayLine }
   var _pendingPro    = {};            // { scene: { prefix, highlight, suffix, tag } }
   var _pendingNutri  = null;          // realNutri object
-
-  function _applyMarket(stocks, pv, dayLine) {
-    var newMkt = stocks.map(function(h) {
-      return { sym: h.sym, base: h.price, price: h.price, prev: h.prevClose, sh: h.shares || 0 };
-    });
-    _logic.setState({ mkt: newMkt, _market: stocks, _portfolioValue: pv, _dayLine: dayLine });
-    console.log('[bridge] market applied: ' + stocks.length + ' syms, PV=$' + Math.round(pv));
-  }
 
   function _applyProactive(scene, prefix, highlight, suffix, tag) {
     var pmap = Object.assign({}, _logic.state._proMap || {});
@@ -214,12 +180,6 @@ _BRIDGE_JS = r"""
 
   function _applyNutri(rn) {
     _logic.setState({ _realNutri: rn });
-  }
-
-  // Push real market data: queued if _logic not yet captured, applied immediately otherwise.
-  function doSetMarket(stocks, pv, dayLine) {
-    if (!_logic) { _pendingMarket = { stocks: stocks, pv: pv, dayLine: dayLine }; return; }
-    _applyMarket(stocks, pv, dayLine);
   }
 
   function doSetNutri(rn) {
@@ -243,7 +203,6 @@ _BRIDGE_JS = r"""
     window._elf = {
       goto:          doGoto,
       setState:      doSetState,
-      setMarket:     doSetMarket,
       setProactive:  doSetProactive,
       setNutri:      doSetNutri,
       getState:      function() { return _logic ? _logic.state : null; },
@@ -331,6 +290,10 @@ class HudWebView(QWebEngineView):
             lambda ok: self._on_poll(ok, tries),
         )
 
+    # Bounded bridge wait: 50 × 200 ms = 10 s. If the React bundle hasn't
+    # mounted by then, give up loudly instead of polling forever.
+    _MAX_BRIDGE_TRIES = 50
+
     def _on_poll(self, ok, tries: int):
         if ok:
             if not self._bridge_ready:
@@ -340,8 +303,13 @@ class HudWebView(QWebEngineView):
                 for js in self._pending_js:
                     self.page().runJavaScript(js)
                 self._pending_js.clear()
-        elif tries < 150:
-            QTimer.singleShot(300, lambda: self._poll_bridge(tries + 1))
+        elif tries < self._MAX_BRIDGE_TRIES:
+            QTimer.singleShot(200, lambda: self._poll_bridge(tries + 1))
+        else:
+            print("[HUD] Bridge failed to initialise within 10 s — "
+                  "HUD stays static; the native assistant is unaffected.",
+                  flush=True)
+            self._pending_js.clear()
 
     # ------------------------------------------------------------------ #
     #  Public API                                                          #
@@ -375,27 +343,6 @@ class HudWebView(QWebEngineView):
             "processing": False,
         })
         self._js(f"window._elf && window._elf.setState({patch})")
-
-    def push_market_data(
-        self,
-        stocks: list[dict],
-        portfolio_value: float,
-        day_pl: float,
-        day_pct: float,
-    ):
-        """
-        Push live market prices + Alpaca account equity to the Stocks scene.
-
-        stocks: list of {sym, key, price, prevClose, shares}
-        """
-        arrow = "▲" if day_pl >= 0 else "▼"
-        sign  = "+" if day_pct >= 0 else ""
-        day_line = f"{arrow} ${abs(round(day_pl)):,} today  ·  {sign}{day_pct:.1f}%"
-        stocks_js = json.dumps(stocks)
-        self._js(
-            f"window._elf && window._elf.setMarket("
-            f"{stocks_js}, {round(portfolio_value, 2)}, {json.dumps(day_line)})"
-        )
 
     def push_proactive(
         self,

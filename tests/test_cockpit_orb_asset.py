@@ -1,0 +1,407 @@
+"""The Ember sphere's page, checked without a browser.
+
+ui/assets/cockpit_orb.html is the one piece of the Cockpit the Python suite
+cannot reach: a syntax error in it leaves the stage silently black, every
+Python test still green, and cockpit.py's _orb_js() swallowing the failure.
+
+Chromium cannot run under QT_QPA_PLATFORM=offscreen on this machine — it dies
+with STATUS_STACK_BUFFER_OVERRUN — so the suite cannot drive the real widget.
+These do the next best thing: parse the script with Node, and pin the API
+surface ui/cockpit.py calls into.
+
+Verified once by hand against real QWebEngine, for the record: the loop runs
+at ~45 fps (67 frames in 1.5 s), the sphere draws (8,536 lit pixels in a
+200x200 centre sample), idle is amber rgb(234,146,63) and listening is cyan
+rgb(41,209,248), and speech moves the centroid 20 px across versus 2 px at
+rest.
+"""
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ORB = Path("ui/assets/cockpit_orb.html")
+
+
+@pytest.fixture(scope="module")
+def script() -> str:
+    html = ORB.read_text(encoding="utf-8")
+    match = re.search(r"<script>(.*)</script>", html, re.S)
+    assert match, "no <script> block in the orb page"
+    return match.group(1)
+
+
+class TestItParses:
+    @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+    def test_the_javascript_has_no_syntax_error(self, script, tmp_path):
+        # The failure this catches: a stray character makes the whole script
+        # dead, the canvas never paints, and nothing else in the suite notices.
+        js = tmp_path / "orb.js"
+        js.write_text(script, encoding="utf-8")
+        result = subprocess.run(["node", "--check", str(js)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, f"syntax error in orb script:\n{result.stderr}"
+
+
+class TestTheApiCockpitDrivesStillExists:
+    """ui/cockpit.py calls these through runJavaScript, where a missing name
+    fails silently — there is no exception to catch on the Python side."""
+
+    @pytest.mark.parametrize("member", [
+        "setState", "setAmbient", "bloom", "start", "stop", "ready", "state", "setStage", "setLevel",
+    ])
+    def test_the_member_is_defined(self, script, member):
+        assert re.search(rf"\b{member}\s*[({{:]", script), \
+            f"window.orb.{member} is gone; ui/cockpit.py still calls it"
+
+    def test_every_state_the_cockpit_pushes_has_a_colour(self, script):
+        # cockpit.py is read as text rather than imported. Importing a Qt
+        # module from this file reordered initialisation enough to segfault a
+        # later Qt test under the offscreen platform, and nothing here needs
+        # Qt: both sides of the comparison are literals in source.
+        cockpit_src = Path("ui/cockpit.py").read_text(encoding="utf-8")
+        table = re.search(r"_ORB_STATE\s*=\s*\{(.*?)\n\}", cockpit_src, re.S)
+        assert table, "_ORB_STATE is gone from ui/cockpit.py"
+        pushed = set(re.findall(r':\s*"(\w+)"', table.group(1)))
+        assert pushed, "no states parsed out of _ORB_STATE"
+
+        colours = re.search(r"const COLORS\s*=\s*\{(.*?)\}", script, re.S)
+        assert colours, "the COLORS table is gone"
+        defined = set(re.findall(r"(\w+)\s*:", colours.group(1)))
+        for orb_state in pushed:
+            assert orb_state in defined, \
+                f"cockpit pushes '{orb_state}' but the orb has no colour for it"
+
+    def test_the_loop_parks_itself_so_a_hidden_cockpit_costs_no_gpu(self, script):
+        assert "cancelAnimationFrame" in script, \
+            "stop() no longer cancels the frame; a cockpit in the tray would burn GPU"
+
+
+def _colours(script) -> dict:
+    table = re.search(r"const COLORS\s*=\s*\{(.*?)\}", script, re.S).group(1)
+    return {name: tuple(int(v) for v in (r, g, b))
+            for name, r, g, b in re.findall(r"(\w+):\s*\[\s*(\d+),\s*(\d+),\s*(\d+)\]", table)}
+
+
+def _hue(rgb) -> float:
+    import colorsys
+    return colorsys.rgb_to_hsv(*(v / 255 for v in rgb))[0] * 360
+
+
+class TestTheSphereIsBlue:
+    """The reel's sphere is blue; El Fager's follows it (it was amber)."""
+
+    @pytest.mark.parametrize("state", ["idle", "thinking"])
+    def test_rest_and_thinking_are_blue(self, script, state):
+        assert 205 <= _hue(_colours(script)[state]) <= 240, f"{state} is not blue"
+
+    def test_speech_is_purple(self, script):
+        # Mo chose "speaking stands out" with a purple voice, so talking no
+        # longer looks like resting.
+        assert 260 <= _hue(_colours(script)["speaking"]) <= 285, "speaking is not purple"
+
+    def test_speech_reads_apart_from_rest(self, script):
+        colours = _colours(script)
+        assert abs(_hue(colours["idle"]) - _hue(colours["speaking"])) >= 30,             "speaking would blur into the resting blue"
+
+    def test_listening_still_reads_apart_from_rest(self, script):
+        colours = _colours(script)
+        assert abs(_hue(colours["idle"]) - _hue(colours["listening"])) >= 25, \
+            "listening would blur into the resting blue"
+
+    def test_error_stays_red(self, script):
+        hue = _hue(_colours(script)["error"])
+        assert hue <= 15 or hue >= 345
+
+    def test_it_opens_on_its_resting_colour(self, script):
+        # The eased colour starts at `cur`; left amber, every open would fade
+        # from gold to blue.
+        cur = re.search(r"const cur = \{ r: (\d+), g: (\d+), b: (\d+) \}", script)
+        assert cur, "the starting colour moved"
+        assert tuple(int(v) for v in cur.groups()) == _colours(script)["idle"]
+
+
+class TestMotionConstantsStayInRange:
+    """Both of these shipped wrong once and were caught only by rendering."""
+
+    def test_the_speech_ripple_cannot_deform_the_sphere_into_a_blob(self, script):
+        # First attempt used 0.20/0.11 and turned it into a mushroom at volume.
+        rip = re.search(r"rip1\s*=\s*env\s*\*\s*([\d.]+),\s*rip2\s*=\s*env\s*\*\s*([\d.]+)",
+                        script)
+        assert rip, "the ripple amplitudes moved; re-check them by rendering"
+        assert float(rip.group(1)) <= 0.09, "ripple too strong to still read as a sphere"
+        assert float(rip.group(2)) <= 0.06
+
+    def test_the_envelope_never_falls_silent_mid_speech(self, script):
+        # The floor matters more than the peak: an envelope returning to zero
+        # between syllables reads as broken rather than as talking.
+        floor = re.search(r"return Math\.min\(1,\s*\(([\d.]+)\s*\+", script)
+        assert floor, "the speech envelope's floor term moved"
+        assert float(floor.group(1)) >= 0.2, "the sphere would go still between syllables"
+
+
+class TestTheSphereFillsTheStage:
+    """The sphere centres on the middle column Python reports, not on the
+    whole window, and sizes to it — the reel's fills the space between its
+    panels."""
+
+    def test_it_centres_on_the_stage_it_is_given(self, script):
+        assert re.search(r"stage\.x", script), "the sphere ignores the stage centre"
+
+    def test_its_size_follows_the_free_space(self, script):
+        assert re.search(r"stage\.w\s*\*", script), "the sphere ignores the stage width"
+        assert re.search(r"stage\.h\s*\*", script), "the sphere ignores the stage height"
+
+
+
+# Runs the page's script under Node with a stub canvas that records every dot
+# drawn, so a test can ask how the sphere *moves*, not just what it declares.
+_HARNESS = r"""
+const radii = [];
+const sphereXs = [];                        // x of every dot the sphere draws
+const dust = [];                            // [x, y, style] of every speck-sized rect
+const lines = [];                           // [x, y, w] of every hairline-thin wide rect
+const pools = [];                           // colour stops of every radial gradient
+let alphaSum = 0, alphaN = 0, lastStyle = '', scaled = false;
+const ctx = {
+  setTransform() {}, clearRect() {}, beginPath() {}, fill() {},
+  save() {}, translate() {}, scale() { scaled = true; }, restore() { scaled = false; },
+  fillRect(x, y, w, h) {
+    if (w < 3) dust.push([x, y, lastStyle]);
+    else if (h <= 2 && w > 50) lines.push([x, y, w]);
+  },
+  // Arcs drawn under a scale are shapes (the pool), not sphere dots.
+  arc(x, y, r) { if (scaled) return; radii.push(r); sphereXs.push(x); },
+  createLinearGradient() { return { addColorStop() {} }; },
+  createRadialGradient() { const g = []; pools.push(g); return { addColorStop(o, c) { g.push(c); } }; },
+  set fillStyle(v) {
+    lastStyle = typeof v === 'string' ? v : '';
+    const m = /rgba\([^)]*,([\d.]+)\)$/.exec(v);
+    if (m) { alphaSum += +m[1]; alphaN++; }
+  },
+  get fillStyle() { return ''; },
+  globalAlpha: 1,
+};
+const canvas = { clientWidth: 800, clientHeight: 600, width: 0, height: 0, getContext: () => ctx };
+globalThis.window = globalThis;
+window.devicePixelRatio = 1;
+window.addEventListener = () => {};
+window.matchMedia = () => ({ matches: false });
+globalThis.document = { getElementById: () => canvas };
+let pending = null;
+globalThis.requestAnimationFrame = cb => { pending = cb; return 1; };
+globalThis.cancelAnimationFrame = () => {};
+"""
+
+_DRIVER = r"""
+let now = 1000;
+// Dust is only ever read from the last frame, and the floor only while
+// keepFloor is set; clearing them each frame keeps the run fast.
+let keepFloor = false;
+function run(frames) {
+  for (let i = 0; i < frames; i++) {
+    dust.length = 0;
+    if (!keepFloor) { lines.length = 0; pools.length = 0; }
+    now += 1000 / 60; const cb = pending; pending = null; cb(now);
+  }
+}
+// level: fed before every frame, as the recorder does ~30 times a second;
+// null feeds nothing.
+function measure(state, ambient, level = null) {
+  window.orb.setState(state);
+  window.orb.setAmbient(ambient);
+  const frames = [];                          // mean dot alpha, frame by frame
+  const feed = n => {
+    for (let i = 0; i < n; i++) {
+      if (level !== null) window.orb.setLevel(level);
+      const sum = alphaSum, count = alphaN;
+      run(1);
+      frames.push((alphaSum - sum) / (alphaN - count));
+    }
+  };
+  feed(240);                                  // let colour and envelope settle
+  radii.length = 0; alphaSum = 0; alphaN = 0; frames.length = 0;
+  feed(180);
+  // swing: brightest frame over dimmest; beats: rises through the mean
+  const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+  let beats = 0;
+  for (let i = 1; i < frames.length; i++) if (frames[i - 1] < mean && frames[i] >= mean) beats++;
+  return { radius: radii.reduce((a, b) => a + b, 0) / radii.length, alpha: alphaSum / alphaN,
+           swing: Math.max(...frames) / Math.min(...frames), beats };
+}
+const results = {
+  idle: measure('idle', false),
+  thinking: measure('thinking', false),
+  speaking: measure('speaking', false),
+  ambient: measure('idle', true),
+  listeningSilent: measure('listening', false, 0),
+  listeningLoud: measure('listening', false, 0.8),
+};
+// The recorder stops reporting (the turn ended) but the state has not moved on yet.
+results.listeningStale = measure('listening', false, null);
+// One frame of dust, once the colour has settled; stage is [x, y, w, h] or null.
+function dustIn(state, stage) {
+  if (stage) window.orb.setStage(...stage);
+  window.orb.setState(state);
+  window.orb.setAmbient(false);
+  run(200);
+  dust.length = 0; sphereXs.length = 0;
+  run(1);
+  const rgb = dust.map(d => /rgba\((\d+),(\d+),(\d+),/.exec(d[2])).filter(Boolean)
+                  .map(m => m.slice(1).map(Number));
+  const xs = dust.map(d => d[0]);
+  return { count: dust.length, minX: Math.min(...xs), maxX: Math.max(...xs),
+           sphereMinX: Math.min(...sphereXs), sphereMaxX: Math.max(...sphereXs),
+           rgb: [0, 1, 2].map(k => rgb.reduce((a, c) => a + c[k], 0) / Math.max(1, rgb.length)) };
+}
+// A narrow middle column, 300 px wide around x = 400, as the side panels leave it.
+results.dustListening = dustIn('listening', [400, 300, 300, 500]);
+results.dustSpeaking = dustIn('speaking', null);
+// Two seconds of the floor under the sphere: where the line is drawn each
+// frame, and how bright the centre of the pool of light is.
+function groundIn(state, stage) {
+  window.orb.setStage(...stage);
+  window.orb.setState(state);
+  window.orb.setAmbient(false);
+  run(200);
+  lines.length = 0; pools.length = 0;
+  keepFloor = true;
+  run(120);
+  keepFloor = false;
+  const alphas = pools.map(g => g.length && /,([\d.]+)\)$/.exec(g[0])).filter(Boolean).map(m => +m[1]);
+  return {
+    lineYs: lines.map(l => l[1]),
+    lineMinX: Math.min(...lines.map(l => l[0])),
+    lineMaxRight: Math.max(...lines.map(l => l[0] + l[2])),
+    lineWidth: Math.max(...lines.map(l => l[2])),
+    poolAlpha: alphas.reduce((a, b) => a + b, 0) / Math.max(1, alphas.length),
+    poolSwing: alphas.length ? Math.max(...alphas) / Math.min(...alphas) : 0,
+  };
+}
+results.groundRest = groundIn('idle', [400, 300, 300, 500]);
+results.groundThinking = groundIn('thinking', [400, 300, 300, 500]);
+results.groundSpeaking = groundIn('speaking', [400, 300, 300, 500]);
+console.log(JSON.stringify(results));
+"""
+
+
+@pytest.fixture(scope="module")
+def motion(script, tmp_path_factory) -> dict:
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    import json
+    js = tmp_path_factory.mktemp("orb") / "motion.js"
+    js.write_text(_HARNESS + script + _DRIVER, encoding="utf-8")
+    result = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+class TestRestIsACalmerSpeech:
+    """Mo liked the sphere listening and speaking but not at rest, and chose
+    for rest to look like speech turned down: a pale blue, and a slow, soft
+    version of the speaking ripple rather than a still dark sphere."""
+
+    def test_rest_is_a_pale_blue(self, script):
+        assert _colours(script)["idle"] == (150, 180, 255)
+
+    def test_the_sphere_moves_at_rest(self, motion):
+        # Speech swells the dots with the envelope; a still sphere at rest draws
+        # them exactly as thinking (which stays still) does.
+        assert motion["idle"]["radius"] > motion["thinking"]["radius"] * 1.03, motion
+
+    def test_rest_is_calmer_than_speech(self, motion):
+        assert motion["speaking"]["radius"] > motion["idle"]["radius"] * 1.03, motion
+
+    def test_the_quiet_fade_keeps_two_thirds_of_the_light(self, motion):
+        # Ambient used to dim to a third, which read as dull; two-thirds still
+        # says "resting" without the sphere going dark.
+        ratio = motion["ambient"]["alpha"] / motion["idle"]["alpha"]
+        assert 0.55 <= ratio <= 0.75, motion
+
+
+class TestListeningFollowsTheVoice:
+    """Mo chose for the sphere to swell and ripple with their voice while it
+    listens, and to settle when they pause."""
+
+    def test_silence_leaves_it_still(self, motion):
+        assert motion["listeningSilent"]["radius"] < motion["thinking"]["radius"] * 1.01, motion
+
+    def test_a_loud_voice_swells_it(self, motion):
+        assert motion["listeningLoud"]["radius"] > motion["thinking"]["radius"] * 1.03, motion
+
+    def test_a_level_that_stops_arriving_does_not_hold_it_swollen(self, motion):
+        assert motion["listeningStale"]["radius"] < motion["thinking"]["radius"] * 1.01, motion
+
+
+class TestWorkingPulses:
+    """Mo asked for a steady pulse while it works: the sphere breathes in and
+    out and brightens on each beat, the same whatever else is going on."""
+
+    def test_it_pulses_while_thinking(self, motion):
+        assert motion["thinking"]["swing"] > 1.2, motion["thinking"]
+
+    def test_the_pulse_is_steady_about_once_a_second(self, motion):
+        # Three seconds are measured: a beat a second is two to four rises.
+        assert 2 <= motion["thinking"]["beats"] <= 4, motion["thinking"]
+
+    @pytest.mark.parametrize("state", ["idle", "listeningSilent"])
+    def test_only_working_pulses(self, motion, state):
+        assert motion[state]["swing"] < 1.1, motion[state]
+
+
+class TestRingOfDust:
+    """Mo chose a ring of dust round the sphere, in its own colour, like a
+    planet's ring, in place of the two clouds over its shoulders."""
+
+    def test_the_two_clouds_are_gone(self, script):
+        assert "buildCluster" not in script and "drawCluster" not in script
+
+    def test_there_is_a_ring_of_dust(self, motion):
+        assert motion["dustListening"]["count"] >= 300, motion["dustListening"]["count"]
+
+    def test_it_stays_inside_the_middle_column(self, motion):
+        # Past the column the side panels would cut the ring off.
+        ring = motion["dustListening"]
+        assert ring["minX"] >= 250 and ring["maxX"] <= 550, ring
+
+    def test_it_reaches_past_the_sphere_on_both_sides(self, motion):
+        # As first built, the sphere filled the column and the ring, held inside
+        # it, sat hidden behind the sphere. The sphere now leaves it room.
+        ring = motion["dustListening"]
+        assert ring["minX"] < ring["sphereMinX"] - 15, ring
+        assert ring["maxX"] > ring["sphereMaxX"] + 15, ring
+
+    def test_it_takes_the_spheres_colour(self, motion):
+        red, green, _ = motion["dustListening"]["rgb"]
+        assert green > red + 40, f"listening dust is not cyan: {motion['dustListening']['rgb']}"
+        red, green, _ = motion["dustSpeaking"]["rgb"]
+        assert red > green + 25, f"speaking dust is not purple: {motion['dustSpeaking']['rgb']}"
+
+
+class TestPoolOfLight:
+    """Mo chose a soft pool of the sphere's light on the floor beneath it,
+    swelling with the voice and the working pulse, over a bare hairline."""
+
+    def test_there_is_a_pool_of_light(self, motion):
+        assert motion["groundRest"]["poolAlpha"] > 0.1, motion["groundRest"]
+
+    def test_it_swells_with_the_voice(self, motion):
+        assert motion["groundSpeaking"]["poolAlpha"] > motion["groundRest"]["poolAlpha"] * 1.05, \
+            (motion["groundRest"], motion["groundSpeaking"])
+
+    def test_it_pulses_while_working(self, motion):
+        assert motion["groundThinking"]["poolSwing"] > 1.2, motion["groundThinking"]
+
+    def test_the_line_holds_still_while_the_sphere_swells(self, motion):
+        # It was placed from the swelling radius, so it bobbed with every syllable.
+        ys = motion["groundSpeaking"]["lineYs"]
+        assert ys and max(ys) - min(ys) < 0.5, (min(ys), max(ys))
+
+    def test_the_line_spans_the_column_it_is_given(self, motion):
+        # It was a fixed 640 px, running under the side panels in a narrow column.
+        ground = motion["groundSpeaking"]
+        assert ground["lineMinX"] >= 250 and ground["lineMaxRight"] <= 550, ground
+        assert ground["lineWidth"] >= 240, ground

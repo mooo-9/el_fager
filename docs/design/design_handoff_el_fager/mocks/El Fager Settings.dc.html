@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#02040A}
+a{color:#38E0FF;text-decoration:none}
+a:hover{color:#8FF0FF}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes fgrBreath{0%,100%{transform:scale(1);opacity:.45}50%{transform:scale(1.1);opacity:.85}}
+</style>
+</helmet>
+<div data-screen-label="Settings" dir="{{ dir }}" style="display:flex;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(1000px 700px at 30% 0%,#050B18 0%,#02040A 65%);font-family:'Space Grotesk','Alexandria',sans-serif;position:relative">
+  <div style="position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(255,255,255,0.012) 0 1px,transparent 1px 3px);z-index:1"></div>
+  <!-- rail -->
+  <div style="width:230px;flex:none;border-right:1px solid rgba(255,255,255,0.06);padding:28px 14px;display:flex;flex-direction:column;gap:4px">
+    <div style="position:relative;display:flex;align-items:center;gap:10px;padding:0 12px 20px">
+      <div style="position:relative;width:22px;height:22px;display:grid;place-items:center"><div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,rgba(56,224,255,0.4),transparent 70%);animation:fgrBreath 3.6s ease-in-out infinite"></div><div style="width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#fff,#38E0FF 60%,#0E5B70)"></div></div>
+      <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">El Fager</div><div style="font:400 9px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5F7183">SETTINGS</div></div>
+      <div style="position:absolute;left:0;right:0;bottom:8px;height:1px;background:linear-gradient(90deg,transparent 0,#38E0FF 14px,rgba(56,224,255,0.3) 45%,rgba(255,255,255,0.05) 80%)"></div>
+      <div style="position:absolute;left:11px;bottom:6px;width:5px;height:5px;border-radius:50%;background:#38E0FF;box-shadow:0 0 8px rgba(56,224,255,0.9)"></div>
+    </div>
+    <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
+      <div onClick="{{ n.go }}" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;background:{{ n.bg }};border:1px solid {{ n.border }}" style-hover="background:rgba(255,255,255,0.04)">
+        <div style="width:5px;height:5px;border-radius:50%;background:{{ n.dot }}"></div>
+        <div style="font:500 13px 'Space Grotesk',sans-serif;color:{{ n.color }}">{{ n.label }}</div>
+      </div>
+    </sc-for>
+    <div style="flex:1"></div>
+    <a href="El Fager Cockpit v2.dc.html" style="display:flex;align-items:center;gap:9px;padding:9px 12px;margin-bottom:8px;border-radius:9px;border:1px solid rgba(255,255,255,0.08)" style-hover="background:rgba(56,224,255,0.06);border-color:rgba(56,224,255,0.3)">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M7.5 1.5 3 6l4.5 4.5" fill="none" stroke="#9FB1C2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <div style="font:500 13px 'Space Grotesk',sans-serif;color:#9FB1C2">Back to cockpit</div>
+    </a>
+    <div style="display:flex;align-items:center;gap:8px;padding:0 12px 10px"><div style="width:5px;height:5px;border-radius:50%;background:#38E0FF;box-shadow:0 0 7px rgba(56,224,255,0.8)"></div><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:#5F7183">MIC LIVE — SAY THE SETTING</div></div>
+    <div style="font:400 9.5px/1.7 'Spline Sans Mono',monospace;color:#3A4A5C;padding:0 12px">V4.1 · COCKPIT MODE<br>ALL CHANGES SAVE INSTANTLY</div>
+  </div>
+
+  <!-- content -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;position:relative;z-index:2">
+  <div style="flex:1;overflow-y:auto;padding:36px 44px 20px;opacity:{{ secOpacity }};transform:translateY({{ secShift }});transition:opacity 120ms cubic-bezier(.22,1,.36,1),transform 120ms cubic-bezier(.22,1,.36,1)">
+    <sc-if value="{{ isVoice }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:620px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">Voice</div><div dir="rtl" style="font:400 10.5px 'Spline Sans Mono',monospace;color:#3A4A5C">قول: "غيّر الصوت"</div></div>
+        <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:4px">How it hears you and how it talks back.</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:26px">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Wake word</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Also answers to Ctrl+Space</div></div>
+            <div style="font:500 13px 'Spline Sans Mono',monospace;color:#38E0FF;background:rgba(56,224,255,0.08);border:1px solid rgba(56,224,255,0.3);border-radius:99px;padding:6px 16px">"hey Fager"</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Reply language</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">It always understands both</div></div>
+            <div style="display:flex;gap:6px">
+              <div onClick="{{ langMatch }}" style="font:500 12px 'Space Grotesk',sans-serif;color:{{ langMatchColor }};background:{{ langMatchBg }};border:1px solid {{ langMatchBorder }};border-radius:99px;padding:6px 14px;cursor:pointer">Match mine</div>
+              <div onClick="{{ langEn }}" style="font:500 12px 'Space Grotesk',sans-serif;color:{{ langEnColor }};background:{{ langEnBg }};border:1px solid {{ langEnBorder }};border-radius:99px;padding:6px 14px;cursor:pointer">English</div>
+              <div onClick="{{ langAr }}" style="font:500 12px 'Space Grotesk','Alexandria',sans-serif;color:{{ langArColor }};background:{{ langArBg }};border:1px solid {{ langArBorder }};border-radius:99px;padding:6px 14px;cursor:pointer">عربي</div>
+            </div>
+          </div>
+          <div onClick="{{ toggleBarge }}" style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px;cursor:pointer">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Barge-in</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Talking over it interrupts immediately</div></div>
+            <div style="width:40px;height:22px;border-radius:99px;background:{{ bargeBg }};position:relative;transition:background 140ms;flex:none"><div style="position:absolute;top:2px;left:{{ bargeLeft }};width:18px;height:18px;border-radius:50%;background:#EAF2F7;transition:left 140ms"></div></div>
+          </div>
+          <div onClick="{{ toggleSounds }}" style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px;cursor:pointer">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Sound cues</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Summon chime, confirm tick, error pulse</div></div>
+            <div style="width:40px;height:22px;border-radius:99px;background:{{ soundsBg }};position:relative;transition:background 140ms;flex:none"><div style="position:absolute;top:2px;left:{{ soundsLeft }};width:18px;height:18px;border-radius:50%;background:#EAF2F7;transition:left 140ms"></div></div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isRoutines }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:620px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">Routines</div><div style="font:400 10.5px 'Spline Sans Mono',monospace;color:#3A4A5C">SAY: "TURN OFF THE MORNING BRIEF"</div></div>
+        <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:4px">What it does without being asked. Each one knocks before entering — see the Knock Rule.</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:26px">
+          <sc-for list="{{ routines }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px">
+              <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">{{ r.name }}</div><div style="font:400 12px 'Space Grotesk','Alexandria',sans-serif;color:#5F7183;margin-top:2px">{{ r.desc }}</div></div>
+              <div style="display:flex;align-items:center;gap:14px">
+                <div style="font:400 11px 'Spline Sans Mono',monospace;color:#9FB1C2">{{ r.when }}</div>
+                <div onClick="{{ r.toggle }}" style="width:40px;height:22px;border-radius:99px;background:{{ r.bg }};position:relative;transition:background 140ms;cursor:pointer;flex:none"><div style="position:absolute;top:2px;left:{{ r.left }};width:18px;height:18px;border-radius:50%;background:#EAF2F7;transition:left 140ms"></div></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSkills }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:620px">
+        <div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">Skills &amp; permissions</div>
+        <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:4px">What it can touch. Anything that leaves the machine always stages first.</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:26px">
+          <sc-for list="{{ skills }}" as="k" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:14px 20px">
+              <div style="display:flex;align-items:center;gap:12px"><div style="width:6px;height:6px;border-radius:50%;background:{{ k.dot }}"></div><div><div style="font:500 14px 'Spline Sans Mono',monospace;color:#EAF2F7">{{ k.name }}</div><div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:1px">{{ k.perm }}</div><div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.06em;color:#3A4A5C;margin-top:4px">{{ k.usage }}</div></div></div>
+              <div onClick="{{ k.toggle }}" style="width:40px;height:22px;border-radius:99px;background:{{ k.bg }};position:relative;transition:background 140ms;cursor:pointer;flex:none"><div style="position:absolute;top:2px;left:{{ k.left }};width:18px;height:18px;border-radius:50%;background:#EAF2F7;transition:left 140ms"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isMemory }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:620px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">Memory</div><div dir="rtl" style="font:400 10.5px 'Spline Sans Mono',monospace;color:#3A4A5C">قول: "انسى إني بحب القهوة سادة"</div></div>
+        <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:4px">{{ memCount }} facts it learned about you. Forget anything — no questions asked.</div>
+        <div style="display:flex;align-items:center;gap:9px;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.08);border-radius:99px;padding:7px 16px;margin-top:18px">
+          <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="5" cy="5" r="3.6" fill="none" stroke="#5F7183" stroke-width="1.3"></circle><line x1="8" y1="8" x2="11" y2="11" stroke="#5F7183" stroke-width="1.3"></line></svg>
+          <input value="{{ memQuery }}" onChange="{{ onMemQuery }}" placeholder="Search memory — دوّر في الذاكرة" style="flex:1;background:transparent;border:none;outline:none;font:400 12.5px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;min-width:0"></input>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+          <sc-for list="{{ facts }}" as="f" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px 18px">
+              <div style="display:flex;align-items:baseline;gap:12px"><div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#3A4A5C;flex:none;width:44px">{{ f.tag }}</div><div dir="auto" style="font:400 13.5px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7">{{ f.text }}</div><div style="font:400 8.5px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#38E0FF;flex:none">{{ f.newTag }}</div></div>
+              <div onClick="{{ f.forget }}" style="font:500 11.5px 'Space Grotesk',sans-serif;color:#FF5A4E;border:1px solid rgba(255,80,66,0.3);border-radius:8px;padding:4px 12px;cursor:pointer;flex:none" style-hover="background:rgba(255,80,66,0.1)">Forget</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSystem }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:620px">
+        <div style="font:500 24px 'Space Grotesk',sans-serif;color:#EAF2F7">System</div>
+        <div style="font:400 13px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:4px">The machine underneath.</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:26px">
+          <div onClick="{{ toggleBoot }}" style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px;cursor:pointer">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Start with Windows</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Lives in the tray, summon path always warm</div></div>
+            <div style="width:40px;height:22px;border-radius:99px;background:{{ bootBg }};position:relative;transition:background 140ms;flex:none"><div style="position:absolute;top:2px;left:{{ bootLeft }};width:18px;height:18px;border-radius:50%;background:#EAF2F7;transition:left 140ms"></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Ambient after</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Cockpit fades to the resting orb</div></div>
+            <div style="display:flex;gap:6px">
+              <div onClick="{{ amb30 }}" style="font:500 12px 'Spline Sans Mono',monospace;color:{{ amb30Color }};background:{{ amb30Bg }};border:1px solid {{ amb30Border }};border-radius:99px;padding:6px 13px;cursor:pointer">30s</div>
+              <div onClick="{{ amb60 }}" style="font:500 12px 'Spline Sans Mono',monospace;color:{{ amb60Color }};background:{{ amb60Bg }};border:1px solid {{ amb60Border }};border-radius:99px;padding:6px 13px;cursor:pointer">60s</div>
+              <div onClick="{{ amb120 }}" style="font:500 12px 'Spline Sans Mono',monospace;color:{{ amb120Color }};background:{{ amb120Bg }};border:1px solid {{ amb120Border }};border-radius:99px;padding:6px 13px;cursor:pointer">2m</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(5,11,24,0.9);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px">
+            <div><div style="font:500 14px 'Space Grotesk',sans-serif;color:#EAF2F7">Data</div><div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183;margin-top:2px">Everything local. Nothing trains anyone's model.</div></div>
+            <div style="font:400 11px 'Spline Sans Mono',monospace;color:#56C99C">ON THIS MACHINE</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- change receipts + live command bar -->
+  <div style="flex:none;padding:10px 44px 16px;border-top:1px solid rgba(255,255,255,0.05);background:rgba(2,4,10,0.6)">
+    <sc-if value="{{ hasUndo }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px;padding-bottom:9px">
+        <div dir="auto" style="font:400 11px 'Spline Sans Mono',monospace;color:#9FB1C2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Forgot "{{ forgotText }}"</div>
+        <div onClick="{{ undoForget }}" style="font:500 12px 'Space Grotesk',sans-serif;color:#38E0FF;cursor:pointer;flex:none" style-hover="color:#8FF0FF">Undo</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ hasReceipts }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:5px;padding-bottom:9px">
+        <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="0">
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:4px;height:4px;border-radius:50%;background:#56C99C;flex:none"></div><div dir="auto" style="font:400 10.5px 'Spline Sans Mono',monospace;color:#5F7183">{{ r.text }} · {{ r.time }}</div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:10px;background:#081120;border:1px solid rgba(255,255,255,0.1);border-radius:99px;padding:6px 6px 6px 16px">
+      <input value="{{ cmd }}" onChange="{{ onCmd }}" onKeyDown="{{ onCmdKey }}" placeholder="Say it or type it — 'wake me at 8' · 'انسى القهوة'" style="flex:1;background:transparent;border:none;outline:none;font:400 12.5px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;min-width:0"></input>
+      <div style="width:30px;height:30px;border-radius:50%;background:rgba(56,224,255,0.12);border:1px solid rgba(56,224,255,0.4);display:grid;place-items:center;flex:none"><svg width="11" height="11" viewBox="0 0 14 14"><rect x="5" y="1" width="4" height="8" rx="2" fill="#38E0FF"></rect><path d="M2.5 7a4.5 4.5 0 0 0 9 0" fill="none" stroke="#38E0FF" stroke-width="1.6"></path><line x1="7" y1="11.5" x2="7" y2="13" stroke="#38E0FF" stroke-width="1.6"></line></svg></div>
+    </div>
+  </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;uiLanguage&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;en&quot;,&quot;ar&quot;],&quot;default&quot;:&quot;en&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Language&quot;},&quot;$preview&quot;:{&quot;width&quot;:&quot;1180px&quot;,&quot;height&quot;:&quot;760px&quot;}}">
+class Component extends DCLogic {
+  state = {
+    section: 'voice',
+    lang: 'match', barge: true, sounds: true, boot: true, ambient: 60,
+    routines: { morning: true, evening: true, focus: true, gym: false },
+    skills: { gmail: true, whatsapp: true, todoist: true, browser: true, screen: false },
+    facts: [
+      { tag: 'FOOD', text: 'قهوة سادة، من غير سكر' },
+      { tag: 'GYM', text: 'Push/pull/legs split — push Tue & Fri' },
+      { tag: 'PEOPLE', text: 'Omar = Omar Adel (WhatsApp), Ahmed = work email', fresh: true },
+      { tag: 'STYLE', text: 'Short replies before noon' },
+      { tag: 'STYLE', text: 'بيحب الرد بالمصري مش الفصحى' },
+      { tag: 'WORK', text: 'Deep work 1–5 PM, no interruptions' }
+    ],
+    cmd: '', receipts: [], memQuery: '', lastForgot: null, secOpacity: 1
+  };
+  componentWillUnmount() { if (this.undoT) clearTimeout(this.undoT); }
+  set(k, v) { this.setState({ [k]: v }); }
+  goSection(id) {
+    if (id === this.state.section) return;
+    this.setState({ secOpacity: 0 });
+    setTimeout(() => this.setState({ section: id, secOpacity: 1 }), 120);
+  }
+  receipt(text) { this.setState({ receipts: [{ text, time: 'just now' }, ...this.state.receipts].slice(0, 3) }); }
+  renderVals() {
+    const S = this.state;
+    const cyan = '#38E0FF', dim = '#5F7183';
+    const onBg = 'rgba(56,224,255,0.8)', offBg = 'rgba(255,255,255,0.12)';
+    const tgl = (on) => ({ bg: on ? onBg : offBg, left: on ? '20px' : '2px' });
+    const pill = (sel) => sel
+      ? { color: '#04121A', bg: cyan, border: cyan }
+      : { color: dim, bg: 'transparent', border: 'rgba(255,255,255,0.12)' };
+    const navDefs = [
+      ['voice', 'Voice'], ['routines', 'Routines'], ['skills', 'Skills'], ['memory', 'Memory'], ['system', 'System']
+    ];
+    const routineDefs = [
+      ['morning', 'Morning briefing', 'Speaks the day when you sit down', '8:30 AM'],
+      ['evening', 'Evening shutdown', 'Tomorrow preview + inbox zero check', '9:00 PM'],
+      ['focus', 'Focus mode', 'Silences everything on deep-work blocks', 'AUTO'],
+      ['gym', 'Gym mode', 'Logs sets by voice, rest timers', 'ON ARRIVAL']
+    ];
+    const skillDefs = [
+      ['gmail', '#EA6C5A', 'Read inbox · draft replies · send stages first', 'LAST USED 2H AGO · 14 ACTIONS THIS WEEK'],
+      ['whatsapp', '#25D366', 'Read chats · send stages first', 'LAST USED 20M AGO · 31 ACTIONS THIS WEEK'],
+      ['todoist', '#E8746A', 'Read · add · complete tasks', 'LAST USED 1H AGO · 9 ACTIONS THIS WEEK'],
+      ['browser', '#38E0FF', 'Drive a browser window on request', 'LAST USED YESTERDAY · 3 ACTIONS THIS WEEK'],
+      ['screen', '#5B8DEF', 'Analyze what is on screen — only when asked', 'NEVER USED']
+    ];
+    const lp = { match: pill(S.lang === 'match'), en: pill(S.lang === 'en'), ar: pill(S.lang === 'ar') };
+    const ap = { 30: pill(S.ambient === 30), 60: pill(S.ambient === 60), 120: pill(S.ambient === 120) };
+    return {
+      navItems: navDefs.map(([id, label]) => ({
+        label,
+        color: S.section === id ? '#EAF2F7' : dim,
+        dot: S.section === id ? cyan : 'transparent',
+        bg: S.section === id ? 'rgba(56,224,255,0.07)' : 'transparent',
+        border: S.section === id ? 'rgba(56,224,255,0.25)' : 'transparent',
+        go: () => this.goSection(id)
+      })),
+      dir: (this.props.uiLanguage ?? 'en') === 'ar' ? 'rtl' : 'ltr',
+      secOpacity: S.secOpacity, secShift: S.secOpacity ? '0px' : '6px',
+      isVoice: S.section === 'voice', isRoutines: S.section === 'routines', isSkills: S.section === 'skills',
+      isMemory: S.section === 'memory', isSystem: S.section === 'system',
+      langMatch: () => this.set('lang', 'match'), langEn: () => this.set('lang', 'en'), langAr: () => this.set('lang', 'ar'),
+      langMatchColor: lp.match.color, langMatchBg: lp.match.bg, langMatchBorder: lp.match.border,
+      langEnColor: lp.en.color, langEnBg: lp.en.bg, langEnBorder: lp.en.border,
+      langArColor: lp.ar.color, langArBg: lp.ar.bg, langArBorder: lp.ar.border,
+      toggleBarge: () => { this.set('barge', !S.barge); this.receipt('barge-in ' + (!S.barge ? 'ON' : 'OFF')); }, bargeBg: tgl(S.barge).bg, bargeLeft: tgl(S.barge).left,
+      toggleSounds: () => { this.set('sounds', !S.sounds); this.receipt('sound cues ' + (!S.sounds ? 'ON' : 'OFF')); }, soundsBg: tgl(S.sounds).bg, soundsLeft: tgl(S.sounds).left,
+      toggleBoot: () => { this.set('boot', !S.boot); this.receipt('start with Windows ' + (!S.boot ? 'ON' : 'OFF')); }, bootBg: tgl(S.boot).bg, bootLeft: tgl(S.boot).left,
+      amb30: () => this.set('ambient', 30), amb60: () => this.set('ambient', 60), amb120: () => this.set('ambient', 120),
+      amb30Color: ap[30].color, amb30Bg: ap[30].bg, amb30Border: ap[30].border,
+      amb60Color: ap[60].color, amb60Bg: ap[60].bg, amb60Border: ap[60].border,
+      amb120Color: ap[120].color, amb120Bg: ap[120].bg, amb120Border: ap[120].border,
+      routines: routineDefs.map(([id, name, desc, when]) => ({
+        name, desc, when, ...tgl(S.routines[id]),
+        toggle: () => {
+          const on = !S.routines[id];
+          this.setState({ routines: { ...S.routines, [id]: on }, cmd: (on ? 'turn on ' : 'turn off ') + name.toLowerCase() });
+          this.receipt(name + ' ' + (on ? 'ON' : 'OFF'));
+        }
+      })),
+      skills: skillDefs.map(([id, dot, perm, usage]) => ({
+        name: id, dot, perm, usage, ...tgl(S.skills[id]),
+        toggle: () => {
+          const on = !S.skills[id];
+          this.setState({ skills: { ...S.skills, [id]: on }, cmd: (on ? 'enable ' : 'disable ') + id });
+          this.receipt(id + ' ' + (on ? 'ENABLED' : 'DISABLED'));
+        }
+      })),
+      facts: S.facts
+        .filter((f) => !S.memQuery || (f.text + ' ' + f.tag).toLowerCase().includes(S.memQuery.toLowerCase()))
+        .map((f) => ({
+          ...f,
+          newTag: f.fresh ? 'NEW' : '',
+          forget: () => {
+            if (this.undoT) clearTimeout(this.undoT);
+            this.setState({ facts: S.facts.filter((x) => x !== f), lastForgot: f });
+            this.undoT = setTimeout(() => this.setState({ lastForgot: null }), 6000);
+          }
+        })),
+      memCount: S.facts.length + 41,
+      memQuery: S.memQuery,
+      onMemQuery: (e) => this.set('memQuery', e.target.value),
+      hasUndo: !!S.lastForgot,
+      forgotText: S.lastForgot ? S.lastForgot.text : '',
+      undoForget: () => {
+        if (this.undoT) clearTimeout(this.undoT);
+        this.setState({ facts: [S.lastForgot, ...S.facts], lastForgot: null });
+      },
+      hasReceipts: S.receipts.length > 0,
+      receipts: S.receipts,
+      cmd: S.cmd,
+      onCmd: (e) => this.set('cmd', e.target.value),
+      onCmdKey: (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && S.cmd.trim()) {
+          this.receipt('heard: "' + S.cmd.trim() + '" — applied');
+          this.set('cmd', '');
+        }
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

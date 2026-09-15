@@ -14,7 +14,6 @@ import json
 import os
 import sys
 import threading
-import winreg
 from pathlib import Path
 
 # Force line-buffered stdout so print() inside Qt callbacks flushes immediately
@@ -49,7 +48,6 @@ from core.voice_in import VoiceInput
 from core.voice_out import VoiceOutput
 from core.wake_word import WakeWordListener
 from ui.overlay import OverlayWindow
-from ui.hud_window import HudWindow
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -62,10 +60,14 @@ from ui.hud_window import HudWindow
 
 class HotkeySignaler(QObject):
     triggered = pyqtSignal()
+    hud_triggered = pyqtSignal()
+    cockpit_triggered = pyqtSignal()
+    command_center_triggered = pyqtSignal()
     analyze_triggered = pyqtSignal()
     memory_query_triggered = pyqtSignal()
     memory_clear_triggered = pyqtSignal()
     wake_word_detected = pyqtSignal()
+    second_launch = pyqtSignal()      # the desktop icon, clicked again
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -85,33 +87,56 @@ def _make_tray_image() -> Image.Image:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Windows startup registration
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def _register_startup():
-    """Add El Fager to Windows HKCU startup registry so it runs on login."""
-    try:
-        exe = sys.executable
-        script = str(Path(__file__).resolve())
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0,
-            winreg.KEY_SET_VALUE,
-        )
-        winreg.SetValueEx(key, "ElFager", 0, winreg.REG_SZ, f'"{exe}" "{script}"')
-        winreg.CloseKey(key)
-    except Exception as e:
-        print(f"[El Fager] Startup registration failed (non-fatal): {e}")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 _INSTANCE_MUTEX = None  # kept alive at module level so GC doesn't release it
+
+
+# A second launch hands off to the running instance through this event rather
+# than dying quietly. Auto-reset, so each click wakes the waiter exactly once.
+_SHOW_EVENT_NAME = "ElFagerShowRequested"
+
+
+def _signal_running_instance() -> bool:
+    """Ask the instance that owns the mutex to show itself. True if it heard."""
+    import ctypes
+    EVENT_MODIFY_STATE = 0x0002
+    handle = ctypes.windll.kernel32.OpenEventW(EVENT_MODIFY_STATE, False,
+                                               _SHOW_EVENT_NAME)
+    if not handle:
+        return False
+    try:
+        return bool(ctypes.windll.kernel32.SetEvent(handle))
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
+def _watch_for_second_launch(signaler) -> None:
+    """Wait on the show event and raise the surface when a second launch asks.
+
+    Clicking the desktop icon while El Fager was already running used to start
+    a process that found the mutex, showed a toast telling Mo to go and find
+    the tray himself, and exited. Under pythonw there is no console either, so
+    the icon simply looked broken. Now the running instance comes forward.
+    """
+    import ctypes
+    import threading
+
+    handle = ctypes.windll.kernel32.CreateEventW(None, False, False,
+                                                 _SHOW_EVENT_NAME)
+    if not handle:
+        return
+
+    def wait_loop():
+        while True:
+            # INFINITE wait; the thread is a daemon and dies with the process.
+            if ctypes.windll.kernel32.WaitForSingleObject(handle, 0xFFFFFFFF) != 0:
+                return
+            signaler.second_launch.emit()
+
+    threading.Thread(target=wait_loop, daemon=True).start()
 
 
 def _acquire_instance_lock() -> None:
@@ -120,21 +145,53 @@ def _acquire_instance_lock() -> None:
     import ctypes
     _INSTANCE_MUTEX = ctypes.windll.kernel32.CreateMutexW(None, True, "ElFagerSingleInstance")
     if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-        print("[El Fager] Already running — only one instance allowed.")
-        try:
-            from winotify import Notification
-            Notification(
-                app_id="El Fager",
-                title="El Fager",
-                msg="Already running. Check the system tray.",
-                duration="short",
-            ).show()
-        except Exception:
-            pass
+        print("[El Fager] Already running — asking that instance to show itself.")
+        if not _signal_running_instance():
+            # The mutex is held but nothing is listening: an older build, or a
+            # process wedged mid-shutdown. Say so rather than exiting silently.
+            try:
+                from winotify import Notification
+                Notification(
+                    app_id="El Fager",
+                    title="El Fager",
+                    msg="Already running, but not responding. Check the system tray.",
+                    duration="short",
+                ).show()
+            except Exception:
+                pass
         sys.exit(0)
 
 
+def _enable_crash_trace() -> None:
+    """Leave a Python stack behind if the process dies on a fatal signal.
+
+    El Fager crashed after 23 hours with STATUS_HEAP_CORRUPTION and there was
+    nothing to look at afterwards — under pythonw there is no console, so the
+    stack went nowhere. faulthandler costs nothing while running and turns a
+    silent disappearance into a file.
+
+    It will not catch every native fault: heap corruption often fast-fails
+    past signal handlers, which is what the Windows LocalDumps registry key is
+    for. This is the half that does not need administrator rights.
+    """
+    try:
+        import faulthandler
+        from datetime import datetime
+        from pathlib import Path
+        crash_dir = Path("data/crashdumps")
+        crash_dir.mkdir(parents=True, exist_ok=True)
+        # Deliberately not closed: it has to outlive main() and be open at the
+        # moment the process dies.
+        handle = open(crash_dir / "faulthandler.log", "a", encoding="utf-8")
+        handle.write(f"\n--- started {datetime.now().isoformat(timespec='seconds')}\n")
+        handle.flush()
+        faulthandler.enable(file=handle, all_threads=True)
+    except Exception as e:
+        print(f"[El Fager] crash trace unavailable: {e}")
+
+
 def main():
+    _enable_crash_trace()
     _acquire_instance_lock()
 
     # Qt must own the main thread.
@@ -143,6 +200,14 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("El Fager")
+
+    # Design fonts are bundled (OFL) and registered here, never fetched at
+    # runtime. Falls back to Segoe UI if the files are missing.
+    from ui import theme, tokens
+    if theme.register_fonts():
+        _app_font = app.font()
+        _app_font.setFamilies([tokens.FONT_UI, "Segoe UI"])
+        app.setFont(_app_font)
 
     # Load profile
     profile_path = Path(__file__).parent / "profile.json"
@@ -163,25 +228,44 @@ def main():
     memory = Memory()
     brain = Brain(profile, memory)   # memory reference passed for tool dispatch + facts injection
 
+    # Sound cues ride the staging + progress registries — they already
+    # report exactly what happened.
+    from core import sound
+    sound.wire()
+
     # ── Windows icon ───────────────────────────────────────────────────────
     _icon_path = Path("data/el_fager.ico")
     if not _icon_path.exists():
         _icon_img = _make_tray_image().resize((256, 256), Image.LANCZOS)
         _icon_img.save(str(_icon_path), format="ICO", sizes=[(256,256),(64,64),(32,32),(16,16)])
 
-    # ── Primary window: full-screen JARVIS HUD ─────────────────────────────
-    hud = HudWindow(voice_in, brain, voice_out, memory)
-    hud.setWindowIcon(QIcon(str(_icon_path)))
-
-    # ── Secondary window: compact card (accessible via tray) ───────────────
+    # ── Primary window: native compact assistant ───────────────────────────
     overlay = OverlayWindow(voice_in, brain, voice_out, memory)
     overlay.setWindowIcon(QIcon(str(_icon_path)))
 
+    # ── Optional rich HUD: constructed lazily on first request ─────────────
+    # QWebEngine (Chromium) is heavy — it must not spin up at startup.
+    _hud_ref: list = [None]
+    _cockpit_ref: list = [None]
+
     # ── Hotkey bridge ──────────────────────────────────────────────────────
     signaler = HotkeySignaler()
-    signaler.triggered.connect(hud.toggle)           # Ctrl+Space → HUD
-    signaler.analyze_triggered.connect(hud.analyze_screen)
-    signaler.memory_query_triggered.connect(hud.query_memory)
+    signaler.triggered.connect(overlay.toggle)       # Ctrl+Space → assistant
+    signaler.analyze_triggered.connect(overlay.analyze_screen)
+    signaler.memory_query_triggered.connect(overlay.query_memory)
+
+    def _on_second_launch():
+        """The desktop icon, clicked while El Fager was already running.
+
+        present(), not toggle(): clicking an app's icon means "come here",
+        and toggle would hide the window if it happened to be open already.
+        """
+        overlay.present()
+        overlay.raise_()
+        overlay.activateWindow()
+
+    signaler.second_launch.connect(_on_second_launch)
+    _watch_for_second_launch(signaler)
 
     def _on_memory_clear():
         from PyQt6.QtWidgets import QMessageBox
@@ -196,24 +280,117 @@ def main():
             QMessageBox.information(None, "El Fager", "Memory cleared.")
 
     signaler.memory_clear_triggered.connect(_on_memory_clear)
-    keyboard.add_hotkey("ctrl+space", signaler.triggered.emit)
-    print("[El Fager] Hotkey Ctrl+Space registered.")
+    # Two ways in for each surface. Ctrl+Space is the design's canonical
+    # summon; the F12 pair is for the hand that's already on the top row.
+    # (Fn itself cannot be bound — it never leaves the keyboard's firmware,
+    # so Windows and the keyboard library never see it.)
+    for combo, emit, surface in (
+        ("ctrl+space", signaler.triggered.emit, "overlay"),
+        ("ctrl+f12", signaler.triggered.emit, "overlay"),
+        ("ctrl+shift+space", signaler.command_center_triggered.emit, "Command Center"),
+        ("ctrl+shift+f12", signaler.command_center_triggered.emit, "Command Center"),
+    ):
+        try:
+            keyboard.add_hotkey(combo, emit)
+            print(f"[El Fager] Hotkey {combo} registered ({surface}).")
+        except Exception as e:
+            # Another app owning a combo must not stop El Fager from starting.
+            print(f"[El Fager] Hotkey {combo} unavailable ({e}); the others still work.")
 
     # ── Wake word listener ─────────────────────────────────────────────────
     wake_listener = WakeWordListener(on_detected=signaler.wake_word_detected.emit)
-    signaler.wake_word_detected.connect(hud.wake_word_activate)
-    hud.set_wake_listener(wake_listener)
-    # Compact overlay still needs its wake listener set for the HUD-canvas path
-    overlay.set_wake_listener(wake_listener)
+
+    def _on_wake_word():
+        """Which surface answers when you call it.
+
+        Settings key `wake_surface`: "overlay" (default — the fast native
+        path, one frame to visible) or "cockpit" (the design's primary
+        surface, at the cost of building Chromium on the first wake). The
+        cockpit blooms whenever it is already up, whichever is configured.
+        """
+        cockpit = _cockpit_ref[0]
+        try:
+            from ui.overlay import _load_settings
+            surface = str(_load_settings().get("wake_surface", "overlay")).lower()
+        except Exception:
+            surface = "overlay"
+
+        if surface == "cockpit":
+            _get_cockpit().wake_word_activate()
+            return
+        overlay.wake_word_activate()
+        if cockpit is not None and cockpit.isVisible():
+            cockpit.wake_word_activate()   # already up: bloom, don't summon
+
+    signaler.wake_word_detected.connect(_on_wake_word)
+    overlay.set_wake_listener(wake_listener)  # also builds the overlay UI
+
+    def _get_hud():
+        """Construct the full-screen JARVIS HUD on first use (main thread only)."""
+        if _hud_ref[0] is None:
+            from ui.hud_window import HudWindow
+            hud = HudWindow(voice_in, brain, voice_out, memory)
+            hud.setWindowIcon(QIcon(str(_icon_path)))
+            hud.set_wake_listener(wake_listener)
+            _hud_ref[0] = hud
+        return _hud_ref[0]
+
+    def _get_cockpit():
+        """The design's primary surface. Also lazy — its orb is
+        the one QWebEngine instance El Fager runs."""
+        if _cockpit_ref[0] is None:
+            from ui.cockpit import CockpitWindow
+            cockpit = CockpitWindow(voice_in, brain, voice_out, memory)
+            cockpit.setWindowIcon(QIcon(str(_icon_path)))
+            cockpit.set_wake_listener(wake_listener)
+            # Its view pill hands the screen to the Command Center. The
+            # cockpit closes itself first, so toggle() can only open.
+            cockpit.knowledge_requested.connect(
+                lambda: _get_command_center().toggle())
+            _cockpit_ref[0] = cockpit
+        return _cockpit_ref[0]
+
+    # Started only now: _on_wake_word can reach for the cockpit, so the
+    # listener must not be able to fire before that closure exists.
     wake_listener.start()
+
+    # HUD opens from the tray; pystray callbacks run off the main thread, so
+    # marshal construction through a Qt signal.
+    signaler.hud_triggered.connect(lambda: _get_hud().toggle())
+    signaler.cockpit_triggered.connect(lambda: _get_cockpit().toggle())
+    # The overlay's expand button: small surface → big one. open(), not
+    # toggle() — the overlay has already hidden itself, so there is nothing
+    # for a second press to fold back into.
+    overlay.expand_requested.connect(lambda: _get_cockpit().open())
+
+    # ── Command center: native shell, constructed lazily on first open ─────
+    _cc_ref: list = [None]
+
+    def _get_command_center():
+        if _cc_ref[0] is None:
+            from ui.command_center import CommandCenterWindow
+            cc = CommandCenterWindow(voice_in, brain, voice_out, memory, wake_listener)
+            cc.setWindowIcon(QIcon(str(_icon_path)))
+            _cc_ref[0] = cc
+        return _cc_ref[0]
+
+    signaler.command_center_triggered.connect(lambda: _get_command_center().toggle())
 
     # ── System tray ────────────────────────────────────────────────────────
     def on_tray_open(icon, item):
         signaler.triggered.emit()
 
-    def on_tray_compact(icon, item):
-        """Show the compact card overlay instead of the full HUD."""
-        overlay.toggle()
+    def on_tray_hud(icon, item):
+        """Open the optional full-screen JARVIS HUD (lazily constructed)."""
+        signaler.hud_triggered.emit()
+
+    def on_tray_cockpit(icon, item):
+        """Open the Cockpit — the design's primary surface."""
+        signaler.cockpit_triggered.emit()
+
+    def on_tray_command_center(icon, item):
+        """Open the today-at-a-glance command center (lazily constructed)."""
+        signaler.command_center_triggered.emit()
 
     def on_tray_analyze(icon, item):
         signaler.analyze_triggered.emit()
@@ -253,8 +430,10 @@ def main():
         icon=_make_tray_image(),
         title="El Fager",
         menu=pystray.Menu(
-            pystray.MenuItem("Open JARVIS HUD  (Ctrl+Space)", on_tray_open),
-            pystray.MenuItem("Compact Mode", on_tray_compact),
+            pystray.MenuItem("Open Assistant  (Ctrl+Space)", on_tray_open),
+            pystray.MenuItem("Open Command Center", on_tray_command_center),
+            pystray.MenuItem("Open Cockpit", on_tray_cockpit),
+            pystray.MenuItem("Open JARVIS HUD (legacy)", on_tray_hud),
             pystray.MenuItem("Analyze Screen", on_tray_analyze),
             pystray.MenuItem("Memory", pystray.Menu(
                 pystray.MenuItem("What do you know about me?", on_tray_memory_query),
@@ -275,79 +454,138 @@ def main():
     tray_thread.start()
     print("[El Fager] System tray active.")
 
-    # ── Windows startup entry ──────────────────────────────────────────────
-    _register_startup()
+    # ── Background services (deferred past first paint) ────────────────────
+    # None of these are needed in the first seconds; starting them via a
+    # singleShot lets the event loop begin and the assistant window paint
+    # before scheduler/proactive/dashboard imports and threads spin up.
+    _services: dict = {}
 
-    # ── Reminder checker ──────────────────────────────────────────────────
-    from tools.reminder_tool import check_reminders
-    reminder_timer = QTimer()
-    reminder_timer.setInterval(30_000)  # every 30 seconds
-    reminder_timer.timeout.connect(check_reminders)
-    reminder_timer.start()
+    def _start_background_services():
+        # Reminder checker
+        from tools.reminder_tool import check_reminders
+        reminder_timer = QTimer()
+        reminder_timer.setInterval(30_000)  # every 30 seconds
+        reminder_timer.timeout.connect(check_reminders)
+        reminder_timer.start()
+        _services["reminder_timer"] = reminder_timer
 
-    # ── Clipboard history monitor ─────────────────────────────────────────────
-    from tools.clipboard_history_tool import start_clipboard_monitor
-    start_clipboard_monitor()
+        # Clipboard history monitor
+        from tools.clipboard_history_tool import start_clipboard_monitor
+        start_clipboard_monitor()
 
-    # ── Proactive scheduler ───────────────────────────────────────────────────
-    from core.scheduler import _set_instance
-    from core.defaults import seed_default_schedules
-    seed_default_schedules()           # no-op if schedules already exist
+        # Names from Spotify Liked Songs for Whisper's hint, read once a day
+        from core import voice_liked
+        voice_liked.start()
 
-    scheduler = ElFagerScheduler()
-    _set_instance(scheduler)          # share the live instance with all tool code
-    try:
-        scheduler.set_speak_callback(voice_out.speak)
-    except Exception:
-        pass
-    scheduler.start()
+        # Proactive scheduler
+        from core.scheduler import _set_instance
+        from core.defaults import seed_default_schedules
+        seed_default_schedules()           # no-op if schedules already exist
 
-    # ── Proactive engine (condition-based, autonomous checks) ─────────────────
-    from core.proactive import ProactiveEngine
-    proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat)
-    # Wire proactive notifications to the HUD banner (thread-safe via Qt signal)
-    proactive.set_hud_notify(hud.notify_hud)
-    proactive.start()
+        scheduler = ElFagerScheduler()
+        _set_instance(scheduler)          # share the live instance with all tool code
+        try:
+            scheduler.set_speak_callback(voice_out.speak)
+        except Exception:
+            pass
+        scheduler.start()
+        _services["scheduler"] = scheduler
 
-    # ── Macro speak callback (enables mid-macro TTS announcements) ────────────
-    from tools.macro_tool import set_speak_callback as _macro_speak_cb
-    _macro_speak_cb(voice_out.speak)
-    from tools.trading_tool import set_trading_speak_callback as _trading_speak_cb, start_trading_engine as _start_trading
-    _trading_speak_cb(voice_out.speak)
-    _start_trading()   # auto-start paper trading on every launch
+        # Proactive engine (condition-based, autonomous checks)
+        from core.proactive import ProactiveEngine
+        # brain_fn MUST be chat_background: proactive runs in a daemon thread and
+        # must never splice its turns into the voice pipeline's live conversation.
+        proactive = ProactiveEngine(speak_fn=voice_out.speak, memory=memory, brain_fn=brain.chat_background)
 
-    # ── Spotify warm-up ───────────────────────────────────────────────────────
-    # Refresh the token and find a device in the background so the first
-    # "play X" doesn't pay for it. No-op until Spotify has been authorised once.
-    from tools.spotify_tool import warm_up as _spotify_warm_up
-    _spotify_warm_up()
+        def _notify_hud(scene, prefix, highlight, suffix, tag):
+            """Forward proactive banners to the HUD only if it has been opened."""
+            hud = _hud_ref[0]
+            if hud is not None:
+                hud.notify_hud(scene, prefix, highlight, suffix, tag)
 
-    # ── Comet ─────────────────────────────────────────────────────────────────
-    # Start Comet minimised with its debugging port before Mo opens it himself —
-    # a Comet he starts has no port, and Chromium can't add one to a live
-    # process, which would leave browser automation logged out all session.
-    from tools.comet_tool import autostart as _comet_autostart
-    _comet_autostart()
+        proactive.set_hud_notify(_notify_hud)
+        proactive.start()
+        _services["proactive"] = proactive
 
-    # ── Read-only LAN dashboard (phone-viewable status page) ──────────────────
-    from core.dashboard import start_dashboard
-    start_dashboard()
+        # Macro speak callback (enables mid-macro TTS announcements)
+        from tools.macro_tool import set_speak_callback as _macro_speak_cb
+        _macro_speak_cb(voice_out.speak)
 
-    # ── Daily briefing ────────────────────────────────────────────────────────
-    from core.briefing import already_briefed_today, mark_briefed_today, get_briefing_prompt
+        # Spotify warm-up: refresh the token and find a device in the
+        # background so the first "play X" doesn't pay for it. No-op until
+        # Spotify has been authorised once.
+        from tools.spotify_tool import warm_up as _spotify_warm_up
+        _spotify_warm_up()
 
-    def _run_daily_briefing():
-        if already_briefed_today():
+        # Comet: start it minimised with its debugging port before Mo opens it
+        # himself — a Comet he starts has no port, and Chromium can't add one
+        # to a live process, which would leave browser automation logged out
+        # all session.
+        from tools.comet_tool import autostart as _comet_autostart
+        _comet_autostart()
+
+        # Read-only LAN dashboard (phone-viewable status page)
+        from core.dashboard import start_dashboard
+        start_dashboard()
+
+        print("[El Fager] Background services started.")
+
+    QTimer.singleShot(1500, _start_background_services)
+
+    # ── Startup health check (daemon thread, ~10 s after launch) ───────────
+    def _startup_health_check():
+        problems = []
+
+        key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not key or key.startswith("sk-ant-xxx"):
+            problems.append("ANTHROPIC_API_KEY missing — the brain cannot answer")
+        else:
+            try:
+                import anthropic
+                anthropic.Anthropic().models.list()  # free auth probe
+            except anthropic.AuthenticationError:
+                problems.append("Anthropic API key invalid — check .env")
+            except Exception:
+                pass  # network blips are not startup-fatal
+
+        if not os.getenv("GROQ_API_KEY", "").strip():
+            problems.append("GROQ_API_KEY not set — slower local Whisper + Edge TTS in use")
+
+        if getattr(memory, "degraded", False):
+            problems.append("Vector memory failed to load (facts still work)")
+
+        if not problems:
+            print("[El Fager] Health check: all critical services OK.")
             return
-        mark_briefed_today()
-        hud.run_briefing(get_briefing_prompt())
+        msg = " | ".join(problems)
+        print(f"[El Fager] Health check: {msg}")
+        try:
+            from winotify import Notification
+            Notification(
+                app_id="El Fager",
+                title="El Fager health check",
+                msg=msg[:256],
+                duration="long",
+            ).show()
+        except Exception:
+            pass
 
-    QTimer.singleShot(3000, _run_daily_briefing)
+    QTimer.singleShot(
+        10_000,
+        lambda: threading.Thread(target=_startup_health_check, daemon=True).start(),
+    )
 
-    # Show HUD on startup
-    hud.show()
-    hud.raise_()
-    hud.activateWindow()
+    # Launching is now a deliberate act (Desktop shortcut) — not a login
+    # autostart — so show the assistant. The daily briefing is NOT auto-run;
+    # it stays on the 7:30am schedule and the Command Center's Briefing button.
+    # First run only: an unnamed profile means we have never met.
+    if not profile.get("name", "").strip():
+        from ui.onboarding import OnboardingWindow
+        _onboarding = OnboardingWindow(voice_in, voice_out, wake_listener)
+        _onboarding.finished.connect(overlay.present)
+        _onboarding.open()
+    else:
+        overlay.present()
 
     print("[El Fager] Running. Press Ctrl+Space to activate.")
     sys.exit(app.exec())

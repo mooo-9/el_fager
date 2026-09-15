@@ -22,21 +22,10 @@ def isolated(tmp_path, monkeypatch):
 class TestSnapshot:
     def test_snapshot_has_all_sections_on_empty_disk(self, isolated):
         s = db.build_snapshot()
-        for key in ("generated_at", "mission", "cost", "skills", "tasks",
-                    "trading"):
+        for key in ("generated_at", "mission", "cost", "skills", "tasks"):
             assert key in s
         assert s["mission"]["active"] is False
         assert s["cost"]["today_usd"] == 0
-
-    def test_snapshot_reflects_trades(self, isolated):
-        (isolated / "data").mkdir()
-        (isolated / "data" / "trades.json").write_text(json.dumps([
-            {"symbol": "NVDA", "side": "buy", "qty": 2, "price": 100.5,
-             "timestamp": "2026-07-05T10:00:00", "conviction": 78.0},
-        ]), encoding="utf-8")
-        s = db.build_snapshot()
-        assert s["trading"]["total_trades"] == 1
-        assert s["trading"]["recent"][0]["symbol"] == "NVDA"
 
     def test_snapshot_never_contains_secrets(self, isolated):
         blob = json.dumps(db.build_snapshot()).lower()
@@ -75,6 +64,80 @@ class TestServer:
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(req, timeout=5)
         assert exc.value.code == 404  # only /api/command accepts POST
+
+
+class TestDesignTokens:
+    """The phone runs the same palette as the desktop, from the same source."""
+
+    def test_the_root_block_is_generated_from_ui_tokens(self):
+        from ui import tokens as t
+        css = db._token_css()
+        assert f"--accent-ember:{t.EMBER};" in css
+        assert f"--surface-1:{t.SURFACE_1};" in css
+        assert f"--text-hi:{t.TEXT_HI};" in css
+
+    def test_it_runs_dawn_not_cockpit(self):
+        # Cyan belongs to the Cockpit; the phone is the Command Center's
+        # companion, so the accent here is ember.
+        from ui import tokens as t
+        assert f"--accent-ember:{t.EMBER};" in db._token_css()
+        assert t.CK_STATE["listening"] not in db._token_css()
+
+    def test_no_colour_literals_are_left_in_the_page_css(self):
+        """Below :root everything must reference a token, or the phone can
+        drift from ui/tokens.py again — which is how it drifted before."""
+        import re
+        style = db._PAGE.split("<style>", 1)[1].split("</style>", 1)[0]
+        rules = style.split(db._token_css(), 1)[1]
+        assert re.findall(r"#[0-9A-Fa-f]{3,8}\b", rules) == []
+
+    def test_every_variable_the_page_uses_is_defined(self):
+        import re
+        used = set(re.findall(r"var\(--([a-z0-9-]+)\)", db._PAGE))
+        defined = set(re.findall(r"--([a-z0-9-]+):", db._token_css()))
+        assert used - defined == set()
+
+    def test_the_template_placeholders_are_filled(self):
+        assert "__TOKENS__" not in db._PAGE
+        assert "__FONTS__" not in db._PAGE
+
+
+class TestPhoneAssets:
+    @pytest.fixture
+    def server(self, isolated):
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), db._Handler)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        yield f"http://127.0.0.1:{srv.server_address[1]}"
+        srv.shutdown()
+
+    def test_the_bundled_faces_are_served(self, server):
+        for name in db._FONTS:
+            with urllib.request.urlopen(f"{server}/fonts/{name}", timeout=5) as r:
+                assert r.status == 200
+                assert r.headers["Content-Type"] == "font/ttf"
+                assert len(r.read()) > 1000
+
+    def test_the_page_declares_those_faces(self):
+        for family in (f for f, _ in db._FONTS.values()):
+            assert f"font-family:'{family}'" in db._PAGE
+
+    def test_the_font_route_serves_nothing_else(self, server):
+        for path in ("/fonts/settings.json", "/fonts/dashboard.py", "/fonts/"):
+            with pytest.raises(urllib.error.HTTPError) as exc:
+                urllib.request.urlopen(f"{server}{path}", timeout=5)
+            assert exc.value.code == 404
+
+    def test_it_is_installable(self, server):
+        with urllib.request.urlopen(f"{server}/manifest.webmanifest", timeout=5) as r:
+            manifest = json.loads(r.read().decode("utf-8"))
+        assert manifest["name"] == "El Fager"
+        assert manifest["display"] == "standalone"
+        with urllib.request.urlopen(f"{server}{manifest['icons'][0]['src']}",
+                                    timeout=5) as r:
+            assert r.status == 200
+            assert b"<svg" in r.read()
+        assert 'rel="manifest"' in db._PAGE
 
 
 class TestCommandChannel:

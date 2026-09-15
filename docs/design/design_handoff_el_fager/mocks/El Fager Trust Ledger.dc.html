@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Alexandria:wght@200..700&amp;family=Spline+Sans+Mono:wght@300..700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#02040A}
+input{font-family:'Space Grotesk','Alexandria',sans-serif}
+input::placeholder{color:#3A4A5C}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22)}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes fgrShimmer{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes fgrCaret{0%,45%{opacity:1}55%,100%{opacity:0}}
+</style>
+</helmet>
+<div data-screen-label="Trust Ledger" style="display:flex;flex-direction:column;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(1000px 700px at 25% 0%,#050B18 0%,#02040A 62%);font-family:'Space Grotesk','Alexandria',sans-serif">
+
+  <!-- header -->
+  <div style="position:relative;display:flex;align-items:center;gap:14px;padding:16px 40px 18px;flex:none">
+    <div style="position:absolute;left:0;bottom:0;width:320px;height:26px;background:radial-gradient(200px 26px at 44px 100%,rgba(56,224,255,0.14),transparent 70%);pointer-events:none"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0,#38E0FF 34px,rgba(56,224,255,0.3) 32%,rgba(255,255,255,0.06) 68%)"></div>
+    <div style="position:absolute;left:41px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:#38E0FF;box-shadow:0 0 8px #38E0FF"></div>
+    <a href="El Fager Cockpit v2.dc.html" title="Back to cockpit" style="width:30px;height:30px;border-radius:50%;background:#081120;border:1px solid rgba(255,255,255,0.12);display:grid;place-items:center;flex:none;text-decoration:none" style-hover="border-color:rgba(56,224,255,0.5)"><svg width="13" height="13" viewBox="0 0 14 14"><path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="#9FB1C2" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    <div>
+      <div style="font:500 15px 'Space Grotesk',sans-serif;color:#EAF2F7">Trust Ledger</div>
+      <div style="font:400 10px 'Spline Sans Mono',monospace;letter-spacing:.16em;color:#5F7183;margin-top:2px">EVERYTHING EL FAGER DID ON YOUR BEHALF · APPEND-ONLY</div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:22px">
+      <div style="text-align:right"><div style="font:500 16px 'Spline Sans Mono',monospace;color:#EAF2F7">{{ totalCount }}</div><div style="font:400 9px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5F7183">ENTRIES · 30 DAYS</div></div>
+      <div style="width:1px;height:28px;background:rgba(255,255,255,0.08)"></div>
+      <div style="text-align:right"><div style="font:500 16px 'Spline Sans Mono',monospace;color:#FFD782">{{ revocableCount }}</div><div style="font:400 9px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5F7183">STILL REVOCABLE</div></div>
+    </div>
+  </div>
+
+  <!-- search + filters -->
+  <div style="display:flex;align-items:center;gap:12px;padding:16px 40px 12px;flex:none">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;background:#081120;border:1px solid {{ searchBorder }};border-radius:99px;padding:9px 9px 9px 16px;transition:border-color 140ms">
+      <svg width="13" height="13" viewBox="0 0 14 14" style="flex:none"><circle cx="6" cy="6" r="4.2" fill="none" stroke="#5F7183" stroke-width="1.3"></circle><path d="M9.2 9.2 12.5 12.5" stroke="#5F7183" stroke-width="1.3" stroke-linecap="round"></path></svg>
+      <input ref="{{ qRef }}" value="{{ query }}" onChange="{{ onQuery }}" placeholder="Ask the ledger — “what did you send Omar?” · “ابعتلي كل حاجة اتبعتت امبارح”" style="flex:1;background:transparent;border:none;outline:none;font:400 13px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7;min-width:0"></input>
+      <div onClick="{{ voiceSearch }}" title="Ask by voice" style="display:inline-flex;align-items:center;gap:7px;background:rgba(56,224,255,0.12);border:1px solid rgba(56,224,255,0.35);border-radius:99px;padding:5px 12px;cursor:pointer;flex:none" style-hover="background:rgba(56,224,255,0.24)"><div style="display:flex;align-items:flex-end;gap:2px;height:11px"><div style="width:2px;height:5px;border-radius:1px;background:#8FF0FF"></div><div style="width:2px;height:10px;border-radius:1px;background:#8FF0FF"></div><div style="width:2px;height:7px;border-radius:1px;background:#8FF0FF"></div></div><div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#8FF0FF">ASK</div></div>
+    </div>
+    <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+      <div onClick="{{ f.pick }}" style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:{{ f.color }};background:{{ f.bg }};border:1px solid {{ f.border }};border-radius:99px;padding:6px 13px;cursor:pointer;flex:none;transition:all 140ms" style-hover="border-color:rgba(56,224,255,0.4)">{{ f.label }}</div>
+    </sc-for>
+  </div>
+
+  <!-- spoken answer strip -->
+  <sc-if value="{{ hasAnswer }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:4px 40px 8px;display:flex;gap:12px;align-items:flex-start;background:rgba(255,215,130,0.05);border:1px solid rgba(255,215,130,0.2);border-radius:14px;padding:14px 18px;flex:none">
+      <div style="width:3px;align-self:stretch;border-radius:2px;background:linear-gradient(180deg,#FFD782,transparent);flex:none"></div>
+      <div style="flex:1">
+        <div dir="auto" style="font:400 14.5px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7">{{ answer }}<span style="display:inline-block;width:6px;height:14px;background:#FFD782;border-radius:1px;vertical-align:-2px;margin:0 3px;animation:fgrCaret 1s steps(1) infinite;opacity:{{ caret }}"></span></div>
+        <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#5F7183;margin-top:6px">SPOKEN · ANSWERED FROM THE LEDGER, NOT THE MODEL</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- the ledger -->
+  <div style="flex:1;overflow-y:auto;padding:6px 40px 20px">
+    <sc-for list="{{ days }}" as="d" hint-placeholder-count="3">
+      <div style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 0 8px">
+          <div style="font:500 10.5px 'Spline Sans Mono',monospace;letter-spacing:.2em;color:#5F7183">{{ d.label }}</div>
+          <div style="flex:1;height:1px;background:rgba(255,255,255,0.06)"></div>
+          <div style="font:400 9.5px 'Spline Sans Mono',monospace;color:#3A4A5C">{{ d.count }}</div>
+        </div>
+        <sc-for list="{{ d.rows }}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;align-items:flex-start;gap:14px;padding:11px 14px;border-radius:12px;background:{{ r.bg }};border:1px solid {{ r.border }};margin-bottom:6px;transition:background 140ms" style-hover="background:#081120">
+            <div style="font:400 11px 'Spline Sans Mono',monospace;color:#5F7183;width:66px;flex:none;padding-top:2px">{{ r.time }}</div>
+            <div style="width:7px;height:7px;border-radius:50%;background:{{ r.dot }};box-shadow:0 0 8px {{ r.glow }};flex:none;margin-top:6px"></div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:{{ r.kindColor }}">{{ r.kind }}</div>
+                <div dir="auto" style="font:500 13.5px 'Space Grotesk','Alexandria',sans-serif;color:#EAF2F7">{{ r.title }}</div>
+                <sc-if value="{{ r.hasTarget }}" hint-placeholder-val="{{ false }}">
+                  <div style="font:400 11px 'Space Grotesk',sans-serif;color:#9FB1C2;background:#0D1B2E;border-radius:99px;padding:2px 9px">{{ r.target }}</div>
+                </sc-if>
+              </div>
+              <sc-if value="{{ r.hasBody }}" hint-placeholder-val="{{ false }}">
+                <div dir="auto" style="font:400 12.5px/1.6 'Space Grotesk','Alexandria',sans-serif;color:#9FB1C2;margin-top:4px">{{ r.body }}</div>
+              </sc-if>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                <div style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.1em;color:#3A4A5C">{{ r.provenance }}</div>
+                <sc-if value="{{ r.isRevoked }}" hint-placeholder-val="{{ false }}">
+                  <div style="font:500 9.5px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#FF5042">· REVOKED {{ r.revokedAt }}</div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="flex:none;display:flex;align-items:center;gap:8px;padding-top:2px">
+              <sc-if value="{{ r.canRevoke }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ r.revoke }}" style="font:500 11.5px 'Space Grotesk',sans-serif;color:#FFD782;border:1px solid rgba(255,215,130,0.35);border-radius:9px;padding:5px 12px;cursor:pointer;white-space:nowrap" style-hover="background:rgba(255,215,130,0.12)">{{ r.revokeLabel }}</div>
+              </sc-if>
+              <sc-if value="{{ r.isSealed }}" hint-placeholder-val="{{ false }}">
+                <div title="Past the revoke window — the ledger never rewrites history" style="font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.12em;color:#3A4A5C;white-space:nowrap">SEALED</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+    <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;place-items:center;padding:80px 0"><div style="text-align:center"><div style="font:400 14px 'Space Grotesk',sans-serif;color:#5F7183">Nothing matches that.</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#3A4A5C;margin-top:6px">TRY A NAME, A CHANNEL, OR “YESTERDAY”</div></div></div>
+    </sc-if>
+  </div>
+
+  <!-- footer law -->
+  <div style="display:flex;align-items:center;gap:22px;padding:12px 40px;border-top:1px solid rgba(255,255,255,0.06);flex:none">
+    <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.18em;color:#38E0FF;flex:none">THE LAW</div>
+    <div style="font:400 12px 'Space Grotesk',sans-serif;color:#5F7183">Append-only — entries are never edited or deleted. A revoke writes a <span style="color:#9FB1C2">new</span> entry that undoes the old one; the original stays visible. Stored locally, encrypted at rest, never leaves the machine.</div>
+    <div style="margin-left:auto;font:400 9.5px 'Spline Sans Mono',monospace;letter-spacing:.14em;color:#3A4A5C;white-space:nowrap">LOCAL · {{ totalCount }} ENTRIES</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1180px&quot;,&quot;height&quot;:&quot;820px&quot;}}">
+class Component extends DCLogic {
+  state = { query: '', filter: 'all', answer: '', speaking: false, revoked: {}, extra: [] };
+  qRef = React.createRef();
+  timers = [];
+
+  componentWillUnmount() { this.timers.forEach(clearTimeout); if (this.iv) clearInterval(this.iv); }
+  wait(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
+
+  // ── the ledger data: every kind of thing an agent does ──
+  rows() {
+    const base = [
+      { id: 'a1', day: 0, time: '2:36 PM', kind: 'WHATSAPP', cat: 'sent', title: 'Message sent', target: 'Omar Adel', body: 'الميتنج اتأجل لبكرة الساعة ٣ — تمام معاك؟', prov: 'YOU SAID “ابعت لعمر” · CONFIRMED BY VOICE', revoke: 'Delete for all', window: true },
+      { id: 'a2', day: 0, time: '2:34 PM', kind: 'CALENDAR', cat: 'changed', title: 'Moved API review', target: 'Thu 3:00 PM', body: 'Was Tue 3:00 PM · 3 guests re-invited', prov: 'CHAINED FROM THE SAME REQUEST', revoke: 'Restore old time', window: true },
+      { id: 'a3', day: 0, time: '2:10 PM', kind: 'HEALTH', cat: 'logged', title: 'Meal logged', target: '620 kcal', body: 'Chicken, rice, salad — protein +48g', prov: 'YOU SAID “LOG LUNCH”', revoke: 'Remove entry', window: true },
+      { id: 'a4', day: 0, time: '1:52 PM', kind: 'MEMORY', cat: 'learned', title: 'Learned a fact', body: '“Prefers Arabic with Omar, English with Ahmed”', prov: 'INFERRED FROM 6 EXCHANGES · CONFIDENCE HIGH', revoke: 'Forget', window: true },
+      { id: 'a5', day: 0, time: '11:04 AM', kind: 'GMAIL', cat: 'read', title: 'Read 12 messages', body: 'Summarized 3 as priority · nothing sent', prov: 'MORNING BRIEFING ROUTINE', window: false },
+      { id: 'b1', day: 1, time: '7:31 PM', kind: 'GMAIL', cat: 'sent', title: 'Email sent', target: 'Ahmed Fouad', body: 'Re: API review — I can own the auth section. Thursday works.', prov: 'YOU SAID “TELL HIM YES” · CONFIRMED BY VOICE', window: false },
+      { id: 'b2', day: 1, time: '7:12 PM', kind: 'TODOIST', cat: 'changed', title: 'Closed 3 tasks', target: 'Triage by voice', body: 'Reply to Omar · Fix Stripe card · Renew domain (moved to Fri)', prov: 'VOICE TRIAGE SESSION', window: false },
+      { id: 'b3', day: 1, time: '6:48 PM', kind: 'BROWSER', cat: 'acted', title: 'Updated payment method', target: 'stripe.com', body: 'Filled saved card · you approved the final submit', prov: 'STAGED, PREVIEWED, CONFIRMED BY CLICK', window: false },
+      { id: 'b4', day: 1, time: '1:00 PM', kind: 'SYSTEM', cat: 'acted', title: 'Focus mode ran', body: 'Silenced notifications 1:00–3:00 PM · held 4 knocks', prov: 'PROPOSED AUTOMATION YOU APPROVED JUL 9', window: false },
+      { id: 'c1', day: 2, time: '9:22 PM', kind: 'WHATSAPP', cat: 'sent', title: 'Message sent', target: 'Mum', body: 'هوصل الساعة ٨ إن شاء الله', prov: 'YOU SAID “قولها هوصل ٨”', window: false },
+      { id: 'c2', day: 2, time: '8:40 AM', kind: 'MEMORY', cat: 'learned', title: 'Learned a fact', body: '“Push/pull/legs split, gym at 7 PM”', prov: 'INFERRED FROM CALENDAR + 11 LOGS', window: false },
+      { id: 'c3', day: 2, time: '8:02 AM', kind: 'NEWS', cat: 'read', title: 'Read your brief', body: '6 sources · 3 min · nothing shared', prov: 'MORNING BRIEFING ROUTINE', window: false }
+    ];
+    return base.concat(this.state.extra);
+  }
+
+  matches(r) {
+    const f = this.state.filter;
+    if (f !== 'all' && r.cat !== f) return false;
+    const q = this.state.query.trim().toLowerCase();
+    if (!q) return true;
+    if (/yesterday|امبارح/.test(q) && r.day !== 1) return false;
+    if (/today|النهارده/.test(q) && r.day !== 0) return false;
+    const bag = [r.kind, r.title, r.target || '', r.body || '', r.prov].join(' ').toLowerCase();
+    return q.split(/\s+/).filter((w) => !/^(what|did|you|send|show|me|all|the|كل|حاجة|ابعتلي|اتبعتت)$/.test(w)).every((w) => bag.includes(w)) || bag.includes(q);
+  }
+
+  speak(text) {
+    if (this.iv) clearInterval(this.iv);
+    let i = 0;
+    this.setState({ answer: '', speaking: true });
+    this.iv = setInterval(() => {
+      i += 2;
+      this.setState({ answer: text.slice(0, i) });
+      if (i >= text.length) { clearInterval(this.iv); this.iv = null; this.setState({ speaking: false }); }
+    }, 18);
+  }
+
+  voiceSearch() {
+    const q = 'what did you send Omar';
+    this.setState({ query: q, filter: 'sent' });
+    this.wait(() => this.speak('Two messages to Omar in the last week — one moving today’s meeting to tomorrow at 3, one two days ago about the gym. The meeting one is still inside the delete window.'), 350);
+  }
+
+  revoke(r) {
+    const revoked = { ...this.state.revoked, [r.id]: this.now() };
+    const undoRow = {
+      id: 'u' + r.id, day: 0, time: this.now(), kind: r.kind, cat: 'revoked',
+      title: r.revoke || 'Revoked', target: r.target, body: 'Undid: ' + r.title.toLowerCase() + (r.body ? ' — “' + r.body.slice(0, 44) + (r.body.length > 44 ? '…' : '') + '”' : ''),
+      prov: 'YOU REVOKED IT FROM THE LEDGER', window: false
+    };
+    this.setState({ revoked, extra: [undoRow, ...this.state.extra] });
+    this.speak('Done — pulled it back and wrote the reversal into the ledger. The original entry stays, marked revoked.');
+  }
+  now() {
+    const d = new Date(); let h = d.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+  }
+
+  renderVals() {
+    const CAT = {
+      sent: { dot: '#FFD782', glow: 'rgba(255,215,130,0.6)', kind: '#FFD782' },
+      changed: { dot: '#5B8DEF', glow: 'rgba(91,141,239,0.6)', kind: '#8FA9F4' },
+      logged: { dot: '#56C99C', glow: 'rgba(86,201,156,0.5)', kind: '#56C99C' },
+      learned: { dot: '#A48BF5', glow: 'rgba(164,139,245,0.55)', kind: '#BFAcF8' },
+      read: { dot: '#38E0FF', glow: 'rgba(56,224,255,0.45)', kind: '#8FF0FF' },
+      acted: { dot: '#F09950', glow: 'rgba(240,153,80,0.5)', kind: '#F09950' },
+      revoked: { dot: '#FF5042', glow: 'rgba(255,80,66,0.5)', kind: '#FF5042' }
+    };
+    const all = this.rows();
+    const shown = all.filter((r) => this.matches(r));
+    const dayLabels = ['TODAY · TUE 14 JUL', 'YESTERDAY · MON 13 JUL', 'SUN 12 JUL'];
+    const days = [0, 1, 2].map((d) => {
+      const rows = shown.filter((r) => r.day === d);
+      return {
+        label: dayLabels[d], count: rows.length + (rows.length === 1 ? ' ENTRY' : ' ENTRIES'), rows: rows.map((r) => {
+          const c = CAT[r.cat] || CAT.read;
+          const isRev = !!this.state.revoked[r.id];
+          return {
+            time: r.time, kind: r.kind, title: r.title, target: r.target || '', hasTarget: !!r.target,
+            body: r.body || '', hasBody: !!r.body, provenance: r.prov,
+            dot: isRev ? '#3A4A5C' : c.dot, glow: isRev ? 'transparent' : c.glow, kindColor: isRev ? '#3A4A5C' : c.kind,
+            bg: r.cat === 'revoked' ? 'rgba(255,80,66,0.04)' : (isRev ? 'rgba(255,255,255,0.01)' : '#050B18'),
+            border: r.cat === 'revoked' ? 'rgba(255,80,66,0.2)' : 'rgba(255,255,255,0.06)',
+            canRevoke: !!r.window && !isRev, revokeLabel: r.revoke || 'Undo',
+            isSealed: !r.window && !isRev && r.cat !== 'revoked',
+            isRevoked: isRev, revokedAt: this.state.revoked[r.id] || '',
+            revoke: () => this.revoke(r)
+          };
+        })
+      };
+    }).filter((d) => d.rows.length);
+
+    const F = [['all', 'ALL'], ['sent', 'SENT'], ['changed', 'CHANGED'], ['read', 'READ'], ['learned', 'LEARNED']];
+    return {
+      qRef: this.qRef, query: this.state.query,
+      searchBorder: this.state.query ? 'rgba(56,224,255,0.4)' : 'rgba(255,255,255,0.1)',
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      voiceSearch: () => this.voiceSearch(),
+      filters: F.map(([id, label]) => ({
+        label, pick: () => this.setState({ filter: id }),
+        color: this.state.filter === id ? '#04121A' : '#9FB1C2',
+        bg: this.state.filter === id ? '#38E0FF' : '#081120',
+        border: this.state.filter === id ? '#38E0FF' : 'rgba(255,255,255,0.1)'
+      })),
+      days, isEmpty: !days.length,
+      totalCount: all.length + 118,
+      revocableCount: all.filter((r) => r.window && !this.state.revoked[r.id]).length,
+      hasAnswer: !!this.state.answer, answer: this.state.answer, caret: this.state.speaking ? '1' : '0'
+    };
+  }
+}
+</script>
+</body>
+</html>

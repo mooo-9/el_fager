@@ -37,6 +37,13 @@ SCOPE = (
     "user-read-private"
 )
 
+# Reading Liked Songs, to teach Whisper the names in them (core/voice_liked.py).
+# A login of its own: adding this scope to playback's would make spotipy find
+# the saved token short of a scope and reopen the browser on the next "play".
+# Granted once with scripts/spotify_library_login.py.
+LIBRARY_SCOPE = "user-library-read"
+LIBRARY_CACHE = "data/.spotify_library_cache"
+
 MOODS: dict = {
     "chill":   "chill vibes playlist",
     "relax":   "relaxing music playlist",
@@ -46,7 +53,6 @@ MOODS: dict = {
     "study":   "lofi study music playlist",
     "hype":    "hype energy playlist",
     "workout": "workout motivation gym playlist",
-    "arabic":  "arabic music hits playlist",
     "sleep":   "sleep ambient music playlist",
 }
 
@@ -82,6 +88,35 @@ def get_spotify():
         return _sp_client
     except Exception as e:
         print(f"[El Fager] Spotify auth failed: {e}")
+        return None
+
+
+def get_library_client():
+    """A read-only client for Liked Songs from the saved library login, or None.
+
+    Never interactive: with no saved login, or one that can no longer refresh,
+    it returns None rather than opening a browser or waiting on input — it
+    runs from a background thread. The token is taken as it stands (refreshed
+    if expired) and handed over directly, so no later call can re-prompt.
+    """
+    if not SPOTIFY_AVAILABLE:
+        return None
+    try:
+        import spotipy
+        from spotipy.oauth2 import SpotifyOAuth
+        auth = SpotifyOAuth(
+            client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"),
+            scope=LIBRARY_SCOPE,
+            cache_path=LIBRARY_CACHE,
+            open_browser=False,
+        )
+        token = auth.validate_token(auth.cache_handler.get_cached_token())
+        if not token:
+            return None
+        return spotipy.Spotify(auth=token["access_token"])
+    except Exception:
         return None
 
 
@@ -319,6 +354,13 @@ def play_music(query: str, arabic: bool = False) -> str:
         tracks = results.get("tracks", {}).get("items", [])
         if tracks:
             _start_playback(sp, dev, uris=[tracks[0]["uri"]])
+            try:
+                # Its real spelling teaches Whisper the name, if the song is kept.
+                from core import voice_learned
+                voice_learned.played(tracks[0]["name"],
+                                     [a["name"] for a in tracks[0].get("artists", [])])
+            except Exception:
+                pass                   # learning a name never stops the music
             return (f"بشغّل: {_fmt_track(tracks[0])}" if arabic
                     else f"Playing: {_fmt_track(tracks[0])}")
 

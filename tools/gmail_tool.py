@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 CREDENTIALS_PATH = "data/credentials.json"
 TOKEN_PATH = "data/token_gmail.json"   # kept separate so calendar auth is untouched
 GMAIL_AVAILABLE = os.path.exists(CREDENTIALS_PATH)
+HTTP_TIMEOUT_SEC = 30
 
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
 SCOPES = [
@@ -54,10 +55,17 @@ def get_gmail_service():
                     creds = None
             if not refreshed:
                 flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-                creds = flow.run_local_server(port=0)
+                # Bounded: in pythonw there is no console, and an unanswered
+                # login page would otherwise hold the send open forever.
+                creds = flow.run_local_server(port=0, timeout_seconds=120)
             with open(TOKEN_PATH, "w") as f:
                 f.write(creds.to_json())
-        return build("gmail", "v1", credentials=creds)
+        # httplib2 waits forever by default; a stalled connection used to
+        # leave "yes send it" hanging with the turn never finishing.
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        http = AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT_SEC))
+        return build("gmail", "v1", http=http)
     except Exception as e:
         print(f"[El Fager] Gmail auth failed: {e}")
         return None
@@ -122,6 +130,19 @@ def _fmt_date(date_str: str) -> str:
         return dt.strftime("%a, %b %d %H:%M")
     except Exception:
         return date_str[:16] if date_str else "unknown date"
+
+
+def _learn_name(address: str) -> None:
+    """The name on "Ahmed Adel <ahmed@...>" is one Whisper should know. A bare
+    address has none, and its local part isn't a name anyone says."""
+    try:
+        from email.utils import parseaddr
+        from core import voice_learned
+        name = parseaddr(address or "")[0].strip().strip('"')
+        if name:
+            voice_learned.contacted(name)
+    except Exception:
+        pass                  # learning a name never gets in the way of email
 
 
 def _encode_mime(msg) -> str:
@@ -212,6 +233,7 @@ def read_message(msg_id: str) -> str:
         )
         hdrs    = msg.get("payload", {}).get("headers", [])
         sender  = _get_header(hdrs, "From")
+        _learn_name(sender)
         to      = _get_header(hdrs, "To")
         subject = _get_header(hdrs, "Subject") or "(no subject)"
         date    = _fmt_date(_get_header(hdrs, "Date"))
@@ -249,6 +271,8 @@ def send_message(to: str, subject: str, body: str) -> str:
     if not GMAIL_AVAILABLE:
         return _NOT_SET_UP
 
+    from core import staging
+
     _pending_send.clear()
     _pending_send.update({
         "type": "new",
@@ -257,6 +281,15 @@ def send_message(to: str, subject: str, body: str) -> str:
         "body": body,
         "expires_at": datetime.now(CAIRO_TZ) + timedelta(minutes=5),
     })
+    staging.stage(
+        medium="gmail",
+        target=to,
+        body=body,
+        subject=subject,
+        expires_at=_pending_send["expires_at"],
+        confirm=confirm_send_message,
+        cancel=_pending_send.clear,
+    )
 
     preview = body[:200] + ("..." if len(body) > 200 else "")
     return (
@@ -273,11 +306,14 @@ def confirm_send_message() -> str:
     if not GMAIL_AVAILABLE:
         return _NOT_SET_UP
 
+    from core import staging
+
     if not _pending_send:
         return "No email staged — compose one first (e.g. 'send email to X about Y')."
 
     if datetime.now(CAIRO_TZ) > _pending_send.get("expires_at", datetime.min.replace(tzinfo=CAIRO_TZ)):
         _pending_send.clear()
+        staging.resolve("expired")
         return "Send request expired (5-minute limit) — say 'send email to ...' again."
 
     service = get_gmail_service()
@@ -301,10 +337,13 @@ def confirm_send_message() -> str:
 
         service.users().messages().send(userId="me", body=send_body).execute()
         _pending_send.clear()
+        staging.resolve("sent", f"gmail → {pending['to']} · sent")
+        _learn_name(pending["to"])
         return f"Sent to {pending['to']} — Subject: {pending['subject']}"
 
     except Exception as e:
         _pending_send.clear()
+        staging.resolve("failed")
         return f"[Gmail send error: {e}]"
 
 
@@ -336,6 +375,8 @@ def reply_to_message(msg_id: str, body: str) -> str:
             else f"Re: {original_subject}"
         )
 
+        from core import staging
+
         _pending_send.clear()
         _pending_send.update({
             "type": "reply",
@@ -346,6 +387,15 @@ def reply_to_message(msg_id: str, body: str) -> str:
             "thread_id": thread_id,
             "expires_at": datetime.now(CAIRO_TZ) + timedelta(minutes=5),
         })
+        staging.stage(
+            medium="gmail",
+            target=original_from,
+            body=body,
+            subject=reply_subject,
+            expires_at=_pending_send["expires_at"],
+            confirm=confirm_reply_message,
+            cancel=_pending_send.clear,
+        )
 
         preview = body[:200] + ("..." if len(body) > 200 else "")
         return (

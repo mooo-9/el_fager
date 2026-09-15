@@ -7,6 +7,7 @@ to opening the relevant YouTube page in Comet, so a "play X" always gets Mo
 somewhere useful even if YouTube changes its markup.
 """
 
+import html
 import re
 import urllib.parse
 
@@ -25,6 +26,8 @@ _TIMEOUT = 10
 _WATCH = "https://www.youtube.com/watch?v={}"
 _SEARCH_PAGE = "https://www.youtube.com/results?search_query={}"
 _FEED = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
+# YouTube's search with its "channels only" filter.
+_CHANNEL_SEARCH = "https://www.youtube.com/results?search_query={}&sp=EgIQAg%3D%3D"
 
 
 def _extract_video_id(url_or_id: str) -> str | None:
@@ -49,7 +52,7 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
     """
     Fetch the transcript of a YouTube video.
     url      — full YouTube URL or bare video ID
-    language — preferred language code (e.g. 'en', 'ar'); auto-detects if omitted
+    language — preferred transcript language code; defaults to English
     """
     try:
         from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
@@ -60,18 +63,22 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
     if not video_id:
         return f"Could not extract a YouTube video ID from: {url}"
 
+    # youtube-transcript-api 1.x replaced the classmethod API with an instance
+    # one: list_transcripts() became list(). The old call raised AttributeError,
+    # which the except below swallowed into a returned string — so this failed
+    # silently rather than loudly.
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_list = YouTubeTranscriptApi().list(video_id)
     except TranscriptsDisabled:
         return f"Transcripts are disabled for this video ({video_id})."
     except Exception as e:
         return f"[YouTube error: {e}]"
 
-    # Preference order: requested language, then English, then Arabic, then any
+    # Preference order: requested language, then English, then any
     candidates = []
     if language:
         candidates.append([language])
-    candidates += [["en"], ["ar"], ["a.en"], ["a.ar"]]
+    candidates += [["en"], ["a.en"]]
 
     transcript = None
     lang_label = "unknown"
@@ -97,11 +104,17 @@ def get_youtube_transcript(url: str, language: str = None) -> str:
         return f"No transcript available for video {video_id}."
 
     try:
-        entries = transcript.fetch()
+        entries = list(transcript.fetch())
     except Exception as e:
         return f"[Could not fetch transcript: {e}]"
 
-    text = " ".join(e["text"].replace("\n", " ") for e in entries)
+    # 1.x yields FetchedTranscriptSnippet objects, not dicts. Accept either, so
+    # the tool survives the next version bump in whichever direction it goes.
+    def _text(entry) -> str:
+        raw = entry["text"] if isinstance(entry, dict) else getattr(entry, "text", "")
+        return raw.replace("\n", " ")
+
+    text = " ".join(_text(e) for e in entries)
 
     MAX_CHARS = 14_000
     truncated = ""
@@ -201,43 +214,83 @@ def _channel_id(channel: str) -> "str | None":
     return None
 
 
+def _search_channels(name: str) -> "list[str]":
+    """Channel IDs YouTube's own channel search returns for a name, best first."""
+    try:
+        resp = httpx.get(_CHANNEL_SEARCH.format(urllib.parse.quote_plus(name)),
+                         headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True)
+    except Exception:
+        return []
+    if resp.status_code != 200:
+        return []
+    ids: list[str] = []
+    for cid in re.findall(r'"channelRenderer":\{"channelId":"(UC[\w-]{22})"', resp.text):
+        if cid not in ids:
+            ids.append(cid)
+    return ids[:4]
+
+
+def _channels_to_try(channel: str):
+    """The handle or URL guess first, then YouTube's channel search — asked only
+    if the guess doesn't pan out. "Erzaa" guessed @Erzaa, an empty channel that
+    isn't his; "Marwan Moussa" guessed a handle that doesn't exist."""
+    first = _channel_id(channel)
+    if first:
+        yield first
+    for cid in _search_channels(channel):
+        if cid != first:
+            yield cid
+
+
+def _newest_in_feed(chan_id: str) -> "tuple[str, str] | None":
+    """(video_id, title) of a channel's newest upload; None if it has none.
+    Raises when the feed can't be read."""
+    resp = httpx.get(_FEED.format(chan_id), headers=_HEADERS, timeout=_TIMEOUT,
+                     follow_redirects=True)
+    if resp.status_code != 200:
+        raise RuntimeError(f"feed returned {resp.status_code}")
+    # The feed is newest-first; entries carry videoId and title.
+    vid = re.search(r"<yt:videoId>([\w-]{11})</yt:videoId>", resp.text)
+    if not vid:
+        return None
+    # The first <title> is the channel's; the second is the newest video.
+    titles = re.findall(r"<title>(.*?)</title>", resp.text, re.DOTALL)
+    # Feed titles are XML-escaped: '&quot;Over Each Other&quot;' read aloud badly.
+    return vid.group(1), (html.unescape(titles[1].strip()) if len(titles) > 1 else "")
+
+
 def youtube_latest(channel: str, open_it: bool = True) -> str:
     """Open the newest video from a channel. Channel can be a handle, name,
     URL, or channel ID."""
     from tools.comet_tool import open_url
 
-    chan_id = _channel_id(channel)
-    if chan_id is None:
+    first_id, error = None, None
+    for chan_id in _channels_to_try(channel):
+        first_id = first_id or chan_id
+        try:
+            found = _newest_in_feed(chan_id)
+        except Exception as e:
+            error = error or e
+            continue
+        if found:
+            video_id, video_title = found
+            url = _WATCH.format(video_id)
+            if open_it:
+                open_url(url)
+                return f"Latest from {channel}: {video_title or url}"
+            return f"{video_title or 'Latest video'} — {url}"
+
+    if first_id is None:
         # Fall back to searching for the channel so Mo still lands somewhere.
         if open_it:
             open_url(_SEARCH_PAGE.format(urllib.parse.quote_plus(channel)))
             return f"Couldn't find the channel '{channel}' — opened a YouTube search instead."
         return f"[Could not resolve channel '{channel}']"
 
-    try:
-        resp = httpx.get(_FEED.format(chan_id), headers=_HEADERS, timeout=_TIMEOUT,
-                         follow_redirects=True)
-        if resp.status_code != 200:
-            raise RuntimeError(f"feed returned {resp.status_code}")
-        # The feed is newest-first; entries carry videoId and title.
-        vid = re.search(r"<yt:videoId>([\w-]{11})</yt:videoId>", resp.text)
-        # The first <title> is the channel's; the second is the newest video.
-        titles = re.findall(r"<title>(.*?)</title>", resp.text, re.DOTALL)
-        video_title = titles[1].strip() if len(titles) > 1 else ""
-    except Exception as e:
-        if open_it:
-            open_url(f"https://www.youtube.com/channel/{chan_id}/videos")
-            return f"Opened {channel}'s videos — couldn't read the feed ({e})."
-        return f"[Could not read the feed for '{channel}': {e}]"
-
-    if not vid:
-        if open_it:
-            open_url(f"https://www.youtube.com/channel/{chan_id}/videos")
-            return f"Opened {channel}'s videos — the feed had no entries."
-        return f"[No videos in the feed for '{channel}']"
-
-    url = _WATCH.format(vid.group(1))
     if open_it:
-        open_url(url)
-        return f"Latest from {channel}: {video_title or url}"
-    return f"{video_title or 'Latest video'} — {url}"
+        open_url(f"https://www.youtube.com/channel/{first_id}/videos")
+    if error:
+        return (f"Opened {channel}'s videos — couldn't read the feed ({error})." if open_it
+                else f"[Could not read the feed for '{channel}': {error}]")
+    return (f"Opened {channel}'s videos — the feed had no entries." if open_it
+            else f"[No videos in the feed for '{channel}']")

@@ -10,7 +10,6 @@ import time
 
 FEEDS: dict[str, str] = {
     "world":    "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "arabic":   "https://www.aljazeera.net/xml/rss2.0.xml",
     "tech":     "https://techcrunch.com/feed/",
     "science":  "https://feeds.feedburner.com/sciencedailyheadlines",
     "egypt":    "https://english.ahram.org.eg/rss.aspx",
@@ -20,7 +19,6 @@ FEEDS: dict[str, str] = {
 
 _SOURCE_NAMES = {
     "world":    "BBC World",
-    "arabic":   "Al Jazeera Arabic",
     "tech":     "TechCrunch",
     "science":  "Science Daily",
     "egypt":    "Al-Ahram English",
@@ -69,7 +67,7 @@ def _entry_url(entry) -> str:
 def get_news(category: str = "world", n: int = 5) -> str:
     """
     Fetch top headlines for a category.
-    category — world | arabic | tech | science | egypt | business | sports
+    category — world | tech | science | egypt | business | sports
     n        — number of headlines (default 5)
     Articles are cached by index so Mo can say 'read article 1'.
     """

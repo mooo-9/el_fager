@@ -39,6 +39,8 @@ class TestCometResolution:
         monkeypatch.delenv("PROGRAMFILES", raising=False)
         monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
         monkeypatch.delenv("PROGRAMW6432", raising=False)
+        # The registry would still find a Comet installed on this machine.
+        monkeypatch.setattr(comet, "_from_registry", lambda: None)
         assert comet.comet_path() is None
         assert not comet.is_available()
 
@@ -57,14 +59,15 @@ class TestOpenUrl:
              patch.object(comet, "_REMOTE_DEBUG", False), \
              patch.object(comet, "subprocess") as sub:
             assert comet.open_url("https://example.com") is True
-        sub.Popen.assert_called_once_with([r"C:\Comet.exe", "https://example.com"])
+        sub.Popen.assert_called_once_with(
+            [r"C:\Comet.exe", "--profile-directory=Default", "https://example.com"])
 
     def test_launches_comet_bare_when_no_url(self):
         with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
              patch.object(comet, "_REMOTE_DEBUG", False), \
              patch.object(comet, "subprocess") as sub:
             comet.open_url()
-        sub.Popen.assert_called_once_with([r"C:\Comet.exe"])
+        sub.Popen.assert_called_once_with([r"C:\Comet.exe", "--profile-directory=Default"])
 
     def test_everyday_launch_is_attachable(self):
         """open_url is what usually starts Comet, so it carries the debugging
@@ -96,11 +99,25 @@ class TestLaunchArgs:
         with patch.object(comet, "_REMOTE_DEBUG", True), \
              patch.object(comet, "_DEBUG_PORT", "9222"):
             assert comet._launch_args(r"C:\Comet.exe", "https://x.com") == [
-                r"C:\Comet.exe", "--remote-debugging-port=9222", "https://x.com"]
+                r"C:\Comet.exe", "--profile-directory=Default",
+                "--remote-debugging-port=9222", "https://x.com"]
 
     def test_no_debug_port_when_disabled(self):
         with patch.object(comet, "_REMOTE_DEBUG", False):
-            assert comet._launch_args(r"C:\Comet.exe") == [r"C:\Comet.exe"]
+            assert comet._launch_args(r"C:\Comet.exe") == [
+                r"C:\Comet.exe", "--profile-directory=Default"]
+
+    def test_links_open_in_mos_own_profile(self):
+        """Comet has three profiles (mo, mm, saheb ziad). A bare launch hands the
+        link to whichever was last active, so a video could open signed in as
+        someone else. "Default" is Mo's."""
+        args = comet._launch_args(r"C:\Comet.exe", "https://youtube.com/watch?v=x")
+        assert "--profile-directory=Default" in args
+        assert args.index("--profile-directory=Default") < args.index("https://youtube.com/watch?v=x")
+
+    def test_the_profile_can_be_changed_from_env(self):
+        with patch.object(comet, "_PROFILE", "Profile 2"):
+            assert "--profile-directory=Profile 2" in comet._launch_args(r"C:\Comet.exe")
 
 
 class TestAutostart:
@@ -153,8 +170,8 @@ class TestAutostart:
 
 
 class TestAutomationContext:
-    """Automation attaches to Mo's running Comet so his logins carry. When it
-    can't, it must still work — logged out, on a throwaway profile."""
+    """Automation only ever drives Mo's own signed-in "mo" Comet. It used to
+    fall back to a logged-out throwaway browser, which Mo doesn't want."""
 
     def _playwright(self, contexts=("his-context",)):
         pw = MagicMock()
@@ -163,75 +180,95 @@ class TestAutomationContext:
         pw.chromium.connect_over_cdp.return_value = browser
         return pw, browser
 
+    def _run(self, pw, headless=False, **overrides):
+        from contextlib import ExitStack
+        values = dict(comet_path=r"C:\Comet.exe", cdp_alive=False,
+                      _comet_running=False, _start_debuggable_comet=True,
+                      _close_comet=True)
+        values.update(overrides)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(comet, "_REMOTE_DEBUG", True))
+            mocks = {name: stack.enter_context(patch.object(comet, name, return_value=value))
+                     for name, value in values.items()}
+            return comet.automation_context(pw, headless=headless), mocks
+
     def test_attaches_to_running_comet_and_reuses_his_context(self):
         pw, browser = self._playwright()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", True), \
-             patch.object(comet, "cdp_alive", return_value=True):
-            b, ctx, owned = comet.automation_context(pw)
+        (b, ctx, owned), _ = self._run(pw, cdp_alive=True)
         assert (b, ctx) == (browser, "his-context")
         assert owned is False, "his browser must not be ours to close"
         pw.chromium.launch.assert_not_called()
 
-    def test_starts_comet_when_not_yet_attachable(self):
-        pw, browser = self._playwright()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", True), \
-             patch.object(comet, "cdp_alive", return_value=False), \
-             patch.object(comet, "_start_debuggable_comet", return_value=True) as start:
-            _, _, owned = comet.automation_context(pw)
-        start.assert_called_once()
+    def test_starts_his_comet_when_it_isnt_running(self):
+        pw, _ = self._playwright()
+        (_, _, owned), mocks = self._run(pw)
+        mocks["_start_debuggable_comet"].assert_called_once()
+        mocks["_close_comet"].assert_not_called()
         assert owned is False
 
-    def test_falls_back_when_comet_is_not_attachable(self):
+    def test_reopens_a_comet_mo_started_without_the_port(self):
+        """A Comet opened from the taskbar has no debugging port; it is closed
+        gracefully and reopened on his profile with one. Its tabs come back."""
         pw, _ = self._playwright()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", True), \
-             patch.object(comet, "cdp_alive", return_value=False), \
-             patch.object(comet, "_start_debuggable_comet", return_value=False):
-            _, _, owned = comet.automation_context(pw)
-        pw.chromium.launch.assert_called_once_with(headless=False)
-        assert owned is True
+        (_, _, owned), mocks = self._run(pw, _comet_running=True)
+        mocks["_close_comet"].assert_called_once()
+        mocks["_start_debuggable_comet"].assert_called_once()
+        assert owned is False
 
-    def test_falls_back_when_the_attach_itself_fails(self):
+    def test_never_falls_back_to_a_logged_out_browser(self):
+        pw, _ = self._playwright()
+        with pytest.raises(comet.CometUnavailable):
+            self._run(pw, _start_debuggable_comet=False)
+        pw.chromium.launch.assert_not_called()
+
+    def test_a_comet_that_wont_close_is_reported_not_worked_around(self):
+        pw, _ = self._playwright()
+        with pytest.raises(comet.CometUnavailable):
+            self._run(pw, _comet_running=True, _close_comet=False)
+        pw.chromium.launch.assert_not_called()
+
+    def test_a_failed_attach_is_reported_not_worked_around(self):
         pw, _ = self._playwright()
         pw.chromium.connect_over_cdp.side_effect = RuntimeError("refused")
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", True), \
-             patch.object(comet, "cdp_alive", return_value=True):
-            _, _, owned = comet.automation_context(pw)
-        pw.chromium.launch.assert_called_once()
-        assert owned is True
+        with pytest.raises(comet.CometUnavailable):
+            self._run(pw, cdp_alive=True)
+        pw.chromium.launch.assert_not_called()
 
     def test_headless_never_attaches(self):
         """research_agent reads public pages in bulk — it needs no login and
         must not open tabs in Mo's face."""
         pw, _ = self._playwright()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", True), \
-             patch.object(comet, "cdp_alive", return_value=True):
-            _, _, owned = comet.automation_context(pw, headless=True)
+        (_, _, owned), _ = self._run(pw, headless=True, cdp_alive=True)
         pw.chromium.connect_over_cdp.assert_not_called()
         pw.chromium.launch.assert_called_once_with(headless=True)
         assert owned is True
 
-    def test_remote_debug_disabled_uses_a_fresh_profile(self):
+    def test_without_the_debug_port_setting_it_refuses(self):
         pw, _ = self._playwright()
-        with patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"), \
-             patch.object(comet, "_REMOTE_DEBUG", False):
-            _, _, owned = comet.automation_context(pw)
-        pw.chromium.connect_over_cdp.assert_not_called()
-        assert owned is True
+        with patch.object(comet, "_REMOTE_DEBUG", False), \
+             patch.object(comet, "comet_path", return_value=r"C:\Comet.exe"):
+            with pytest.raises(comet.CometUnavailable):
+                comet.automation_context(pw)
+        pw.chromium.launch.assert_not_called()
+
+    def test_without_comet_installed_it_refuses(self):
+        pw, _ = self._playwright()
+        with patch.object(comet, "comet_path", return_value=None):
+            with pytest.raises(comet.CometUnavailable):
+                comet.automation_context(pw)
+        pw.chromium.launch.assert_not_called()
 
 
 class TestTeardownNeverClosesHisBrowser:
-    def test_attached_session_closes_only_our_tab(self):
+    def test_attached_session_closes_nothing_not_even_our_tab(self):
+        # The tab holds what Mo asked for — he found his video, then watched
+        # El Fager close it.
         import tools.browser_tool as bt
         page, context, browser = MagicMock(), MagicMock(), MagicMock()
         with patch.multiple(bt, _page=page, _context=context, _browser=browser,
                             _playwright=MagicMock(), _owned=False):
             bt._reset_browser_state()
-        page.close.assert_called_once()
+        page.close.assert_not_called()
         context.close.assert_not_called()
         browser.close.assert_not_called()
 
@@ -320,14 +357,17 @@ class TestYouTubeSearch:
 class TestYouTubeLatest:
     def test_opens_the_newest_video(self):
         with patch.object(yt, "_channel_id", return_value="UCfM3zsQsOnfWNUppiycmBuw"), \
+             patch.object(yt, "_search_channels", return_value=[]) as searched, \
              patch.object(yt.httpx, "get", return_value=_response(text=_FEED_XML)), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             result = yt.youtube_latest("@linkinpark")
         opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
         assert "Numb" in result
+        searched.assert_not_called()          # a handle that works needs no search
 
     def test_unknown_channel_opens_a_search(self):
         with patch.object(yt, "_channel_id", return_value=None), \
+             patch.object(yt, "_search_channels", return_value=[]), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             result = yt.youtube_latest("some channel")
         assert "results?search_query=" in opened.call_args.args[0]
@@ -335,10 +375,55 @@ class TestYouTubeLatest:
 
     def test_unreadable_feed_opens_the_channel(self):
         with patch.object(yt, "_channel_id", return_value="UCfM3zsQsOnfWNUppiycmBuw"), \
+             patch.object(yt, "_search_channels", return_value=[]), \
              patch.object(yt.httpx, "get", return_value=_response(status=404)), \
              patch("tools.comet_tool.open_url", return_value=True) as opened:
             yt.youtube_latest("@linkinpark")
         assert opened.call_args.args[0].endswith("/videos")
+
+
+_EMPTY_FEED = """<?xml version="1.0"?><feed><title>erzaa</title></feed>"""
+
+
+class TestYouTubeLatestFindsTheRightChannel:
+    """"Erzaa" resolved to @Erzaa — a different channel with no videos — and
+    "Marwan Moussa" guessed @MarwanMoussa, which doesn't exist. YouTube's own
+    channel search finds both."""
+
+    def _feeds(self, by_channel):
+        def get(url, **kwargs):
+            for cid, text in by_channel.items():
+                if cid in url:
+                    return _response(text=text)
+            return _response(status=404)
+        return get
+
+    def test_an_empty_channel_falls_through_to_one_that_has_videos(self):
+        feeds = {"UCemptyemptyemptyempty": _EMPTY_FEED, "UCrealrealrealrealreal": _FEED_XML}
+        with patch.object(yt, "_channel_id", return_value="UCemptyemptyemptyempty"), \
+             patch.object(yt, "_search_channels", return_value=["UCrealrealrealrealreal"]), \
+             patch.object(yt.httpx, "get", side_effect=self._feeds(feeds)), \
+             patch("tools.comet_tool.open_url", return_value=True) as opened:
+            result = yt.youtube_latest("Erzaa")
+        opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
+        assert "Numb" in result
+
+    def test_a_name_with_no_handle_is_found_by_search(self):
+        feeds = {"UCrealrealrealrealreal": _FEED_XML}
+        with patch.object(yt, "_channel_id", return_value=None), \
+             patch.object(yt, "_search_channels", return_value=["UCrealrealrealrealreal"]), \
+             patch.object(yt.httpx, "get", side_effect=self._feeds(feeds)), \
+             patch("tools.comet_tool.open_url", return_value=True) as opened:
+            yt.youtube_latest("Marwan Moussa")
+        opened.assert_called_once_with("https://www.youtube.com/watch?v=kXYiU_JCYtU")
+
+    def test_channel_search_reads_channel_ids_in_order(self):
+        html = ('{"channelRenderer":{"channelId":"UCaaaaaaaaaaaaaaaaaaaaaa","title":{"simpleText":"A"}}}'
+                '{"channelRenderer":{"channelId":"UCbbbbbbbbbbbbbbbbbbbbbb","title":{"simpleText":"B"}}}')
+        with patch.object(yt.httpx, "get", return_value=_response(text=html)) as get:
+            assert yt._search_channels("marwan moussa") == [
+                "UCaaaaaaaaaaaaaaaaaaaaaa", "UCbbbbbbbbbbbbbbbbbbbbbb"]
+        assert "sp=EgIQAg" in get.call_args.args[0]      # YouTube's "channels only" filter
 
 
 class TestWebSearchOpensComet:
@@ -398,3 +483,12 @@ class TestBrainDispatch:
         with patch(target, return_value="done") as fn:
             assert brain._dispatch_tool(tool, args) == "done"
         fn.assert_called_once()
+
+
+def test_feed_titles_are_unescaped_so_they_read_aloud_cleanly():
+    # '"Over Each Other" Live' came back as '&quot;Over Each Other&quot; Live'.
+    feed = ('<feed><title>Linkin Park</title><entry><yt:videoId>kXYiU_JCYtU</yt:videoId>'
+            '<title>&quot;Over Each Other&quot; Live &amp; Loud</title></entry></feed>')
+    with patch.object(yt.httpx, "get", return_value=_response(text=feed)):
+        assert yt._newest_in_feed("UCfM3zsQsOnfWNUppiycmBuw") == (
+            "kXYiU_JCYtU", '"Over Each Other" Live & Loud')

@@ -1,7 +1,7 @@
 """
 El Fager — HUD scene data hub.
 
-Background QThread that fetches live data for all non-market HUD scenes:
+Background QThread that fetches live data for the HUD scenes:
   Briefing (9) — Cairo weather via Open-Meteo
   Inbox    (6) — Gmail unread count + latest sender
   Agenda   (7) — Next Google Calendar event today
@@ -13,8 +13,7 @@ Background QThread that fetches live data for all non-market HUD scenes:
 Each signal carries (prefix, highlight, suffix, tag) that maps directly
 to HudWebView.push_proactive(scene, prefix, highlight, suffix, tag).
 
-Initial delay: 20 s (staggers behind MarketUpdater's 8 s delay).
-Refresh: every 5 minutes thereafter.
+Initial delay: 20 s. Refresh: every 5 minutes thereafter.
 """
 from __future__ import annotations
 

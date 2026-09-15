@@ -26,6 +26,7 @@ pygame-ce>=2.5.7
 
 # Global hotkey
 keyboard>=0.13.5
+comtypes>=1.4.0
 
 # Vector memory
 chromadb>=1.5.9
@@ -75,7 +76,9 @@ notion-client>=2.2.1
 todoist-api-python>=2.1.7
 
 # Phase 5B deps — YouTube transcript
-youtube-transcript-api>=0.6.0
+# 1.x replaced the classmethod API with an instance one; youtube_tool.py
+# targets 1.x, so the floor has to keep it out of 0.x.
+youtube-transcript-api>=1.0.0
 
 # Phase 6B deps — News reader
 feedparser>=6.0.11
@@ -92,6 +95,3 @@ pycaw>=20230710    # Windows system volume control
 
 # Phase 7A — Proactive Scheduler
 apscheduler>=3.10.0
-
-# Phase 10 — Autonomous Trading Engine
-alpaca-py>=0.8.2

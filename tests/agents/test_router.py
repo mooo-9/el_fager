@@ -12,9 +12,6 @@ def test_browser_book():
 def test_browser_login():
     assert classify_intent("log into my university portal and check my grades") == "browser"
 
-def test_stocks_keyword():
-    assert classify_intent("what's the stock price of NVDA?") == "stocks"
-
 def test_research_keyword():
     assert classify_intent("research everything about Egypt's economy this week") == "research"
 
@@ -29,48 +26,6 @@ def test_instant_music():
 
 def test_case_insensitive():
     assert classify_intent("CLICK the button") == "screen"
-
-def test_stocks_ticker_only():
-    assert classify_intent("How is BTC doing today?") == "stocks"
-
-
-class TestStocksAgentRouting:
-    def test_analyze_keyword_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("analyze NVDA for me") == "stocks_agent"
-
-    def test_thesis_keyword_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("what's your thesis on AAPL?") == "stocks_agent"
-
-    def test_should_i_buy_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("should I buy MSFT right now?") == "stocks_agent"
-
-    def test_why_did_you_buy_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("why did you buy NVDA?") == "stocks_agent"
-
-    def test_pause_trading_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("pause trading please") == "stocks_agent"
-
-    def test_set_threshold_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("set auto-trade threshold to 90%") == "stocks_agent"
-
-    def test_price_query_stays_instant_stocks(self):
-        from core.agents.router import classify_intent
-        result = classify_intent("what's the price of AAPL?")
-        assert result == "stocks"
-
-    def test_scan_watchlist_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("scan my watchlist") == "stocks_agent"
-
-    def test_scan_my_watchlist_routes_to_stocks_agent(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("scan my watchlist for opportunities") == "stocks_agent"
 
 
 class TestResearchAndFileRouting:
@@ -106,43 +61,8 @@ class TestResearchAndFileRouting:
         from core.agents.router import classify_intent
         assert classify_intent("what did this contract say about payment terms") == "file"
 
-
-class TestGateCheckRouting:
-    def test_ready_for_real_trading_routes_to_gate_check(self):
+    def test_invest_does_not_match_investigate(self):
         from core.agents.router import classify_intent
-        assert classify_intent("am I ready for real trading?") == "gate_check"
-
-    def test_paper_trading_gate_routes_to_gate_check(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("check my paper trading gate") == "gate_check"
-
-    def test_invest_still_routes_to_stocks(self):
-        from core.agents.router import classify_intent
-        # Regression: word-boundary fix -- "invest" must not match "investigate"
-        assert classify_intent("how should I invest my savings?") == "stocks"
-
-
-class TestConfirmLiveRouting:
-    def test_confirm_real_trading_routes_to_confirm_live(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("confirm real trading") == "confirm_live"
-
-    def test_confirm_live_trading_routes_to_confirm_live(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("confirm live trading") == "confirm_live"
-
-    def test_cancel_live_trading_routes_to_cancel_live(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("cancel live trading") == "cancel_live"
-
-    def test_cancel_real_trading_routes_to_cancel_live(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("cancel real trading") == "cancel_live"
-
-    def test_gate_check_still_routes_correctly(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("am I ready for real trading?") == "gate_check"
-
-    def test_activate_live_routes_to_confirm_live(self):
-        from core.agents.router import classify_intent
-        assert classify_intent("activate live trading") == "confirm_live"
+        # Regression: word-boundary fix -- "investigate" must reach research,
+        # not partially match another keyword.
+        assert classify_intent("investigate the outage last night") == "research"
