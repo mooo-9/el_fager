@@ -19,6 +19,7 @@ Center's local cache — so opening the cockpit never waits on the network.
 import calendar
 import json
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -583,6 +584,7 @@ class CockpitWindow(QWidget):
         self._exchanges: list = []
         self._tab_buttons: list = []
         self._focus = -1
+        self._confirming = threading.Event()
 
     def set_wake_listener(self, listener):
         self._wake_listener = listener
@@ -1735,12 +1737,23 @@ class CockpitWindow(QWidget):
         elif key == Qt.Key.Key_Space:
             self._start_pipeline()
         elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
-            if staging.current() is not None:
-                staging.confirm()
+            # Off the GUI thread — a Gmail send waits on the network and froze
+            # the window. One at a time, so a second Enter can't send twice.
+            if staging.current() is not None and not self._confirming.is_set():
+                self._confirming.set()
+                threading.Thread(target=self._run_confirm, daemon=True).start()
         elif key == Qt.Key.Key_L:
             self.open_ledger()
         else:
             super().keyPressEvent(event)
+
+    def _run_confirm(self):
+        try:
+            staging.confirm()
+        except Exception as e:
+            print(f"[El Fager] Staged confirm failed: {e}")
+        finally:
+            self._confirming.clear()
 
     def closeEvent(self, event):
         staging.unsubscribe(getattr(self, "_staged_cb", None))

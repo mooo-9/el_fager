@@ -788,6 +788,24 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "confirm_staged_action",
+        "description": "Carry out whatever is staged right now (email, reply, WhatsApp message, calendar delete) after Mo explicitly says yes/send it/go ahead. Do not stage it again first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "cancel_staged_action",
+        "description": "Drop whatever is staged right now without sending it, when Mo says cancel/don't send/never mind/remove it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
         "name": "add_whatsapp_contact",
         "description": "Save a WhatsApp contact with their phone number in international format.",
         "input_schema": {
@@ -4465,6 +4483,9 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "screen_agent", "browser_agent",
     "research_agent", "file_agent", "health_agent",
     "run_skill", "list_skills", "learn_skill",
+    # A yes can arrive in a turn with no history (typed turns reset after
+    # each one), so the way to act on a staged action is always on offer.
+    "confirm_staged_action", "cancel_staged_action",
 })
 
 _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
@@ -4834,6 +4855,18 @@ def _select_tools(message: str, history: list | None = None) -> list:
 
 _MAX_TOOL_ITERATIONS = 15
 
+# A confirm sends only what Mo already had in front of him when he spoke. The
+# model once re-staged an expired email and confirmed it in the same turn.
+_CONFIRM_TOOLS = frozenset({
+    "confirm_staged_action", "confirm_send_email", "confirm_reply_email",
+    "confirm_whatsapp_send", "confirm_calendar_delete",
+})
+_UNSEEN_CONFIRM = (
+    "NOT SENT — nothing went out. Mo hasn't seen this draft yet, so it can't "
+    "be confirmed in the same turn it was staged. Do not tell Mo it was sent. "
+    "Tell him the draft is ready and ask him to say yes."
+)
+
 _HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
 
 
@@ -4910,6 +4943,12 @@ class Brain:
             return self._model
         msg = (user_message or "").strip().lower()
         if self._CONFIRM_RE.search(msg):
+            return self._model
+        # Anything said while an action is armed may be a confirm or a cancel
+        # in words the list above misses ("never mind") — Haiku once claimed
+        # a cancel without calling the tool.
+        from core import staging
+        if staging.current() is not None:
             return self._model
         if len(msg.split()) > 18:
             return self._model
@@ -5056,6 +5095,15 @@ class Brain:
             elif name == "confirm_whatsapp_send":
                 from tools import whatsapp_tool
                 return whatsapp_tool.confirm_whatsapp_send()
+            elif name == "confirm_staged_action":
+                from core import staging
+                return staging.confirm()
+            elif name == "cancel_staged_action":
+                from core import staging
+                if staging.current() is None:
+                    return "Nothing is staged."
+                staging.cancel()
+                return "Cancelled — nothing was sent."
             elif name == "add_whatsapp_contact":
                 from tools import whatsapp_tool
                 return whatsapp_tool.add_contact(
@@ -6336,7 +6384,7 @@ class Brain:
             pass
         return response
 
-    def _build_system(self, memory_context: str = "") -> list:
+    def _build_system(self, memory_context: str = "", staged=None) -> list:
         """System prompt as content blocks. The static SYSTEM_PROMPT carries a
         cache_control breakpoint (prompt caching: ~0.1x cost + lower latency on
         repeat calls within the TTL); per-turn dynamic context (facts,
@@ -6357,6 +6405,23 @@ class Brain:
                 dynamic += f"\n\n{deadlines}"
         if memory_context:
             dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
+        # History keeps only final text, not tool calls, so without this the
+        # model can't tell a draft is already armed and stages it again on
+        # every "yes send it".
+        if staged is not None:
+            what = f"{staged.medium} to {staged.target}"
+            if staged.subject:
+                what += f", subject \"{staged.subject}\""
+            dynamic += (
+                f"\n\nSTAGED AND WAITING FOR MO: {what}.\n{staged.body[:300]}\n"
+                "It is already drafted and shown to Mo. If he says yes / send it / "
+                "go ahead, call confirm_staged_action — do not stage it again. "
+                "If he asks for changes, re-stage with them; if the same message "
+                "also says yes/send it, call confirm_staged_action right after. "
+                "If he cancels, says never mind, or says to remove it, call "
+                "cancel_staged_action. Never say it was sent or cancelled "
+                "unless one of those tools did it."
+            )
         if dynamic:
             blocks.append({"type": "text", "text": dynamic.strip()})
         return blocks
@@ -6405,7 +6470,11 @@ class Brain:
         if self._logger:
             self._logger.log("user", user_message)
 
-        system = self._build_system(memory_context)
+        # Only Mo's own conversation acts on what he has staged; background
+        # turns neither see it nor confirm it.
+        from core import staging
+        seen = staging.current() if history is None else None
+        system = self._build_system(memory_context, staged=seen)
         turn_model = self._select_model(user_message)
 
         hist.append({"role": "user", "content": user_message})
@@ -6452,11 +6521,16 @@ class Brain:
                     for block in response.content:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
-                            result_str = self._dispatch_tool(block.name, block.input)
+                            refused = block.name in _CONFIRM_TOOLS and seen is None
+                            result_str = (
+                                _UNSEEN_CONFIRM if refused
+                                else self._dispatch_tool(block.name, block.input)
+                            )
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
                                 "content": result_str,
+                                **({"is_error": True} if refused else {}),
                             })
 
                     messages.append({"role": "user", "content": tool_results})
@@ -6527,7 +6601,9 @@ class Brain:
                 memory_context,
             )
 
-        system = self._build_system(memory_context)
+        from core import staging
+        seen = staging.current()
+        system = self._build_system(memory_context, staged=seen)
 
         content = [
             {
@@ -6580,11 +6656,16 @@ class Brain:
                     for block in response.content:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
-                            result_str = self._dispatch_tool(block.name, block.input)
+                            refused = block.name in _CONFIRM_TOOLS and seen is None
+                            result_str = (
+                                _UNSEEN_CONFIRM if refused
+                                else self._dispatch_tool(block.name, block.input)
+                            )
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
                                 "content": result_str,
+                                **({"is_error": True} if refused else {}),
                             })
 
                     messages.append({"role": "user", "content": tool_results})

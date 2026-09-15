@@ -231,6 +231,38 @@ class TestStagedAction:
         w.close()
 
 
+    def test_enter_sends_off_the_gui_thread_and_only_once(self, qapp):
+        """A Gmail send waits on the network; on the GUI thread it froze the
+        window, and a second Enter while it waited could send twice."""
+        import threading
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QKeyEvent
+        from core import staging
+        staging.reset()
+        w = _make_cockpit(qapp)
+        release, sends = threading.Event(), []
+
+        def slow_send():
+            sends.append(1)
+            release.wait(5)
+            return "Sent"
+
+        staging.stage(medium="gmail", target="mo@x.com", body="hi",
+                      confirm=slow_send)
+        enter = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return,
+                          Qt.KeyboardModifier.NoModifier)
+        w.keyPressEvent(enter)          # returns while the send still waits
+        w.keyPressEvent(enter)
+        release.set()
+        for _ in range(50):
+            if not w._confirming.is_set():
+                break
+            threading.Event().wait(0.02)
+        assert sends == [1]
+        staging.reset()
+        w.close()
+
+
 class TestAttention:
     """ambient (orb alone) → ready (readouts up) → exchange (words own it)."""
 

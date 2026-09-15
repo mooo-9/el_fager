@@ -199,3 +199,26 @@ class TestOneActionAtATime:
         staging.subscribe(lambda: (_ for _ in ()).throw(RuntimeError("boom")))
         staging.stage(medium="gmail", target="a@example.com", body="x")
         assert staging.current() is not None
+
+
+class TestGmailNeverHangs:
+    def test_the_service_is_built_with_a_network_timeout(self, monkeypatch, tmp_path):
+        """httplib2 waits forever by default, so a stalled connection left
+        'yes send it' hanging and the turn never finished."""
+        import google.oauth2.credentials as gcreds
+        import googleapiclient.discovery as discovery
+        import tools.gmail_tool as g
+
+        token = tmp_path / "token.json"
+        token.write_text("{}")
+        creds = type("Creds", (), {"valid": True})()
+        built = {}
+        monkeypatch.setattr(g, "GMAIL_AVAILABLE", True)
+        monkeypatch.setattr(g, "TOKEN_PATH", str(token))
+        monkeypatch.setattr(gcreds.Credentials, "from_authorized_user_file",
+                            classmethod(lambda cls, *a, **k: creds))
+        monkeypatch.setattr(discovery, "build",
+                            lambda *a, **k: built.update(k) or "service")
+
+        assert g.get_gmail_service() == "service"
+        assert built["http"].http.timeout == g.HTTP_TIMEOUT_SEC

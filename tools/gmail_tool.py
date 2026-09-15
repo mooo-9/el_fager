@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 CREDENTIALS_PATH = "data/credentials.json"
 TOKEN_PATH = "data/token_gmail.json"   # kept separate so calendar auth is untouched
 GMAIL_AVAILABLE = os.path.exists(CREDENTIALS_PATH)
+HTTP_TIMEOUT_SEC = 30
 
 CAIRO_TZ = ZoneInfo("Africa/Cairo")
 SCOPES = [
@@ -54,10 +55,17 @@ def get_gmail_service():
                     creds = None
             if not refreshed:
                 flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-                creds = flow.run_local_server(port=0)
+                # Bounded: in pythonw there is no console, and an unanswered
+                # login page would otherwise hold the send open forever.
+                creds = flow.run_local_server(port=0, timeout_seconds=120)
             with open(TOKEN_PATH, "w") as f:
                 f.write(creds.to_json())
-        return build("gmail", "v1", credentials=creds)
+        # httplib2 waits forever by default; a stalled connection used to
+        # leave "yes send it" hanging with the turn never finishing.
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        http = AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT_SEC))
+        return build("gmail", "v1", http=http)
     except Exception as e:
         print(f"[El Fager] Gmail auth failed: {e}")
         return None

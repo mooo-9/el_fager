@@ -78,7 +78,7 @@ class TestSelectedOncePerTurn:
             return responses.pop(0)
 
         monkeypatch.setattr(b, "_create_message", fake_create)
-        monkeypatch.setattr(b, "_build_system", lambda mc="": [])
+        monkeypatch.setattr(b, "_build_system", lambda mc="", staged=None: [])
         monkeypatch.setattr(b, "_dispatch_tool", lambda *a, **k: "ok")
 
         b.chat("what is the weather in cairo")
