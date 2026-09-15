@@ -135,6 +135,9 @@ class TestSystemPromptCaching:
         assert "cache_control" not in blocks[1]
         assert "Mo asked about X" in blocks[1]["text"]
 
-    def test_no_dynamic_context_means_single_block(self):
+    def test_without_other_context_only_the_date_follows_the_cached_prefix(self):
         brain = _make_brain()
-        assert len(brain._build_system()) == 1
+        blocks = brain._build_system()
+        assert len(blocks) == 2
+        assert "cache_control" not in blocks[1]
+        assert "Right now it is" in blocks[1]["text"]

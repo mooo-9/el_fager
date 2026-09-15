@@ -39,7 +39,8 @@ class TestTheModelSeesWhatIsStaged:
         assert "cancel_staged_action" in dynamic["text"]
 
     def test_nothing_staged_adds_nothing(self):
-        assert len(Brain(profile={})._build_system()) == 1
+        text = " ".join(b["text"] for b in Brain(profile={})._build_system())
+        assert "STAGED" not in text
 
 
 class TestConfirmAndCancelAreAlwaysOffered:

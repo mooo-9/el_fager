@@ -415,7 +415,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "web_search",
-        "description": "Search the web using DuckDuckGo. Use for current events, prices, news, weather, or any information that requires live data.",
+        "description": "Search the web using DuckDuckGo and read the results yourself, to answer Mo's question with live information (current events, prices, news, facts). Not when he says 'search the web/internet for X', 'google X' or 'show me results for X' — he wants the results page in front of him: use open_web_search.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -4314,7 +4314,9 @@ TOOLS: list[dict[str, Any]] = [
             "synthesizes a single coherent answer. Use for: 'research everything about X', "
             "'tell me everything about X', 'investigate X', 'comprehensive analysis of X', "
             "'compare and contrast X and Y', 'summarize the news about X'. Do NOT use for quick "
-            "factual lookups -- use wikipedia_lookup or web_search for those."
+            "factual lookups -- use wikipedia_lookup or web_search for those. It returns a "
+            "finished answer with sources: relay it to Mo, and don't repeat the research with "
+            "more searches unless it says it found nothing."
         ),
         "input_schema": {
             "type": "object",
@@ -4938,6 +4940,12 @@ _UNSEEN_CONFIRM = (
 )
 
 _HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
+
+
+def _cairo_now():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Africa/Cairo"))
 
 
 def _window_history(hist: list) -> list:
@@ -6500,7 +6508,14 @@ class Brain:
             "text": SYSTEM_PROMPT,
             "cache_control": {"type": "ephemeral"},
         }]
-        dynamic = ""
+        # The model was never told the date: in September 2026 it searched and
+        # still called 2024's final "the last one" and the iPhone 17 unreleased.
+        now = _cairo_now()
+        dynamic = (
+            f"Right now it is {now:%A, %d %B %Y}, {now:%I:%M %p} in Cairo. What you "
+            "know from training may be out of date: for anything recent, current, "
+            "latest or priced, trust what your tools return over your own memory."
+        )
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:
