@@ -1,6 +1,7 @@
 """
 ResearchAgent -- synthesizes deep web research into a single coherent answer.
-Searches DuckDuckGo, reads top pages via Playwright, synthesizes via Claude Haiku.
+Searches DuckDuckGo, reads top pages (a plain fetch, or headless Playwright when
+that's blocked), synthesizes via Claude Haiku.
 """
 from core.agents.base_agent import BaseAgent
 
@@ -13,7 +14,6 @@ _STRIP_PREFIXES = [
     "research everything on",
     "find out everything about",
     "tell me everything about",
-    "research the best",
     "summarize the news about",
     "latest news about",
     "everything happening with",
@@ -22,6 +22,7 @@ _STRIP_PREFIXES = [
     "compare and contrast",
     "deep dive into",
     "investigate",
+    "research",          # last: "research the best X" keeps "the best X"
 ]
 
 
@@ -40,16 +41,20 @@ class ResearchAgent(BaseAgent):
         if not results:
             return f"No search results found for: {query}"
 
+        # Read down the results until enough pages actually open — a blocked
+        # first page used to leave one source, or none. The snippets of the
+        # results not read still go in: they often hold the fact itself.
         page_texts = []
-        for r in results[:_MAX_PAGES_TO_READ]:
+        for r in results:
+            if len(page_texts) >= _MAX_PAGES_TO_READ:
+                break
             text = self._read_page(r["href"])
             if text:
                 page_texts.append({"url": r["href"], "title": r["title"], "text": text})
 
-        if not page_texts:
-            # Fall back to search snippets when page reading fails
-            for r in results:
-                page_texts.append({"url": r["href"], "title": r["title"], "text": r.get("body", "")})
+        for r in results:
+            if r["href"] not in {p["url"] for p in page_texts} and r.get("body"):
+                page_texts.append({"url": r["href"], "title": r["title"], "text": r["body"]})
 
         return self._synthesize(query, page_texts)
 
@@ -61,14 +66,24 @@ class ResearchAgent(BaseAgent):
         return task.strip()
 
     def _search(self, query: str) -> list[dict]:
+        # duckduckgo_search was renamed ddgs, and the old package now comes back
+        # empty or off-topic (WordPad results for a padel query).
         try:
-            from duckduckgo_search import DDGS
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=_MAX_SEARCH_RESULTS))
         except Exception:
             return []
 
     def _read_page(self, url: str) -> str:
+        # A plain fetch first: a hidden Chromium per page made research ~34 s.
+        from tools.web_tool import fetch_page
+        text = fetch_page(url, max_chars=_MAX_PAGE_CHARS)
+        if not text.startswith("[") and len(text) >= 200:
+            return text[:_MAX_PAGE_CHARS]
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
