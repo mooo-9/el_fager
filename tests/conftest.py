@@ -47,3 +47,21 @@ def _no_real_whatsapp(monkeypatch):
 
     monkeypatch.setattr(whatsapp_desktop, "find_chats", blocked)
     monkeypatch.setattr(whatsapp_desktop, "send", blocked)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_comet(monkeypatch):
+    """Browser automation starts Comet with a debugging port when it can't
+    attach to one. With Mo's own Comet already open, the browser-agent tests
+    ran comet.exe for real — Chromium hands that to the running browser, which
+    opens windows on his screen. Launching Comet or the default browser is off
+    in tests; a test that needs either patches these with its own mock."""
+    from tools import comet_tool
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("launching a real browser is off in tests")
+
+    monkeypatch.setattr(comet_tool, "subprocess",
+                        type("NoSubprocess", (), {"Popen": staticmethod(blocked)}))
+    monkeypatch.setattr(comet_tool, "webbrowser",
+                        type("NoBrowser", (), {"open": staticmethod(blocked)}))

@@ -39,6 +39,8 @@ class TestCometResolution:
         monkeypatch.delenv("PROGRAMFILES", raising=False)
         monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
         monkeypatch.delenv("PROGRAMW6432", raising=False)
+        # The registry would still find a Comet installed on this machine.
+        monkeypatch.setattr(comet, "_from_registry", lambda: None)
         assert comet.comet_path() is None
         assert not comet.is_available()
 
