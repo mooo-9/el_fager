@@ -1668,10 +1668,6 @@ class CockpitWindow(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QTimer.singleShot(0, self._push_stage)       # once the columns have moved
-        ledger_window = getattr(self, "_ledger_window", None)
-        if ledger_window is not None and not ledger_window.isHidden():
-            QTimer.singleShot(0, lambda: ledger_window.setGeometry(
-                ledger_window.parentWidget().rect()))
 
     def _push_orb_state(self, state: str):
         if not (self._orb and self._orb_ready):

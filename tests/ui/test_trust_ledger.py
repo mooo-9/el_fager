@@ -187,3 +187,66 @@ class TestItIsReadableOverTheStage:
                                   Qt.KeyboardModifier.NoModifier))
         assert w.isHidden()
         cockpit.close()
+
+
+class TestALongRecordScrolls:
+    """With a real day's worth of entries the card has to use the height it
+    has and scroll the rest — under every filter, and in search."""
+
+    def _full(self, qapp, tmp_path, monkeypatch, n=60):
+        cats = ["sent", "changed", "read", "learned"]
+        for i in range(n):
+            ledger.append(cats[i % 4], "whatsapp", f"target {i}",
+                          f"entry number {i}", provenance="CONFIRMED BY VOICE")
+        import json
+        from unittest.mock import MagicMock
+        import ui.overlay as overlay_mod
+        path = tmp_path / "settings.json"
+        path.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
+        from ui.cockpit import CockpitWindow
+        cockpit = CockpitWindow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        from PyQt6.QtCore import Qt
+        cockpit.set_wake_listener(None)
+        cockpit.resize(1280, 760)
+        # Laid out but never on Mo's screen: the scroll range is only computed
+        # once the widgets have a real geometry.
+        cockpit.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        cockpit.show()
+        cockpit.open_ledger()
+        for _ in range(20):
+            qapp.processEvents()
+        return cockpit, cockpit._ledger_window
+
+    def _scroll(self, w):
+        from PyQt6.QtWidgets import QScrollArea
+        return w.findChildren(QScrollArea)[0]
+
+    def test_the_card_fills_the_stage_it_is_given(self, qapp, tmp_path, monkeypatch):
+        cockpit, w = self._full(qapp, tmp_path, monkeypatch)
+        stage = w.parentWidget()
+        assert w._card.height() == min(760, stage.height() - 80)
+        assert w._card.width() == min(860, stage.width() - 80)
+        cockpit.close()
+
+    def test_the_list_scrolls_under_every_filter(self, qapp, tmp_path, monkeypatch):
+        cockpit, w = self._full(qapp, tmp_path, monkeypatch)
+        for key in (None, "sent", "changed", "read", "learned"):
+            w._set_filter(key)
+            for _ in range(10):
+                qapp.processEvents()
+            bar = self._scroll(w).verticalScrollBar()
+            assert bar.maximum() > 0, f"the {key or 'all'} list does not scroll"
+            bar.setValue(bar.maximum())
+            assert bar.value() == bar.maximum()
+        cockpit.close()
+
+    def test_a_small_window_still_fits_the_card_inside_it(self, qapp, tmp_path, monkeypatch):
+        cockpit, w = self._full(qapp, tmp_path, monkeypatch)
+        cockpit.resize(900, 560)
+        for _ in range(20):
+            qapp.processEvents()
+        stage = w.parentWidget()
+        assert w._card.width() <= stage.width() and w._card.height() <= stage.height()
+        assert self._scroll(w).verticalScrollBar().maximum() > 0
+        cockpit.close()

@@ -16,7 +16,7 @@ Two things this surface must never do, and the code keeps both:
 Cockpit palette — this is a cockpit-family surface, not a Dawn one.
 """
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -142,6 +142,15 @@ class TrustLedgerWindow(QWidget):
         self._filter = None
         self._build_ui()
         self.refresh()
+        if parent is not None:
+            # Keep covering the stage: it is a child of the cockpit rather
+            # than a widget in its layout, so nothing else would resize it.
+            parent.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if watched is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self.setGeometry(watched.rect())
+        return super().eventFilter(watched, event)
 
     def _build_ui(self):
         # A panel over the cockpit, the way the ? map is: the stage dimmed
@@ -165,7 +174,6 @@ class TrustLedgerWindow(QWidget):
             f" border: 1px solid {tokens.CK_HAIRLINE};"
             f" border-radius: {tokens.R3}px; }}"
         )
-        self._card.setMaximumSize(860, 760)
         backdrop.addWidget(self._card, 0, Qt.AlignmentFlag.AlignCenter)
 
         col = QVBoxLayout(self._card)
@@ -236,7 +244,8 @@ class TrustLedgerWindow(QWidget):
         self._rows_host = QWidget()
         self._rows_host.setStyleSheet("background: transparent;")
         self._rows = QVBoxLayout(self._rows_host)
-        self._rows.setContentsMargins(0, 0, 0, 0)
+        # Room for the scrollbar: a long record put it over the revoke button.
+        self._rows.setContentsMargins(0, 0, 14, 0)
         self._rows.setSpacing(0)
         self._rows.addStretch()
         scroll.setWidget(self._rows_host)
@@ -250,6 +259,15 @@ class TrustLedgerWindow(QWidget):
         law.setWordWrap(True)
         law.setStyleSheet(_mono(10, tokens.CK_TEXT_FAINT, 1.2))
         col.addWidget(law)
+
+    def resizeEvent(self, event):
+        """The card takes the stage it is given, up to its own size. Left to
+        its layout it asked only for what its rows needed, which on a long
+        record meant four entries and a scrollbar for the other fifty-six."""
+        super().resizeEvent(event)
+        # 40px of backdrop all round, so the card gets what is left of both.
+        self._card.setFixedSize(min(860, max(320, self.width() - 80)),
+                                min(760, max(280, self.height() - 80)))
 
     def _set_filter(self, key: "str | None"):
         self._filter = key
