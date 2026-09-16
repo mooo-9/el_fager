@@ -27,6 +27,55 @@ from typing import Callable
 
 _STATE_FILE = Path("data/proactive_state.json")
 
+# Every check below, in the order _run_checks calls them, written for Mo to
+# read: the Cockpit's AUTOMATIONS panel lists these as what El Fager watches
+# for. A test pairs this list against the _check_ methods, so a new check has
+# to be described here too.
+WATCHES = [
+    {"check": "_check_battery", "name": "Battery low",
+     "when": "6 AM–12 AM", "detail": "Every minute · low or critical"},
+    {"check": "_check_prayer_times", "name": "Prayer heads-up",
+     "when": "6 AM–12 AM", "detail": "Every minute · 10 minutes before each prayer"},
+    {"check": "_check_upcoming_events", "name": "Calendar heads-up",
+     "when": "6 AM–12 AM", "detail": "Every minute · before an event starts"},
+    {"check": "_check_autonomous_tasks", "name": "Queued tasks",
+     "when": "6 AM–12 AM", "detail": "Every minute · runs what you asked for later"},
+    {"check": "_check_missions", "name": "Missions",
+     "when": "6 AM–12 AM", "detail": "Every minute · one step at a time"},
+    {"check": "_check_deadlines", "name": "Deadlines",
+     "when": "7–11 AM", "detail": "Mornings · due today or tomorrow"},
+    {"check": "_check_weather", "name": "Weather alert",
+     "when": "7–11 AM", "detail": "Mornings · rain or sandstorm"},
+    {"check": "_check_overdue_invoices", "name": "Overdue invoices",
+     "when": "7–11 AM", "detail": "Mornings · unpaid past their due date"},
+    {"check": "_check_rest_day", "name": "Rest day",
+     "when": "7–11 AM", "detail": "Mornings · after 4 training days straight"},
+    {"check": "_check_oauth_tokens", "name": "Google sign-in expiry",
+     "when": "7–11 AM", "detail": "Mornings · before Gmail and Calendar stop"},
+    {"check": "_check_skill_proposals", "name": "Skill proposals",
+     "when": "7–11 AM", "detail": "Mornings · habits worth turning into a skill"},
+    {"check": "_check_journal", "name": "Journal nudge",
+     "when": "7–10 PM", "detail": "Evenings · nothing written today"},
+    {"check": "_check_expenses", "name": "Expense nudge",
+     "when": "7–10 PM", "detail": "Evenings · nothing logged today"},
+    {"check": "_check_budget_exceeded", "name": "Budget exceeded",
+     "when": "7–10 PM", "detail": "Evenings · over a category budget"},
+    {"check": "_check_api_budget", "name": "API budget",
+     "when": "7–10 PM", "detail": "Evenings · what the models cost this month"},
+    {"check": "_check_transcription_quality", "name": "Transcription quality",
+     "when": "7–10 PM", "detail": "Evenings · too many garbled turns today"},
+    {"check": "_check_weekly_review", "name": "Weekly review",
+     "when": "FRI–SAT 5 PM", "detail": "Weekly · offers to look back on the week"},
+    {"check": "_check_lunch_logged", "name": "Lunch logged",
+     "when": "1 PM", "detail": "Daily · no lunch in the food log"},
+    {"check": "_check_daily_nutrition", "name": "Daily nutrition",
+     "when": "6 PM", "detail": "Daily · protein and calories so far"},
+    {"check": "_check_gym_session", "name": "Gym session",
+     "when": "8 PM", "detail": "Daily · asks how training went"},
+    {"check": "_check_weekly_gym_report", "name": "Weekly gym report",
+     "when": "MON", "detail": "Weekly · how last week's training went"},
+]
+
 
 def _fmt12(hhmm: str) -> str:
     """Convert 'HH:MM' (24h) to '12:30 PM' format."""

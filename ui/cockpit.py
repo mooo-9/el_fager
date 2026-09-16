@@ -340,58 +340,227 @@ class _MonthCalendar(QWidget):
                 self._grid.addWidget(cell, r, c)
 
 
-class _FileMark(QWidget):
-    """The reel's automation icon: a small ember page with its corner folded.
+def _clock(moment: datetime) -> str:
+    """7:30 AM, or 6 PM on the hour."""
+    minutes = f":{moment.minute:02d}" if moment.minute else ""
+    return f"{moment.hour % 12 or 12}{minutes} {'AM' if moment.hour < 12 else 'PM'}"
 
-    Painted rather than typed, like the step ledger's marks — a font without
-    the glyph would draw an empty box.
-    """
 
-    def __init__(self, parent=None):
+def _automation_rows(schedules: list, history: list, tasks: list,
+                     skills: list, now: datetime) -> list:
+    """Everything El Fager does without being asked, in two groups:
+
+    scheduled — the scheduler's jobs and any skill put on a timer, soonest
+    first, paused ones last; a skill that only runs on request is not an
+    automation, so it stays off the list.
+    watching  — the proactive engine's checks, in the order it runs them.
+
+    Each row is {name, when, detail, state, run, kind}; state is ok, failed,
+    paused or watching, and run is None for a row nothing can start by hand.
+    `now` is timezone-aware, in the scheduler's zone."""
+    def on(moment: datetime) -> str:
+        return "today" if moment.date() == now.date() else f"{moment:%b} {moment.day}"
+
+    def local(stamp) -> "datetime | None":
+        try:
+            moment = datetime.fromisoformat(str(stamp))
+        except ValueError:
+            return None
+        return moment.replace(tzinfo=now.tzinfo) if moment.tzinfo is None else moment
+
+    def row(name, cadence, nxt, last, failed, enabled, run):
+        if not enabled:
+            when, state = "PAUSED", "paused"
+        else:
+            state = "failed" if failed else "ok"
+            if nxt is None:
+                when = ""
+            elif (nxt - now).total_seconds() < 24 * 3600:
+                when = _clock(nxt)
+            else:
+                when = f"{nxt:%a} {_clock(nxt)}".upper()
+        ran = "never ran" if last is None else f"{'failed' if failed else 'last ran'} {on(last)}"
+        return {"name": name, "when": when, "detail": f"{cadence} · {ran}",
+                "state": state, "run": run, "kind": "scheduled", "_next": nxt}
+
+    latest = {}
+    for entry in history:          # oldest first, so the newest run wins
+        latest[entry.get("job_id")] = entry
+
+    rows = []
+    for job in schedules:
+        trigger = job.get("trigger") or {}
+        kind = trigger.get("type")
+        nxt = None
+        if kind == "cron":
+            spec = {k: v for k, v in trigger.items() if k != "type"}
+            cadence = ("Weekly" if "day_of_week" in spec
+                       else "Monthly" if "day" in spec else "Daily")
+            try:
+                from apscheduler.triggers.cron import CronTrigger
+                nxt = CronTrigger(timezone=now.tzinfo, **spec).get_next_fire_time(None, now)
+            except Exception:
+                pass
+        elif kind == "interval":
+            hours = trigger.get("hours", 0) + trigger.get("minutes", 0) / 60
+            cadence = f"Every {hours:g} h"
+        elif kind == "date":
+            cadence = "Once"
+            nxt = local(trigger.get("run_date"))
+        else:
+            continue
+        fired = latest.get(job.get("id"))
+        rows.append(row(job.get("name") or job.get("id", ""), cadence, nxt,
+                        local(fired["fired_at"]) if fired else None,
+                        bool(fired) and fired.get("status") != "ok",
+                        job.get("enabled", True), ("job", job.get("id"))))
+
+    by_id = {t.get("id"): t for t in tasks}
+    for skill in skills:
+        task = by_id.get(skill.get("scheduled_task_id"))
+        if not task or task.get("status") == "done":
+            continue
+        hours = task.get("recurring_hours") or 0
+        cadence = "Daily" if hours == 24 else f"Every {hours:g} h" if hours else "Once"
+        name = (skill.get("name") or "").strip()
+        rows.append(row(name[:1].upper() + name[1:], cadence,
+                        local(task["run_at"]) if task.get("run_at") else None,
+                        local(task["completed_at"]) if task.get("completed_at") else None,
+                        task.get("status") == "failed", True, ("skill", name)))
+
+    rows.sort(key=lambda r: (r["state"] == "paused", r["_next"] is None, r["_next"] or now))
+    for r in rows:
+        del r["_next"]
+
+    from core.proactive import WATCHES
+    for watch in WATCHES:
+        rows.append({"name": watch["name"], "when": watch["when"],
+                     "detail": watch["detail"], "state": "watching",
+                     "run": None, "kind": "watching"})
+    return rows
+
+
+def _skill_rows(skills: list, macros: list, disabled: set) -> list:
+    """Everything El Fager does when asked, in three groups: the skills Mo
+    taught it, the routines it ships with, and the apps it is connected to.
+
+    Rows read like the automation rows, so one list widget serves both."""
+    def cap(name: str) -> str:
+        name = name.strip()
+        return name[:1].upper() + name[1:]
+
+    rows = []
+    for skill in skills:
+        phrase = next((p for p in (skill.get("trigger_phrases") or []) if p), "")
+        runs = skill.get("run_count") or 0
+        if not runs:
+            ran = "never ran"
+        else:
+            last = str(skill.get("last_run_at") or "")[:10]
+            times = "once" if runs == 1 else f"{runs} times"
+            try:
+                moment = datetime.fromisoformat(last)
+                ran = f"ran {times}, last {moment:%b} {moment.day}"
+            except ValueError:
+                ran = f"ran {times}"
+        detail = (f'Say "{phrase}" · {ran}' if phrase
+                  else f"{cap(ran)} · ask for it by name")
+        rows.append({"name": cap(skill.get("name", "")), "when": "", "detail": detail,
+                     "state": "ok", "run": ("skill", skill.get("name", "")),
+                     "kind": "taught"})
+
+    for macro in macros:
+        what = (macro.get("description") or "").split("—", 1)[-1].strip()
+        # The rail is 400px: a longer line is clipped mid-word rather than
+        # wrapping, so it is cut here, where a test can hold the length.
+        if len(what) > 46:
+            what = what[:45].rstrip(" ,") + "…"
+        rows.append({"name": cap(macro.get("name", "").replace("_", " ")), "when": "",
+                     "detail": what, "state": "ok",
+                     "run": ("macro", macro.get("name", "")), "kind": "routine"})
+
+    from core.brain import SKILL_LABELS
+    for key, (name, what) in SKILL_LABELS.items():
+        off = key in disabled
+        rows.append({"name": name, "when": "OFF" if off else "ON", "detail": what,
+                     "state": "paused" if off else "ok", "run": None, "kind": "app"})
+    return rows
+
+
+def _skill_list() -> list:
+    try:
+        from core.skills.store import SkillStore
+        return SkillStore().list_all()
+    except Exception:
+        return []
+
+
+class _AutoRow(QWidget):
+    """One automation: a state dot, its name over how often it runs and how
+    the last run went, and when it runs next on the right. Hovered, RUN takes
+    the place of the time; while it runs, the time reads RUNNING."""
+
+    _DOT = {"ok": tokens.OK, "failed": tokens.BAD, "paused": tokens.CK_TEXT_FAINT,
+            "watching": tokens.CK_STATE["listening"]}
+
+    def __init__(self, auto: dict, on_run=None, running: bool = False, parent=None):
         super().__init__(parent)
-        self.setFixedSize(12, 16)   # page sits 2px low, on the text line
+        # A check has nothing to start: it acts when its condition is true.
+        self._can_run = on_run is not None and not running and auto["run"] is not None
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 6, 0, 6)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(2)
 
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(Qt.PenStyle.NoPen)
-        page = QPainterPath(QPointF(1.5, 3.5))
-        page.lineTo(7.5, 3.5)
-        page.lineTo(10.5, 6.5)
-        page.lineTo(10.5, 14.5)
-        page.lineTo(1.5, 14.5)
-        page.closeSubpath()
-        p.setBrush(QColor(tokens.EMBER))
-        p.drawPath(page)
-        fold = QPainterPath(QPointF(7.5, 3.5))
-        fold.lineTo(7.5, 6.5)
-        fold.lineTo(10.5, 6.5)
-        fold.closeSubpath()
-        p.setBrush(QColor(tokens.EMBER_BRIGHT))
-        p.drawPath(fold)
+        dot = QLabel()
+        dot.setFixedSize(6, 6)
+        dot.setStyleSheet(f"background: {self._DOT[auto['state']]}; border-radius: 3px;")
+        grid.addWidget(dot, 0, 0, Qt.AlignmentFlag.AlignVCenter)
 
-
-class _RailRow(QWidget):
-    """One automation: what it is on the left, when/where it runs on the
-    right. The tag is mono so the column of them lines up."""
-
-    def __init__(self, label: str, tag: str, parent=None):
-        super().__init__(parent)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 5, 0, 5)
-        row.setSpacing(10)
-        row.addWidget(_FileMark(), 0, Qt.AlignmentFlag.AlignTop)
-        name = QLabel(label)
-        name.setWordWrap(True)
+        paused = auto["state"] == "paused"
+        name = QLabel(auto["name"])
         name.setStyleSheet(
-            f"color: {tokens.CK_TEXT_MID}; font-family: {theme.FONT};"
-            f" font-size: 12px; background: transparent;"
+            f"color: {tokens.CK_TEXT_MID if paused else tokens.CK_TEXT_HI};"
+            f" font-family: {theme.FONT}; font-size: 13px; background: transparent;"
         )
-        row.addWidget(name, 1)
-        if tag:
-            chip = QLabel(tag)
-            chip.setStyleSheet(_mono(9, tokens.CK_TEXT_FAINT, 0.8))
-            row.addWidget(chip, 0, Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(name, 0, 1)
+
+        self._when = QLabel("RUNNING" if running else auto["when"])
+        self._when.setStyleSheet(_mono(
+            10, tokens.EMBER if running else tokens.CK_TEXT_LOW if paused else tokens.CK_TEXT_MID,
+            1.0))
+        grid.addWidget(self._when, 0, 2, Qt.AlignmentFlag.AlignRight)
+
+        self._run_btn = QPushButton("RUN")
+        self._run_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._run_btn.setStyleSheet(
+            f"QPushButton {{ {_mono(9, tokens.EMBER, 1.6)}"
+            f" border: 1px solid {tokens.rgba(tokens.EMBER, 0.45)};"
+            f" border-radius: 5px; padding: 1px 10px; }}"
+            f"QPushButton:hover {{ color: {tokens.CK_TEXT_ON_FILL};"
+            f" background: {tokens.EMBER}; }}"
+        )
+        self._run_btn.setVisible(False)
+        if self._can_run:
+            self._run_btn.clicked.connect(lambda: on_run(auto))
+        grid.addWidget(self._run_btn, 0, 2, Qt.AlignmentFlag.AlignRight)
+
+        detail = QLabel(auto["detail"])
+        detail.setStyleSheet(
+            f"color: {tokens.BAD if auto['state'] == 'failed' else tokens.CK_TEXT_LOW};"
+            f" font-family: {theme.FONT}; font-size: 11px; background: transparent;"
+        )
+        grid.addWidget(detail, 1, 1, 1, 2)
+        grid.setColumnStretch(1, 1)
+
+    def enterEvent(self, event):
+        if self._can_run:
+            self._when.setVisible(False)
+            self._run_btn.setVisible(True)
+
+    def leaveEvent(self, event):
+        self._run_btn.setVisible(False)
+        self._when.setVisible(True)
 
 
 # A long run with no spaces — a link, an email address — cannot wrap, so it
@@ -564,6 +733,8 @@ class CockpitWindow(QWidget):
     # The stage's view pill. main.py owns the Command Center for the same
     # reason it owns the Cockpit — both are lazy and single-instance.
     knowledge_requested = pyqtSignal()
+    # A job started from the AUTOMATIONS panel finished, off the GUI thread.
+    automation_finished = pyqtSignal(str)
 
     def __init__(self, voice_in, brain, voice_out, memory):
         super().__init__()
@@ -572,6 +743,7 @@ class CockpitWindow(QWidget):
         self.voice_out = voice_out
         self.memory = memory
         self._worker = None
+        self._running: set = set()   # scheduler job ids started from RUN
         self._wake_listener = None
         self._current_state = "idle"
         self._attention = "ready"
@@ -596,6 +768,7 @@ class CockpitWindow(QWidget):
         self._progress_cb = self.progress_changed.emit
         progress.subscribe(self._progress_cb)
         self.progress_changed.connect(self._refresh_steps)
+        self.automation_finished.connect(self._on_automation_finished)
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
         self._clock.timeout.connect(self._tick_clock)
@@ -879,15 +1052,39 @@ class CockpitWindow(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(16)
 
-        auto = _Panel("AUTOMATIONS")
-        self._auto_list = QVBoxLayout()
-        self._auto_list.setContentsMargins(0, 2, 0, 2)
+        auto = _Panel("")
+        head = QHBoxLayout()
+        head.setSpacing(22)
+        self._tab_autos = self._panel_tab("AUTOMATIONS", True)
+        self._tab_autos.clicked.connect(lambda: self._show_panel_tab("automations"))
+        head.addWidget(self._tab_autos)
+        self._tab_skills = self._panel_tab("SKILLS", False)
+        self._tab_skills.clicked.connect(lambda: self._show_panel_tab("skills"))
+        head.addWidget(self._tab_skills)
+        head.addStretch()
+        self._auto_count = QLabel("")
+        self._auto_count.setStyleSheet(_mono(9, tokens.OK, 1.6))
+        head.addWidget(self._auto_count)
+        auto.column.addLayout(head)
+        # Everything El Fager runs on its own is more than fits a rail, so the
+        # list scrolls inside the panel and the conversation keeps its height.
+        auto_box = QWidget()
+        auto_box.setStyleSheet("background: transparent;")
+        self._auto_list = QVBoxLayout(auto_box)
+        self._auto_list.setContentsMargins(0, 2, 18, 2)
         self._auto_list.setSpacing(0)
-        auto.column.addLayout(self._auto_list)
+        self._auto_scroll = QScrollArea()
+        self._auto_scroll.setWidgetResizable(True)
+        self._auto_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._auto_scroll.setStyleSheet(theme.SCROLL_AREA)
+        self._auto_scroll.viewport().setStyleSheet("background: transparent;")
+        self._auto_scroll.setWidget(auto_box)
+        self._auto_scroll.setMaximumHeight(224)
+        auto.column.addWidget(self._auto_scroll)
 
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
-        self._skills_btn = QPushButton("SKILLS")
+        self._skills_btn = QPushButton("LEDGER")
         self._skills_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._skills_btn.setStyleSheet(
             f"QPushButton {{ {_mono(9, tokens.CK_TEXT_LOW, 1.6)}"
@@ -910,7 +1107,7 @@ class CockpitWindow(QWidget):
         buttons.addWidget(self._talk_btn)
         auto.column.addLayout(buttons)
         # The panel ends at its buttons, as the reel's does; how many skills
-        # are on rides on the SKILLS button rather than a readout of its own.
+        # there are rides on the SKILLS button rather than a readout of its own.
         col.addWidget(auto)
 
         # The conversation takes the rest of the rail: every exchange this
@@ -1127,39 +1324,129 @@ class CockpitWindow(QWidget):
             )
             self._today_list.addWidget(row)
 
+        self._refresh_panel_list()
+
+    # ── The panel's two lists ─────────────────────────────────────────────
+
+    _HEADINGS = {"scheduled": "SCHEDULED", "watching": "WATCHING",
+                 "taught": "TAUGHT SKILLS", "routine": "ROUTINES",
+                 "app": "CONNECTED APPS"}
+
+    def _panel_tab(self, text: str, selected: bool) -> QPushButton:
+        tab = QPushButton(text)
+        tab.setCheckable(True)
+        tab.setChecked(selected)
+        tab.setCursor(Qt.CursorShape.PointingHandCursor)
+        tab.setStyleSheet(
+            f"QPushButton {{ {_mono(9, tokens.CK_TEXT_LOW, 2.0)} border: none;"
+            f" border-bottom: 2px solid transparent; padding: 0 0 6px 0; }}"
+            f"QPushButton:hover {{ color: {tokens.CK_TEXT_MID}; }}"
+            f"QPushButton:checked {{ color: {tokens.CK_TEXT_HI};"
+            f" border-bottom: 2px solid {tokens.EMBER}; }}")
+        return tab
+
+    def _show_panel_tab(self, which: str):
+        self._panel_tab_name = which
+        self._tab_autos.setChecked(which == "automations")
+        self._tab_skills.setChecked(which == "skills")
+        self._auto_count.setVisible(which == "automations")
+        self._refresh_panel_list()
+        self._auto_scroll.verticalScrollBar().setValue(0)
+
+    def _refresh_panel_list(self):
+        """Rebuild whichever list the panel is showing. Both are read from
+        disk and laid out the same way, group heading over its rows."""
         while self._auto_list.count():
             item = self._auto_list.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-        for label, tag in self._automations():
-            self._auto_list.addWidget(_RailRow(label, tag))
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+        skills_tab = getattr(self, "_panel_tab_name", "automations") == "skills"
+        rows = self._skills() if skills_tab else self._automations()
+        group = None
+        for entry in rows:
+            if entry["kind"] != group:
+                group = entry["kind"]
+                count = sum(1 for r in rows if r["kind"] == group)
+                heading = QLabel(f"{self._HEADINGS[group]}  ·  {count}")
+                heading.setStyleSheet(_mono(9, tokens.CK_TEXT_LOW, 1.8) + " padding-top: 10px;")
+                self._auto_list.addWidget(heading)
+            self._auto_list.addWidget(_AutoRow(
+                entry, on_run=self._run_automation,
+                running=entry["run"] is not None and entry["run"][1] in self._running))
+        if not rows:
+            empty = QLabel("Nothing runs on its own yet.")
+            empty.setStyleSheet(
+                f"color: {tokens.CK_TEXT_FAINT}; font-family: {theme.FONT};"
+                f" font-size: 12px; background: transparent; padding: 3px 0;"
+            )
+            self._auto_list.addWidget(empty)
+        if not skills_tab:
+            on = sum(1 for r in rows if r["state"] != "paused")
+            self._auto_count.setText(f"{on} ON" if on else "")
+
+    def _run_automation(self, auto: dict):
+        """RUN on a row. A scheduler job or a routine runs now, off the GUI
+        thread, and delivers its result the way a scheduled firing does; a
+        taught skill is asked for, so it plays out in the conversation."""
+        kind, key = auto["run"]
+        if kind == "skill":
+            self._start_pipeline(text_input=f"Run my skill '{key}'.")
+            return
+        if key in self._running:
+            return
+        self._running.add(key)
+        self._refresh_panel_list()
+
+        def work():
+            try:
+                if kind == "macro":
+                    from tools import macro_tool
+                    macro_tool.run_macro(key)
+                else:
+                    from core import scheduler
+                    (scheduler.get_instance() or scheduler.ElFagerScheduler()).run_now(key)
+            except Exception:
+                pass
+            finally:
+                self.automation_finished.emit(key)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_automation_finished(self, key: str):
+        self._running.discard(key)
+        self._refresh_panel_list()
 
     def _automations(self) -> list:
-        """Scheduled skills first, then queued autonomous tasks — the things
-        El Fager runs without being asked each time."""
-        rows: list = []
+        """The AUTOMATIONS rows, read from the files the scheduler and the
+        autonomous task loop run from."""
         try:
-            from core.skills.store import SkillStore
-            for skill in SkillStore().list_all():
-                if len(rows) >= 6:
-                    break
-                name = (skill.get("name") or "").strip()
-                if name:
-                    rows.append((name, (skill.get("schedule") or "manual").upper()[:12]))
+            from zoneinfo import ZoneInfo
+            from core import autonomous_tasks, scheduler
+            history = []
+            if scheduler._HISTORY_FILE.exists():
+                for line in scheduler._HISTORY_FILE.read_text(encoding="utf-8").splitlines():
+                    try:
+                        history.append(json.loads(line))
+                    except ValueError:
+                        pass
+            return _automation_rows(
+                scheduler._load_schedules(), history,
+                autonomous_tasks.AutonomousTaskManager().list_all(),
+                _skill_list(), datetime.now(ZoneInfo(scheduler._TZ)))
         except Exception:
-            pass
+            return []
+
+    def _skills(self) -> list:
+        """The SKILLS rows: taught skills, the routines that ship with El
+        Fager, and the apps Settings has switched on."""
         try:
-            from core.autonomous_tasks import AutonomousTaskManager
-            for task in AutonomousTaskManager().list_all():
-                if len(rows) >= 6:
-                    break
-                desc = (task.get("description") or "").strip()
-                if desc:
-                    rows.append((desc[:60], (task.get("status") or "queued").upper()[:12]))
+            from tools.macro_tool import _load_macros
+            return _skill_rows(_skill_list(), _load_macros(),
+                               set(_load_settings().get("skills_disabled", []) or []))
         except Exception:
-            pass
-        return rows or [("Nothing scheduled yet.", "")]
+            return []
 
     def _build_keymap(self, parent: QWidget) -> QWidget:
         """The `?` map. A child of the chrome so it covers the stage without
@@ -1360,7 +1647,8 @@ class CockpitWindow(QWidget):
         self._status.next.setText(_cached("calendar"))
         self._status.done.setText(self._done_today())
         self._r_today.set_value(_cached("tasks"))
-        self._skills_btn.setText(f"SKILLS  {self._skills_online().replace(' of ', '/')}")
+        self._tab_autos.setText(f"AUTOMATIONS  {len(self._automations())}")
+        self._tab_skills.setText(f"SKILLS  {len(self._skills())}")
         self._refresh_rails()
 
     def _done_today(self) -> str:
@@ -1375,16 +1663,6 @@ class CockpitWindow(QWidget):
         except Exception:
             return "—"
         return str(len(done))
-
-    def _skills_online(self) -> str:
-        """How many of the six surfaces are switched on in Settings → Skills."""
-        try:
-            from core.brain import SKILL_TOOLS
-            disabled = set(_load_settings().get("skills_disabled", []) or [])
-            live = [k for k in SKILL_TOOLS if k not in disabled]
-        except Exception:
-            return "—"
-        return f"{len(live)} of {len(live) + len(disabled)}"
 
     # ── Data moments ──────────────────────────────────────────────────────
 

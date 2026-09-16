@@ -86,6 +86,21 @@ def _run_checks_at(engine, dt):
         engine._run_checks()
 
 
+class TestWatchesCatalogue:
+    """WATCHES is what the Cockpit lists as El Fager's background checks. It
+    is written by hand beside the checks, so a new check must be added to it
+    — that is what this test guards."""
+
+    def test_every_check_is_described_and_nothing_extra(self):
+        methods = {n for n in dir(ProactiveEngine) if n.startswith("_check_")}
+        assert {w["check"] for w in pa.WATCHES} == methods
+
+    def test_each_entry_reads_as_a_row(self):
+        for watch in pa.WATCHES:
+            assert watch["name"] and watch["when"] and watch["detail"]
+            assert watch["name"][0].isupper()
+
+
 class TestRunChecksWindows:
     def test_sleep_hours_run_nothing(self, engine):
         mocks = _patch_all_checks(engine)

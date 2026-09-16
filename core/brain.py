@@ -4854,6 +4854,18 @@ SKILL_TOOLS: dict[str, frozenset[str]] = {
     }),
 }
 
+# What each of those is called, and what it lets El Fager do, for the Cockpit's
+# SKILLS tab and Settings. Paired with SKILL_TOOLS by a test, so a new surface
+# has to be named here too.
+SKILL_LABELS: dict[str, tuple[str, str]] = {
+    "gmail":    ("Gmail", "Read, draft and send email"),
+    "whatsapp": ("WhatsApp", "Draft and send to your chats"),
+    "calendar": ("Calendar", "Read your days and add events"),
+    "todoist":  ("Todoist", "Tasks and to-dos"),
+    "browser":  ("Browser", "Drive Comet for you"),
+    "screen":   ("Screen", "Read what is on your screen"),
+}
+
 
 def _disabled_tool_names() -> set[str]:
     """Tools belonging to skills switched off in Settings → Skills.
