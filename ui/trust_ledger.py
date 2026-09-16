@@ -144,12 +144,31 @@ class TrustLedgerWindow(QWidget):
         self.refresh()
 
     def _build_ui(self):
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # A panel over the cockpit, the way the ? map is: the stage dimmed
+        # behind, the record on a card of its own. It used to carry the
+        # frameless flag while parented to the cockpit — which does not make a
+        # window — so it painted no background at all and the sphere read
+        # straight through every line of it.
         self.setWindowTitle("El Fager — Trust Ledger")
-        self.setStyleSheet(f"background: {tokens.CK_PANEL};")
-        self.resize(860, 760)
+        self.setObjectName("scrim")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"#scrim {{ background: {tokens.rgba(tokens.CK_VOID, 0.93)}; }}")
+        self.resize(940, 820)
 
-        col = QVBoxLayout(self)
+        backdrop = QVBoxLayout(self)
+        backdrop.setContentsMargins(40, 40, 40, 40)
+        self._card = QWidget()
+        self._card.setObjectName("card")
+        self._card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._card.setStyleSheet(
+            f"#card {{ background: {tokens.CK_PANEL};"
+            f" border: 1px solid {tokens.CK_HAIRLINE};"
+            f" border-radius: {tokens.R3}px; }}"
+        )
+        self._card.setMaximumSize(860, 760)
+        backdrop.addWidget(self._card, 0, Qt.AlignmentFlag.AlignCenter)
+
+        col = QVBoxLayout(self._card)
         col.setContentsMargins(32, 26, 32, 22)
         col.setSpacing(16)
 
@@ -311,14 +330,19 @@ class TrustLedgerWindow(QWidget):
 
     def open(self):
         self.refresh()
-        screen = QApplication.primaryScreen()
-        if screen is not None:
-            area = screen.availableGeometry()
-            self.move(area.center().x() - self.width() // 2,
-                      area.center().y() - self.height() // 2)
+        parent = self.parentWidget()
+        if parent is not None:
+            self.setGeometry(parent.rect())
+        else:
+            screen = QApplication.primaryScreen()
+            if screen is not None:
+                area = screen.availableGeometry()
+                self.move(area.center().x() - self.width() // 2,
+                          area.center().y() - self.height() // 2)
         self.show()
         self.raise_()
         self.activateWindow()
+        self.setFocus()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

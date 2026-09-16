@@ -121,3 +121,69 @@ class TestTheLawIsOnScreen:
         from ui import tokens
         for category in ledger.CATEGORIES:
             assert category in tokens.LEDGER_TINT
+
+
+class TestItIsReadableOverTheStage:
+    """It opened as a child widget with the frameless flag, which does not
+    make a window: nothing painted a background, so the sphere read straight
+    through the record. It is a panel over the cockpit now, like the ? map."""
+
+    def _cockpit(self, qapp, tmp_path, monkeypatch):
+        import json
+        from unittest.mock import MagicMock
+        import ui.overlay as overlay_mod
+        path = tmp_path / "settings.json"
+        path.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
+        from ui.cockpit import CockpitWindow
+        w = CockpitWindow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        w.set_wake_listener(None)
+        w.resize(1280, 760)
+        return w
+
+    def test_the_card_paints_a_solid_background(self, qapp):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QImage
+        from ui import tokens
+        w = _window(qapp)
+        w.resize(900, 800)
+        image = QImage(w._card.size(), QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        w._card.render(image)
+        middle = image.pixelColor(image.width() // 2, image.height() // 2)
+        assert middle.alpha() == 255, "the stage shows through the record"
+        assert middle.name().lower() == tokens.CK_PANEL.lower()
+        w.close()
+
+    def test_it_covers_the_cockpit_and_centres_the_card(self, qapp, tmp_path, monkeypatch):
+        cockpit = self._cockpit(qapp, tmp_path, monkeypatch)
+        cockpit.open_ledger()
+        ledger_window = cockpit._ledger_window
+        stage = ledger_window.parentWidget()
+        assert stage is cockpit._chrome, "it should cover the stage, not the title bar"
+        assert ledger_window.size() == stage.size(), "the backdrop leaves the stage showing"
+        card = ledger_window._card
+        assert card.width() <= stage.width() - 40 and card.height() <= stage.height() - 40
+        centre_gap = abs((card.x() + card.width() // 2) - stage.width() // 2)
+        assert centre_gap <= 2, "the card is not centred on the cockpit"
+        cockpit.close()
+
+    def test_a_resized_cockpit_keeps_it_covered(self, qapp, tmp_path, monkeypatch):
+        cockpit = self._cockpit(qapp, tmp_path, monkeypatch)
+        cockpit.open_ledger()
+        cockpit.resize(1000, 700)
+        for _ in range(10):
+            qapp.processEvents()
+        assert cockpit._ledger_window.size() == cockpit._chrome.size()
+        cockpit.close()
+
+    def test_escape_puts_it_away(self, qapp, tmp_path, monkeypatch):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QKeyEvent, QKeySequence
+        cockpit = self._cockpit(qapp, tmp_path, monkeypatch)
+        cockpit.open_ledger()
+        w = cockpit._ledger_window
+        w.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
+                                  Qt.KeyboardModifier.NoModifier))
+        assert w.isHidden()
+        cockpit.close()

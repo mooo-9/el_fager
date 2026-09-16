@@ -18,6 +18,7 @@ Center's local cache — so opening the cockpit never waits on the network.
 
 import calendar
 import json
+import math
 import re
 import threading
 from datetime import datetime
@@ -91,28 +92,52 @@ _LABELS = {
 }
 
 
-def _cached(card_id: str) -> str:
-    """First meaningful line of a Command Center card, or an em dash."""
+def _cached_text(card_id: str) -> str:
+    """A Command Center card, but only while it is still about today.
+
+    A card says things like "No events found for today (Monday, Sep 14)". It
+    used to be written with the time alone, so a card fetched on Monday was
+    still read out on Wednesday as today's. An undated card is from before
+    this, and is old by definition."""
     try:
-        data = json.loads(_CACHE.read_text(encoding="utf-8"))
-        text = data.get("cards", {}).get(card_id, {}).get("text", "")
-        for line in text.splitlines():
-            if line.strip():
-                return line.strip()
+        card = json.loads(_CACHE.read_text(encoding="utf-8")).get("cards", {}).get(card_id, {})
+        if card.get("date") == datetime.now().date().isoformat():
+            return card.get("text", "")
     except Exception:
         pass
+    return ""
+
+
+def _cache_card(card_id: str, text: str) -> None:
+    """Write a card back, dated, leaving the other cards alone."""
+    try:
+        try:
+            data = json.loads(_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        now = datetime.now()
+        data.setdefault("cards", {})[card_id] = {
+            "text": text, "updated": now.strftime("%H:%M"),
+            "date": now.date().isoformat(),
+        }
+        _CACHE.parent.mkdir(parents=True, exist_ok=True)
+        _CACHE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _cached(card_id: str) -> str:
+    """First meaningful line of a Command Center card, or an em dash."""
+    for line in _cached_text(card_id).splitlines():
+        if line.strip():
+            return line.strip()
     return "—"
 
 
 def _cached_lines(card_id: str, limit: int) -> list[str]:
     """Up to `limit` meaningful lines of a card — the rails show a list where
     the old corner readouts showed one line."""
-    try:
-        data = json.loads(_CACHE.read_text(encoding="utf-8"))
-        text = data.get("cards", {}).get(card_id, {}).get("text", "")
-        return [l.strip() for l in text.splitlines() if l.strip()][:limit]
-    except Exception:
-        return []
+    return [l.strip() for l in _cached_text(card_id).splitlines() if l.strip()][:limit]
 
 
 def _mono(size: int, color: str, tracking: float = 1.4) -> str:
@@ -236,24 +261,100 @@ class _StatusCard(QWidget):
         pass                  # a card, not a hairline readout: it keeps its border
 
 
+class _StateMark(QWidget):
+    """The chip's mark, which moves with the state rather than sitting still:
+    a breathing dot at rest, bars bouncing like a level meter while it hears
+    you, a ring spinning while it works, and bars waving while it speaks.
+
+    It repaints at 20 fps, and only while the Cockpit is on screen — most of
+    El Fager's life is spent in the tray, where this would be pure waste."""
+
+    _FPS_MS = 50
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(16, 12)
+        self._state = "idle"
+        self._colour = tokens.CK_ORB["idle"]
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(self._FPS_MS)
+        self._timer.timeout.connect(self._tick)
+
+    def colour(self) -> str:
+        return self._colour
+
+    def set_state(self, state: str, colour: str):
+        self._state = state
+        self._colour = colour
+        self.update()
+
+    def _tick(self):
+        self._phase += self._FPS_MS / 1000
+        self.update()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._timer.stop()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        colour = QColor(self._colour)
+        cx, cy = self.width() / 2, self.height() / 2
+        t = self._phase
+
+        if self._state == "thinking":
+            # A ring with a gap, turning: the one state Mo waits through.
+            pen = QPen(colour, 2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            span = 270 * 16
+            painter.drawArc(QRectF(cx - 5, cy - 5, 10, 10), int(-t * 360 * 16) % (360 * 16), span)
+        elif self._state in ("listening", "speaking"):
+            # Bars: three slower ones while it listens, four quicker while it
+            # speaks, each on its own beat so they read as a level meter.
+            count, rate = (3, 5.2) if self._state == "listening" else (4, 9.0)
+            width, gap, tall = 2.0, 3.0, 10.0
+            left = cx - (count * width + (count - 1) * (gap - width)) / 2
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(colour)
+            for i in range(count):
+                height = tall * (0.3 + 0.7 * (0.5 + 0.5 * math.sin(t * rate + i * 0.9)))
+                painter.drawRoundedRect(
+                    QRectF(left + i * gap, cy - height / 2, width, height), 1, 1)
+        else:
+            # Rest and error: one dot, breathing slowly.
+            swell = 0.5 + 0.5 * math.sin(t * 2.1)
+            colour.setAlphaF(0.6 + 0.4 * swell)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(colour)
+            radius = 2.6 + 1.1 * swell
+            painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2, radius * 2))
+        painter.end()
+
+
 class _StateChip(QWidget):
-    """Top-centre state mark: a state-tinted dot beside the state's name."""
+    """Top-centre state mark: a mark that moves with the state, beside its name."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
-        self._dot = QLabel("●")
-        self._dot.setStyleSheet(_mono(9, tokens.CK_ORB["idle"], 0))
-        row.addWidget(self._dot)
+        self._mark = _StateMark()
+        row.addWidget(self._mark)
         self.label = QLabel("IDLE")
         self.label.setStyleSheet(_mono(11, tokens.CK_TEXT_MID, 2.6))
         row.addWidget(self.label)
 
-    def set_state(self, text: str, color: str):
+    def set_state(self, text: str, color: str, state: str = "idle"):
         self.label.setText(text)
-        self._dot.setStyleSheet(_mono(9, color, 0))
+        self._mark.set_state(state, color)
 
 
 class _MonthCalendar(QWidget):
@@ -735,6 +836,8 @@ class CockpitWindow(QWidget):
     knowledge_requested = pyqtSignal()
     # A job started from the AUTOMATIONS panel finished, off the GUI thread.
     automation_finished = pyqtSignal(str)
+    # Today's calendar and tasks came back, off the GUI thread.
+    day_refreshed = pyqtSignal()
 
     def __init__(self, voice_in, brain, voice_out, memory):
         super().__init__()
@@ -769,6 +872,7 @@ class CockpitWindow(QWidget):
         progress.subscribe(self._progress_cb)
         self.progress_changed.connect(self._refresh_steps)
         self.automation_finished.connect(self._on_automation_finished)
+        self.day_refreshed.connect(self._refresh_readouts)
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
         self._clock.timeout.connect(self._tick_clock)
@@ -977,6 +1081,7 @@ class CockpitWindow(QWidget):
         self._state_label = self._state_chip.label
 
         outer.addWidget(self._build_right_rail(), 0)
+        self._chrome = chrome          # the ledger and the map cover this, not the title bar
         self._keymap = self._build_keymap(chrome)
 
     def _build_title_bar(self) -> QWidget:
@@ -1438,6 +1543,26 @@ class CockpitWindow(QWidget):
         except Exception:
             return []
 
+    def _refresh_day(self) -> threading.Thread:
+        """Fetch today's calendar and tasks off the GUI thread and cache them,
+        so the rails say what is on today rather than whatever day the
+        Command Center was last opened on. Returns the thread, for tests."""
+        def work():
+            from ui import command_center
+            for card, fetch in (("calendar", command_center._fetch_calendar),
+                                ("tasks", command_center._fetch_tasks)):
+                try:
+                    text = (fetch() or "").strip()
+                except Exception:
+                    continue          # keep whatever is cached; never blank the rail
+                if text:
+                    _cache_card(card, text)
+            self.day_refreshed.emit()
+
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        return thread
+
     def _skills(self) -> list:
         """The SKILLS rows: taught skills, the routines that ship with El
         Fager, and the apps Settings has switched on."""
@@ -1543,6 +1668,10 @@ class CockpitWindow(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QTimer.singleShot(0, self._push_stage)       # once the columns have moved
+        ledger_window = getattr(self, "_ledger_window", None)
+        if ledger_window is not None and not ledger_window.isHidden():
+            QTimer.singleShot(0, lambda: ledger_window.setGeometry(
+                ledger_window.parentWidget().rect()))
 
     def _push_orb_state(self, state: str):
         if not (self._orb and self._orb_ready):
@@ -1561,7 +1690,8 @@ class CockpitWindow(QWidget):
 
     def _paint_state(self, state: str):
         color = tokens.CK_ORB.get(_ORB_STATE.get(state, "idle"), tokens.CK_ORB["idle"])
-        self._state_chip.set_state(_LABELS.get(state, state.upper()), color)
+        self._state_chip.set_state(_LABELS.get(state, state.upper()), color,
+                                   _ORB_STATE.get(state, "idle"))
         self._state_label.setStyleSheet(_mono(11, color, 2.6))
         for readout in self._readouts():
             readout.set_tint(color)
@@ -1883,6 +2013,7 @@ class CockpitWindow(QWidget):
     def open(self):
         self._ensure_orb()
         self._refresh_readouts()
+        self._refresh_day()
         self._refresh_staged()
         self._refresh_steps()
         self._show_window()
@@ -2014,7 +2145,9 @@ class CockpitWindow(QWidget):
         """The record, opened over the cockpit. Built on first use."""
         if getattr(self, "_ledger_window", None) is None:
             from ui.trust_ledger import TrustLedgerWindow
-            self._ledger_window = TrustLedgerWindow(self)
+            # A child of the chrome, as the ? map is: it covers the stage and
+            # leaves the title bar — clock, minimise, close — reachable.
+            self._ledger_window = TrustLedgerWindow(self._chrome)
         self._ledger_window.open()
 
     def keyPressEvent(self, event):

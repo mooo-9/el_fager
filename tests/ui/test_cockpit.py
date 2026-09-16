@@ -5,6 +5,8 @@ user's desktop. What matters here is the contract around the orb — that
 Chromium stays unbuilt until the cockpit is actually opened, and that state
 maps onto the orb's own vocabulary.
 """
+import json
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -82,7 +84,7 @@ class TestStateMapping:
         from ui import tokens
         w = _make_cockpit(qapp)
         w.on_state_update(state, "", "")
-        assert f"color: {tokens.CK_ORB[orb_state]};" in w._state_chip._dot.styleSheet()
+        assert w._state_chip._mark.colour() == tokens.CK_ORB[orb_state]
         assert f"color: {tokens.CK_ORB[orb_state]};" in w._state_label.styleSheet()
         w.close()
 
@@ -101,12 +103,59 @@ class TestReadouts:
     def test_readouts_come_from_the_local_cache_never_the_network(self, tmp_path, monkeypatch):
         import ui.cockpit as mod
         cache = tmp_path / "cache.json"
-        cache.write_text(
-            '{"cards": {"calendar": {"text": "Standup at 10:00\\nthen review"}}}',
-            encoding="utf-8",
-        )
+        cache.write_text(json.dumps({"cards": {"calendar": {
+            "text": "Standup at 10:00\nthen review",
+            "date": date.today().isoformat()}}}), encoding="utf-8")
         monkeypatch.setattr(mod, "_CACHE", cache)
         assert mod._cached("calendar") == "Standup at 10:00"
+
+    def test_yesterdays_card_is_not_read_as_today(self, tmp_path, monkeypatch):
+        # The rails said "No events found for today (Monday, Sep 14)" two days
+        # running: a card was written once and never dated, so nothing could
+        # tell it was stale.
+        import ui.cockpit as mod
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"cards": {"calendar": {
+            "text": "No events found for today (Monday, Sep 14)",
+            "date": (date.today() - timedelta(days=1)).isoformat()}}}), encoding="utf-8")
+        monkeypatch.setattr(mod, "_CACHE", cache)
+        assert mod._cached("calendar") == "—"
+        assert mod._cached_lines("calendar", 4) == []
+
+    def test_a_card_from_before_dates_were_written_is_stale(self, tmp_path, monkeypatch):
+        import ui.cockpit as mod
+        cache = tmp_path / "cache.json"
+        cache.write_text(
+            '{"cards": {"calendar": {"text": "No events found", "updated": "05:53"}}}',
+            encoding="utf-8")
+        monkeypatch.setattr(mod, "_CACHE", cache)
+        assert mod._cached("calendar") == "—"
+
+    def test_what_the_cockpit_caches_it_can_read_back(self, tmp_path, monkeypatch):
+        import ui.cockpit as mod
+        cache = tmp_path / "cache.json"
+        cache.write_text('{"cards": {"mail": {"text": "keep me"}}}', encoding="utf-8")
+        monkeypatch.setattr(mod, "_CACHE", cache)
+        mod._cache_card("calendar", "Lecture at 2")
+        assert mod._cached("calendar") == "Lecture at 2"
+        written = json.loads(cache.read_text(encoding="utf-8"))
+        assert written["cards"]["mail"]["text"] == "keep me"   # other cards kept
+        assert written["cards"]["calendar"]["date"] == date.today().isoformat()
+
+    def test_opening_the_cockpit_refreshes_the_day_in_the_background(self, qapp, tmp_path,
+                                                                     monkeypatch):
+        import ui.cockpit as mod
+        import ui.command_center as cc
+        cache = tmp_path / "cache.json"
+        cache.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(mod, "_CACHE", cache)
+        monkeypatch.setattr(cc, "_fetch_calendar", lambda: "Lecture at 2")
+        monkeypatch.setattr(cc, "_fetch_tasks", lambda: "Finish the slides")
+        w = _make_cockpit(qapp)
+        w._refresh_day().join(5)
+        assert mod._cached("calendar") == "Lecture at 2"
+        assert mod._cached("tasks") == "Finish the slides"
+        w.close()
 
     def test_a_missing_cache_reads_as_an_em_dash(self, tmp_path, monkeypatch):
         import ui.cockpit as mod
@@ -165,7 +214,8 @@ class TestStatusCard:
     def test_next_comes_from_the_calendar_cache(self, qapp, tmp_path, monkeypatch):
         import ui.cockpit as mod
         cache = tmp_path / "cache.json"
-        cache.write_text('{"cards": {"calendar": {"text": "19:00  Gym"}}}', encoding="utf-8")
+        cache.write_text(json.dumps({"cards": {"calendar": {
+            "text": "19:00  Gym", "date": date.today().isoformat()}}}), encoding="utf-8")
         monkeypatch.setattr(mod, "_CACHE", cache)
         w = _make_cockpit(qapp)
         w._refresh_readouts()
@@ -1452,6 +1502,80 @@ class TestSphereStage:
             qapp.processEvents()
         assert any(call.startswith("window.orb && window.orb.setStage(") for call in sent)
         w.close()
+
+
+class TestTheLiveMark:
+    """Mo chose a mark that moves with the state: it breathes at rest, bounces
+    like a level meter while listening, spins while working, and waves while
+    speaking. A still dot said nothing the word beside it did not."""
+
+    def _ink(self, mark):
+        """Every lit pixel of the mark, as (x, y, hue, saturation).
+
+        Qt images are freed here on the main thread: a pixmap left to the
+        collector has crashed this suite from a worker thread before."""
+        import gc
+        pixmap = mark.grab()
+        image = pixmap.toImage()
+        ink = []
+        for x in range(image.width()):
+            for y in range(image.height()):
+                colour = image.pixelColor(x, y)
+                if colour.alpha() > 40 and colour.lightness() > 40:
+                    ink.append((x, y, colour.hue(), colour.saturation()))
+        del colour, image, pixmap
+        gc.collect()
+        return ink
+
+    def test_the_mark_paints_in_every_state(self, qapp):
+        w = _make_cockpit(qapp)
+        for state in ("idle", "listening", "processing", "speaking"):
+            w.on_state_update(state, "", "")
+            assert len(self._ink(w._state_chip._mark)) > 5, f"{state} painted almost nothing"
+        w.close()
+
+    def test_each_state_has_its_own_shape(self, qapp):
+        # Bars, a ring and a dot cover the mark differently; if two states
+        # painted the same pixels, the mark would say nothing.
+        w = _make_cockpit(qapp)
+        shapes = {}
+        for state in ("idle", "listening", "processing", "speaking"):
+            w.on_state_update(state, "", "")
+            shapes[state] = {(x, y) for x, y, _, _ in self._ink(w._state_chip._mark)}
+        pairs = [(a, b) for a in shapes for b in shapes if a < b]
+        for a, b in pairs:
+            same = len(shapes[a] & shapes[b]) / max(1, len(shapes[a] | shapes[b]))
+            assert same < 0.8, f"{a} and {b} paint nearly the same mark"
+        w.close()
+
+    def test_it_moves_on_its_own(self, qapp):
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        first = {(x, y) for x, y, _, _ in self._ink(w._state_chip._mark)}
+        for _ in range(12):
+            w._state_chip._mark._tick()
+        later = {(x, y) for x, y, _, _ in self._ink(w._state_chip._mark)}
+        assert first != later, "the mark is not animating"
+        w.close()
+
+    def test_it_takes_the_state_colour(self, qapp):
+        from PyQt6.QtGui import QColor
+        from ui import tokens
+        w = _make_cockpit(qapp)
+        w.on_state_update("listening", "", "")
+        want = QColor(tokens.CK_ORB["listening"]).hue()
+        hues = [hue for _, _, hue, sat in self._ink(w._state_chip._mark) if sat > 60]
+        assert hues and all(abs(hue - want) <= 12 for hue in hues)
+        w.close()
+
+    def test_a_hidden_cockpit_costs_nothing(self, qapp):
+        # The Cockpit spends most of its life hidden in the tray; a 20 fps
+        # repaint there would be pure waste.
+        w = _make_cockpit(qapp)
+        w._show_window()
+        assert w._state_chip._mark._timer.isActive()
+        w.close()
+        assert not w._state_chip._mark._timer.isActive()
 
 
 class TestSphereHearsYou:
