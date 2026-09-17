@@ -1295,6 +1295,77 @@ class TestTranscriptTabs:
         w.close()
 
 
+class TestModelNamedTabs:
+    """A tab is named from the words heard, so garbled speech gave tabs like
+    "End day able". Once the answer is in, the fast model names the exchange
+    from the answer too, and the tab takes that name."""
+
+    def _answered(self, qapp, reply, heard="End day able",
+                  answer="Here's your evening shutdown: journal, then lights off."):
+        w = _make_cockpit(qapp)
+        w.brain.synthesize = MagicMock(side_effect=reply) if isinstance(reply, Exception) \
+            else MagicMock(return_value=reply)
+        w.on_state_update("listening", "", "")
+        w.on_state_update("processing", heard, "")
+        w.on_state_update("speaking", heard, answer)
+        w._naming.join(5)
+        qapp.processEvents()
+        return w
+
+    def test_the_models_name_replaces_the_one_from_the_words_heard(self, qapp):
+        w = self._answered(qapp, "Evening shutdown")
+        tab = w._tab_buttons[0]
+        assert tab.text() == "Evening shutdown"
+        assert tab.toolTip() == "End day able"         # what was heard stays
+        assert tab.width() >= tab.fontMetrics().horizontalAdvance("Evening shutdown")
+        w.close()
+
+    def test_the_model_is_shown_the_answer_not_only_the_garbled_words(self, qapp):
+        w = self._answered(qapp, "Evening shutdown")
+        prompt = w.brain.synthesize.call_args.args[0]
+        assert "End day able" in prompt and "evening shutdown" in prompt
+        w.close()
+
+    @pytest.mark.parametrize("reply", [
+        "", "   ", "A name that is far too long for a tab label",
+        "Evening shutdown\nBecause the answer was about it",
+        RuntimeError("API down"),
+    ])
+    def test_anything_but_a_short_name_keeps_the_first_one(self, qapp, reply):
+        w = self._answered(qapp, reply)
+        assert w._tab_buttons[0].text() == "End day able"
+        w.close()
+
+    def test_a_four_word_phrase_is_a_name(self, qapp):
+        # The live model's name for "What the fuck was that? I'm telling you,
+        # send a WhatsApp…" — rejected at three words, so that tab stayed
+        # "Fuck telling send".
+        w = self._answered(qapp, "Sending message to Ziad")
+        assert w._tab_buttons[0].text() == "Sending message to Ziad"
+        w.close()
+
+    def test_quotes_and_a_full_stop_are_trimmed(self, qapp):
+        w = self._answered(qapp, '"Evening shutdown."')
+        assert w._tab_buttons[0].text() == "Evening shutdown"
+        w.close()
+
+    def test_each_exchange_is_named_once(self, qapp):
+        w = self._answered(qapp, "Evening shutdown")
+        w.on_state_update("speaking", "End day able", "Here's your evening shutdown.")
+        w._naming.join(5)
+        assert w.brain.synthesize.call_count == 1
+        w.close()
+
+    def test_a_name_for_a_conversation_already_cleared_goes_nowhere(self, qapp):
+        from datetime import date, timedelta
+        w = self._answered(qapp, "Evening shutdown")
+        w._transcript_day = date.today() - timedelta(days=1)
+        w.on_state_update("processing", "weather", "")      # a new day's first
+        w._on_topic_named(0, "End day able", "Evening shutdown")   # late arrival
+        assert w._tab_buttons[0].text() == "Weather"
+        w.close()
+
+
 class TestTopic:
     @pytest.mark.parametrize("heard,topic", [
         ("give me my daily briefing", "Daily briefing"),

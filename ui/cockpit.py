@@ -718,6 +718,10 @@ _TOPIC_SMALL_WORDS = frozenset("""
     tell show give let know see get got
 """.split())
 _TOPIC_MAX = 22
+# The model's names are whole phrases ("Sending message to Ziad") that can't
+# be cut down without leaving a dangling word, so they get a little more room;
+# the tab strip scrolls.
+_MODEL_TOPIC_MAX = 28
 
 
 def _topic(heard: str) -> str:
@@ -861,6 +865,8 @@ class CockpitWindow(QWidget):
     automation_finished = pyqtSignal(str)
     # Today's calendar and tasks came back, off the GUI thread.
     day_refreshed = pyqtSignal()
+    # The fast model named an exchange: its index, what was heard, the name.
+    topic_named = pyqtSignal(int, str, str)
 
     def __init__(self, voice_in, brain, voice_out, memory):
         super().__init__()
@@ -881,6 +887,9 @@ class CockpitWindow(QWidget):
         # the arrows under the sphere point at, -1 while there are none.
         self._exchanges: list = []
         self._transcript_day = datetime.now().date()
+        self._named: set = set()            # exchanges the model has been asked to name
+        self._naming = None                 # the latest naming thread, for tests
+        self.topic_named.connect(self._on_topic_named)
         self._tab_buttons: list = []
         self._focus = -1
         self._confirming = threading.Event()
@@ -1342,6 +1351,50 @@ class CockpitWindow(QWidget):
         self._tab_buttons.append(tab)
         self._focus = index                            # a new question takes the tab
         self._render_exchange(index)
+
+    def _name_topic(self, index: int):
+        """Ask the fast model to name a finished exchange, off the GUI thread.
+
+        The tab's first name comes from the words heard, so garbled speech
+        named tabs like "End day able". The answer says what it was about.
+        Once per exchange, and only after the whole answer is in: nothing
+        here is on the voice path."""
+        if index in self._named:
+            return
+        self._named.add(index)
+        heard, answer = self._exchanges[index][0], self._exchanges[index][1]
+        prompt = (
+            "Say what this exchange was about in two to four plain words, for "
+            "a tab label, in sentence case like \"Daily briefing\" or \"Weather "
+            "tomorrow\". Be literal, not clever. The question was transcribed "
+            "from speech and may be garbled, so go by the answer; if it was "
+            "nonsense, reply \"Unclear\". Reply with the words only.\n\n"
+            f"Question: {heard}\nAnswer: {answer[:600]}"
+        )
+
+        def work():
+            try:
+                name = self.brain.synthesize(prompt, max_tokens=12)
+                self.topic_named.emit(index, heard, name if isinstance(name, str) else "")
+            except Exception:
+                pass            # the name from the words heard stays
+
+        self._naming = threading.Thread(target=work, daemon=True)
+        self._naming.start()
+
+    @pyqtSlot(int, str, str)
+    def _on_topic_named(self, index: int, heard: str, name: str):
+        """Rename the tab, if the reply is a short name and the exchange is
+        still the one that was asked about — a new day may have cleared it."""
+        name = name.strip().strip("\"'.").strip()
+        if (not name or "\n" in name or len(name.split()) > 4
+                or len(name) > _MODEL_TOPIC_MAX):
+            return
+        if index >= len(self._exchanges) or self._exchanges[index][0] != heard:
+            return
+        tab = self._tab_buttons[index]
+        tab.setText(name[0].upper() + name[1:])
+        tab.setFixedSize(tab.fontMetrics().horizontalAdvance(tab.text()) + 24, 24)
 
     def _render_exchange(self, index: int):
         """Rebuild one exchange in place: what Mo said, the answer as labelled
@@ -1983,6 +2036,7 @@ class CockpitWindow(QWidget):
             self._exchanges[-1][1] = response
             self._render_exchange(len(self._exchanges) - 1)
             self._show_data_moment()
+            self._name_topic(len(self._exchanges) - 1)
         elif state == "interrupted" and self._exchanges:
             # The half-spoken answer stays, marked as cut short.
             self._exchanges[-1][2] = True
@@ -2159,6 +2213,7 @@ class CockpitWindow(QWidget):
                 if item.widget() is not None:
                     item.widget().setParent(None)
         self._exchanges = []
+        self._named = set()
         self._tab_buttons = []
         self._focus = -1
         self._scrub_value.setText("—")
