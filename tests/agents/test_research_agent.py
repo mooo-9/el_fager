@@ -113,6 +113,20 @@ class TestSynthesize:
         assert "NVDA" in result
         assert "https://ex.com" in result
 
+    def test_the_summariser_is_told_today_s_date(self, monkeypatch):
+        # Without it, a March article reads as "this week's news" in September.
+        from datetime import date
+        import core.agents.research_agent as ra
+        monkeypatch.setattr(ra, "_today", lambda: date(2026, 9, 17))
+        sources = [{"title": "EPL", "url": "https://ex.com", "text": "Zamalek won"}]
+        with patch("anthropic.Anthropic") as MockCl:
+            MockCl.return_value.messages.create.return_value = MagicMock(
+                content=[MagicMock(text="Zamalek won [1].")])
+            ResearchAgent()._synthesize("Egyptian Premier League this week", sources)
+        prompt = MockCl.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+        assert "Thursday, 17 September 2026" in prompt
+        assert "don't cover" in prompt
+
     def test_fallback_on_api_failure(self):
         sources = [{"title": "Test", "url": "https://ex.com", "text": "Some snippet here"}]
         with patch("anthropic.Anthropic", side_effect=Exception("API down")):

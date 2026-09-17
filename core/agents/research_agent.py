@@ -30,6 +30,12 @@ _STRIP_PREFIXES = [
 ]
 
 
+def _today():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Africa/Cairo")).date()
+
+
 class ResearchAgent(BaseAgent):
     @property
     def name(self) -> str:
@@ -114,10 +120,13 @@ class ResearchAgent(BaseAgent):
             )
         context = "\n\n".join(context_parts)
 
+        # Without the date, a March article read as "this week's news" in September.
         prompt = (
             "You are El Fager's research engine. Based on the sources below, "
             "answer the query in 3-5 sentences. Be specific and cite sources as [1], [2] etc. "
-            "No emojis. Plain English only.\n\n"
+            "No emojis. Plain English only.\n"
+            f"Today is {_today():%A, %d %B %Y}. If the query asks about a time the "
+            "sources don't cover, say so plainly and give the dates they do cover.\n\n"
             f"Query: {query}\n\n"
             f"Sources:\n{context}"
         )
