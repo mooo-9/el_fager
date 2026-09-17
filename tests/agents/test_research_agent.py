@@ -39,6 +39,34 @@ class TestSearch:
             results = ResearchAgent()._search("anything")
         assert results == []
 
+    def test_ads_are_not_sources(self):
+        # "Rodri's transfer to Barcelona" came back with two Bing ads — airport
+        # transfers and Barcelona tours — each an ~800-character tracking link.
+        mock_result = [
+            {"title": "Airport transfers", "href": "https://www.bing.com/aclick?ld=e8Lg&u=aHR0", "body": "Book"},
+            {"title": "Rodri seals transfer", "href": "https://www.espn.com/soccer/story/rodri", "body": "Rodri"},
+            {"title": "Tours", "href": "https://ad.doubleclick.net/searchads/link/click?lid=1", "body": "Tours"},
+            {"title": "Deals", "href": "https://www.googleadservices.com/pagead/aclk?sa=L", "body": "Deals"},
+            {"title": "DDG ad", "href": "https://duckduckgo.com/y.js?ad_domain=x.com", "body": "Ad"},
+        ]
+        with patch("ddgs.DDGS") as MockDDGS:
+            MockDDGS.return_value.__enter__.return_value.text.return_value = iter(mock_result)
+            results = ResearchAgent()._search("Rodri transfer to Barcelona")
+        assert [r["href"] for r in results] == ["https://www.espn.com/soccer/story/rodri"]
+
+    def test_ads_do_not_cost_it_sources(self):
+        # Ads took slots: with two of five results ads, Rodri's research was
+        # left with two sources. It asks for more and keeps the first real five.
+        ads = [{"title": "Ad", "href": f"https://www.bing.com/aclick?ld={i}", "body": "ad"}
+               for i in range(4)]
+        real = [{"title": f"R{i}", "href": f"https://news{i}.com", "body": "news"}
+                for i in range(7)]
+        with patch("ddgs.DDGS") as MockDDGS:
+            text = MockDDGS.return_value.__enter__.return_value.text
+            text.side_effect = lambda q, max_results: iter((ads + real)[:max_results])
+            results = ResearchAgent()._search("Rodri transfer to Barcelona")
+        assert [r["href"] for r in results] == [f"https://news{i}.com" for i in range(5)]
+
 
 _FETCH_FAILED = "[fetch failed: HTTP 403 — blocked]"
 

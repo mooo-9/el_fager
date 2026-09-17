@@ -9,6 +9,10 @@ _MAX_SEARCH_RESULTS = 5
 _MAX_PAGES_TO_READ = 2
 _MAX_PAGE_CHARS = 3000  # per page, keeps Haiku prompt under token budget
 
+# Search results that are ads: a click-tracking link is not a source.
+_AD_LINKS = ("bing.com/aclick", "doubleclick.net/", "googleadservices.com/",
+             "duckduckgo.com/y.js")
+
 _STRIP_PREFIXES = [
     "research everything about",
     "research everything on",
@@ -74,7 +78,11 @@ class ResearchAgent(BaseAgent):
             except ImportError:
                 from duckduckgo_search import DDGS
             with DDGS() as ddgs:
-                return list(ddgs.text(query, max_results=_MAX_SEARCH_RESULTS))
+                # Twice as many as needed: ads take slots.
+                results = list(ddgs.text(query, max_results=_MAX_SEARCH_RESULTS * 2))
+            return [r for r in results
+                    if not any(ad in r.get("href", "") for ad in _AD_LINKS)
+                    ][:_MAX_SEARCH_RESULTS]
         except Exception:
             return []
 
