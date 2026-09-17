@@ -27,7 +27,7 @@ _last: "dict | None" = None
 _started = False
 
 
-def observe(pid: int, title: str, class_name: str, app: str) -> None:
+def observe(pid: int, title: str, class_name: str, app: str, hwnd: int = 0) -> None:
     """One foreground reading. Remembered unless it's El Fager or the shell."""
     global _last
     if pid == os.getpid() or not title.strip() or class_name in _SHELL_CLASSES:
@@ -35,11 +35,12 @@ def observe(pid: int, title: str, class_name: str, app: str) -> None:
     if app.lower().endswith(".exe"):
         app = app[:-4]
     with _lock:
-        _last = {"app": app, "title": title.strip()[:120], "at": time.monotonic()}
+        _last = {"app": app, "title": title.strip()[:120], "at": time.monotonic(),
+                 "hwnd": hwnd}
 
 
-def _foreground() -> "tuple[int, str, str, str] | None":
-    """(pid, title, class name, process name) of the window in front."""
+def _foreground() -> "tuple[int, str, str, str, int] | None":
+    """(pid, title, class name, process name, handle) of the window in front."""
     try:
         import ctypes
         from ctypes import wintypes
@@ -56,7 +57,7 @@ def _foreground() -> "tuple[int, str, str, str] | None":
         user32.GetWindowTextW(hwnd, title, len(title))
         cls = ctypes.create_unicode_buffer(256)
         user32.GetClassNameW(hwnd, cls, len(cls))
-        return pid.value, title.value, cls.value, psutil.Process(pid.value).name()
+        return pid.value, title.value, cls.value, psutil.Process(pid.value).name(), hwnd
     except Exception:
         return None
 
