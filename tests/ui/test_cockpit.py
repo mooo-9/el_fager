@@ -405,7 +405,7 @@ class TestAttention:
         w._go_ambient()                       # what the timer would do
         assert w._attention == "ambient"
         assert w._status.graphicsEffect().opacity() == 0.0
-        from PyQt6.QtWidgets import QLabel     # saved until the Cockpit closes
+        from PyQt6.QtWidgets import QLabel     # kept until midnight
         assert "Three things today." in [
             label.text() for label in w._reading_box.findChildren(QLabel)]
         w.close()
@@ -889,7 +889,7 @@ class TestStepMark:
 
 class TestConversation:
     """The right rail's TRANSCRIPT panel is one scrolling conversation: every
-    exchange this session stacked in order, kept until the Cockpit closes.
+    exchange today stacked in order, kept until midnight.
     The words live only there — none of them is painted over the sphere."""
 
     def _exchange(self, w, heard, answer):
@@ -995,7 +995,11 @@ class TestConversation:
         assert panel.index("INTERRUPTED") > panel.index("Once upon a time")
         w.close()
 
-    def test_escape_clears_the_conversation(self, qapp):
+    # Esc, closing, and the view pill all used to wipe the conversation, so
+    # nothing said earlier in the day could be read again. It is kept until
+    # midnight now.
+
+    def test_escape_keeps_todays_conversation(self, qapp):
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QKeyEvent
         from core import staging
@@ -1004,16 +1008,38 @@ class TestConversation:
         self._exchange(w, "first question", "first answer")
         w.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
                                   Qt.KeyboardModifier.NoModifier))
-        assert self._panel(w) == []
+        assert "first answer" in self._panel(w)
         w.close()
 
-    def test_the_next_session_starts_empty(self, qapp):
+    def test_closing_and_the_view_pill_keep_it_the_same_day(self, qapp):
+        w = _make_cockpit(qapp)
+        self._exchange(w, "morning question", "morning answer")
+        w._close()
+        self._exchange(w, "noon question", "noon answer")
+        w._open_knowledge()
+        assert len(w._exchanges) == 2
+        assert [b.toolTip() for b in w._tab_buttons] == ["morning question", "noon question"]
+        w.close()
+
+    def test_the_first_question_after_midnight_starts_empty(self, qapp):
+        from datetime import date, timedelta
         w = _make_cockpit(qapp)
         self._exchange(w, "yesterday", "old")
-        w._close()
+        w._transcript_day = date.today() - timedelta(days=1)
         self._exchange(w, "today", "new")
         assert "yesterday" not in self._panel(w)
         assert "today" in self._panel(w)
+        assert len(w._tab_buttons) == 1
+        w.close()
+
+    def test_opening_after_midnight_starts_empty(self, qapp):
+        from datetime import date, timedelta
+        w = _make_cockpit(qapp)
+        self._exchange(w, "yesterday", "old")
+        w._transcript_day = date.today() - timedelta(days=1)
+        w._start_new_day_if_needed()          # what open() does first
+        assert self._panel(w) == []
+        assert w._scrub_value.text() == "—"
         w.close()
 
     def test_the_pipeline_caption_is_not_taken_for_what_mo_said(self, qapp):
@@ -1255,7 +1281,7 @@ class TestTranscriptTabs:
         assert gap < 30, f"the answer floats {gap}px below the question"
         w.close()
 
-    def test_escape_clears_the_tabs(self, qapp):
+    def test_escape_keeps_the_tabs(self, qapp):
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QKeyEvent
         from core import staging
@@ -1264,8 +1290,8 @@ class TestTranscriptTabs:
         self._exchange(w, "first question", "first answer")
         w.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
                                   Qt.KeyboardModifier.NoModifier))
-        assert w._tab_buttons == []
-        assert w._tabs_layout.count() == 0
+        assert len(w._tab_buttons) == 1
+        assert w._tabs_layout.count() == 1
         w.close()
 
 
@@ -1464,11 +1490,13 @@ class TestArrows:
         assert self._focused(w) == [True]
         w.close()
 
-    def test_closing_resets_them(self, qapp):
+    def test_closing_keeps_their_place(self, qapp):
         w = _make_cockpit(qapp)
         self._exchange(w, "question", "answer")
+        before = w._scrub_value.text()
         w._close()
-        assert w._scrub_value.text() == "—"
+        assert before != "—"
+        assert w._scrub_value.text() == before
         w.close()
 
     def test_under_the_sphere_only_the_arrows_and_the_pill(self, qapp):

@@ -880,6 +880,7 @@ class CockpitWindow(QWidget):
         # Cockpit closes — the ledger is the durable record. _focus is the one
         # the arrows under the sphere point at, -1 while there are none.
         self._exchanges: list = []
+        self._transcript_day = datetime.now().date()
         self._tab_buttons: list = []
         self._focus = -1
         self._confirming = threading.Event()
@@ -1316,6 +1317,7 @@ class CockpitWindow(QWidget):
     def _add_exchange(self, heard: str):
         """A new question joins the conversation at once, before its answer
         exists, and the panel follows it."""
+        self._start_new_day_if_needed()
         stamp = datetime.now().strftime("%I:%M %p").lstrip("0")
         self._exchanges.append([heard, "", False, stamp])
         self._reading_layout.addWidget(QWidget())      # placeholder, rendered next
@@ -2031,6 +2033,7 @@ class CockpitWindow(QWidget):
             self.open()
 
     def open(self):
+        self._start_new_day_if_needed()
         self._ensure_orb()
         self._refresh_readouts()
         self._refresh_day()
@@ -2141,8 +2144,15 @@ class CockpitWindow(QWidget):
         self.open()
         self._orb_js("window.orb && window.orb.bloom()")
 
-    def _close(self):
-        # The session's conversation ends with it: the next open starts empty.
+    def _start_new_day_if_needed(self):
+        """Today's conversation is kept until midnight — Esc, closing and the
+        view pill used to wipe it, so nothing asked earlier could be read
+        again. The first open or question of a new day starts it empty. It
+        lives in memory: a restart of El Fager still starts empty."""
+        today = datetime.now().date()
+        if self._transcript_day == today:
+            return
+        self._transcript_day = today
         for layout in (self._reading_layout, self._tabs_layout):
             while layout.count():
                 item = layout.takeAt(0)
@@ -2152,6 +2162,8 @@ class CockpitWindow(QWidget):
         self._tab_buttons = []
         self._focus = -1
         self._scrub_value.setText("—")
+
+    def _close(self):
         self._notice.setText("")
         self._clock.stop()
         self._ambient_timer.stop()      # no timers running behind the tray
