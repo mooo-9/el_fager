@@ -34,6 +34,11 @@ def list_windows(filter: str = "") -> str:
 def get_active_window() -> str:
     """Return the title and position of the currently focused window."""
     try:
+        # Asking El Fager puts El Fager in front; Mo means what was there before.
+        from core import focus_context
+        if focus_context.el_fager_in_front() and focus_context.describe():
+            return (f"El Fager's own window is in front now. Before that, Mo was "
+                    f"in {focus_context.describe()}.")
         import pygetwindow as gw
         w = gw.getActiveWindow()
         if not w:

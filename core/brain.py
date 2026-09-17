@@ -6528,6 +6528,16 @@ class Brain:
             "know from training may be out of date: for anything recent, current, "
             "latest or priced, trust what your tools return over your own memory."
         )
+        # Calling El Fager covers what Mo meant, so "this" has to come from
+        # the window he was in before, not the one in front now.
+        from core import focus_context
+        window = focus_context.describe()
+        if window:
+            dynamic += (
+                f"\n\nBefore Mo turned to you he was in {window}. If he says "
+                "\"this\" or \"that\" without saying what, he most likely means "
+                "that window."
+            )
         if self.memory is not None:
             facts = self.memory.format_facts_for_prompt()
             if facts:

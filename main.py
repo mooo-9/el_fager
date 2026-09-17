@@ -297,6 +297,10 @@ def main():
             # Another app owning a combo must not stop El Fager from starting.
             print(f"[El Fager] Hotkey {combo} unavailable ({e}); the others still work.")
 
+    # ── What Mo was looking at before he turned to El Fager ────────────────
+    from core import focus_context
+    focus_context.start()
+
     # ── Wake word listener ─────────────────────────────────────────────────
     wake_listener = WakeWordListener(on_detected=signaler.wake_word_detected.emit)
 
