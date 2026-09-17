@@ -37,17 +37,9 @@ def _is_screenshot_trigger(text: str) -> bool:
 
 
 def _capture_for_turn() -> "tuple[str, str] | tuple[None, None]":
-    """The picture for "what's this": the window Mo was in before El Fager
-    covered it, or the whole screen when that window can't be drawn."""
-    from core import focus_context
+    """The picture for "what's this" — see screen_tool.capture_for_mo."""
     from tools import screen_tool
-
-    seen = focus_context.last()
-    if seen and seen.get("hwnd"):
-        b64, path = screen_tool.capture_window(seen["hwnd"])
-        if b64:
-            return b64, path
-    return screen_tool.capture_screenshot()
+    return screen_tool.capture_for_mo()
 
 
 def _is_end_phrase(text: str) -> bool:

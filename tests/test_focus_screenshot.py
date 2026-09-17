@@ -48,6 +48,38 @@ class TestWhatsThisPhotographsTheWindowMoMeant:
         assert pipeline._capture_for_turn() == ("screen", "p")
 
 
+class TestAnalyzeScreenSeesTheSameWindow:
+    """analyze_screen — the tool the model picks for "what am I looking at?" —
+    still grabbed the whole monitor, Cockpit included."""
+
+    @pytest.fixture
+    def sent(self, monkeypatch, tmp_path):
+        from unittest.mock import MagicMock
+        from tools import screen_analysis_tool
+        path = tmp_path / "shot.png"
+        path.write_bytes(b"png")
+        monkeypatch.setattr(screen_tool, "capture_for_mo", lambda: ("WINDOW_B64", str(path)))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        client = MagicMock()
+        client.messages.create.return_value.content = [MagicMock(text="It's OSN+.")]
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kw: client)
+        self.path = path
+        return screen_analysis_tool, client
+
+    def test_it_sends_the_window_mo_meant(self, sent):
+        tool, client = sent
+        assert tool.analyze_screen("what am I looking at?") == "It's OSN+."
+        image = client.messages.create.call_args.kwargs["messages"][0]["content"][0]
+        assert image["source"]["data"] == "WINDOW_B64"
+        assert not self.path.exists()               # the temp capture is cleaned up
+
+    def test_no_capture_is_said_plainly(self, sent, monkeypatch):
+        tool, client = sent
+        monkeypatch.setattr(screen_tool, "capture_for_mo", lambda: (None, None))
+        assert "couldn't capture" in tool.analyze_screen().lower()
+        client.messages.create.assert_not_called()
+
+
 class TestCaptureWindow:
     def _fake(self, monkeypatch, image):
         monkeypatch.setattr(screen_tool, "_window_exists", lambda hwnd: True)

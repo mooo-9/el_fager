@@ -96,6 +96,20 @@ def capture_window(hwnd: int) -> "tuple[str, str] | tuple[None, None]":
         return None, None
 
 
+def capture_for_mo() -> "tuple[str, str] | tuple[None, None]":
+    """The picture for "what's this" and analyze_screen: the window Mo was in
+    before El Fager covered it, or the whole screen when that window can't be
+    drawn."""
+    from core import focus_context
+
+    seen = focus_context.last()
+    if seen and seen.get("hwnd"):
+        b64, path = capture_window(seen["hwnd"])
+        if b64:
+            return b64, path
+    return capture_screenshot()
+
+
 def delete_temp_screenshot(path: str) -> None:
     try:
         os.unlink(path)
