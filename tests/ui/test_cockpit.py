@@ -120,7 +120,7 @@ class TestReadouts:
             "date": (date.today() - timedelta(days=1)).isoformat()}}}), encoding="utf-8")
         monkeypatch.setattr(mod, "_CACHE", cache)
         assert mod._cached("calendar") == "—"
-        assert mod._cached_lines("calendar", 4) == []
+        assert mod._calendar_events() is None
 
     def test_a_card_from_before_dates_were_written_is_stale(self, tmp_path, monkeypatch):
         import ui.cockpit as mod
@@ -211,16 +211,64 @@ class TestStatusCard:
         assert w._status.done.text() == "—"
         w.close()
 
-    def test_next_comes_from_the_calendar_cache(self, qapp, tmp_path, monkeypatch):
+
+class TestNextAndToday:
+    """NEXT and the TODAY rail both read the cached calendar card, which is
+    what tools/calendar_tool.list_events wrote. An empty day showed "No events
+    found for today (…)" in both, and a busy one showed the card's heading as
+    NEXT rather than an event."""
+
+    DAY = ("📅 Events for today (Thursday, Sep 17):\n"
+           "- 12:00 AM — Early standup (30 min)\n"
+           "- All day — Mo's graduation prep\n"
+           "- 12:00 AM — Midnight snack (15 min)")
+
+    def _cockpit_with(self, qapp, tmp_path, monkeypatch, text):
         import ui.cockpit as mod
         cache = tmp_path / "cache.json"
         cache.write_text(json.dumps({"cards": {"calendar": {
-            "text": "19:00  Gym", "date": date.today().isoformat()}}}), encoding="utf-8")
+            "text": text, "date": date.today().isoformat()}}}), encoding="utf-8")
         monkeypatch.setattr(mod, "_CACHE", cache)
         w = _make_cockpit(qapp)
         w._refresh_readouts()
-        assert w._status.next.text() == "19:00  Gym"
+        return w
+
+    def _rail(self, w):
+        return [w._today_list.itemAt(i).widget().text()
+                for i in range(w._today_list.count())]
+
+    def test_an_empty_day_says_so_once_in_its_own_words(self, qapp, tmp_path, monkeypatch):
+        w = self._cockpit_with(qapp, tmp_path, monkeypatch,
+                               "No events found for today (Thursday, Sep 17)")
+        assert w._status.next.text() == "Free all day."
+        assert self._rail(w) == ["Nothing on today."]
         w.close()
+
+    def test_the_rail_lists_events_not_the_cards_heading(self, qapp, tmp_path, monkeypatch):
+        w = self._cockpit_with(qapp, tmp_path, monkeypatch, self.DAY)
+        assert self._rail(w) == ["12:00 AM — Early standup (30 min)",
+                                 "All day — Mo's graduation prep",
+                                 "12:00 AM — Midnight snack (15 min)"]
+        assert w._status.next.text() == "Nothing else today."     # all started
+        w.close()
+
+    def test_a_failed_fetch_is_not_an_empty_day(self, qapp, tmp_path, monkeypatch):
+        w = self._cockpit_with(qapp, tmp_path, monkeypatch,
+                               "[Calendar auth failed — check credentials.json]")
+        assert w._status.next.text() == "—"
+        assert self._rail(w) == ["—"]
+        w.close()
+
+    def test_next_is_the_first_timed_event_still_to_come(self):
+        from datetime import datetime
+        from ui.cockpit import _next_event
+        events = ["9:00 AM — Gym (1 hour)", "All day — Holiday",
+                  "2:30 PM — Lecture (2 hours)", "7:00 PM — Dinner (1 hour)"]
+        at_one = datetime(2026, 9, 17, 13, 0)
+        assert _next_event(events, at_one) == "2:30 PM — Lecture (2 hours)"
+        assert _next_event(events, datetime(2026, 9, 17, 20, 0)) == "Nothing else today."
+        assert _next_event([], at_one) == "Free all day."
+        assert _next_event(None, at_one) == "—"
 
 
 class TestMonthArrows:

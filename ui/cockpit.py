@@ -134,10 +134,33 @@ def _cached(card_id: str) -> str:
     return "—"
 
 
-def _cached_lines(card_id: str, limit: int) -> list[str]:
-    """Up to `limit` meaningful lines of a card — the rails show a list where
-    the old corner readouts showed one line."""
-    return [l.strip() for l in _cached_text(card_id).splitlines() if l.strip()][:limit]
+def _calendar_events() -> "list[str] | None":
+    """Today's events from the cached calendar card, without its heading.
+
+    The card is what calendar_tool.list_events wrote: a "📅 Events for …:"
+    heading over "- 2:30 PM — Lecture (2 hours)" lines, or "No events found
+    for …". None when unknown — not fetched today, or the fetch failed —
+    which is not the same as an empty day."""
+    text = _cached_text("calendar")
+    if not text or text.startswith("["):
+        return None
+    return [line.strip()[2:].strip() for line in text.splitlines()
+            if line.strip().startswith("- ")]
+
+
+def _next_event(events: "list[str] | None", now: datetime) -> str:
+    """The first timed event today that hasn't started yet."""
+    if events is None:
+        return "—"
+    for event in events:
+        try:
+            start = datetime.strptime(event.split(" — ", 1)[0], "%I:%M %p").time()
+        except ValueError:
+            continue            # all day: not something that comes next
+        if start > now.time():
+            return event
+    # Not "Nothing on today.": the TODAY rail right below already says that.
+    return "Nothing else today." if events else "Free all day."
 
 
 def _mono(size: int, color: str, tracking: float = 1.4) -> str:
@@ -1418,8 +1441,9 @@ class CockpitWindow(QWidget):
             w = item.widget()
             if w is not None:
                 w.setParent(None)
-        events = _cached_lines("calendar", 4)
-        for line in events or ["Nothing on today."]:
+        known = _calendar_events()
+        events = (known or [])[:4]
+        for line in events or (["—"] if known is None else ["Nothing on today."]):
             row = QLabel(line)
             row.setWordWrap(True)
             row.setStyleSheet(
@@ -1770,7 +1794,7 @@ class CockpitWindow(QWidget):
 
     def _refresh_readouts(self):
         self._tick_clock()
-        self._status.next.setText(_cached("calendar"))
+        self._status.next.setText(_next_event(_calendar_events(), datetime.now()))
         self._status.done.setText(self._done_today())
         self._r_today.set_value(_cached("tasks"))
         self._tab_autos.setText(f"AUTOMATIONS  {len(self._automations())}")
