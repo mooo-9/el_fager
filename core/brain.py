@@ -67,9 +67,9 @@ Mouse & keyboard: mouse_move, mouse_click, mouse_double_click, mouse_drag, mouse
 When Mo says "click on X", "type this", "press Enter", "right-click", "drag from X to Y", "scroll down", "copy" (ctrl+c), "paste" (ctrl+v) — use mouse/keyboard tools.
 Workflow: analyze_screen first to see what's on screen → get coordinates → mouse_click or type_text. Always use get_mouse_position if Mo asks where the cursor is.
 Safety: pyautogui FAILSAFE is ON — if automation goes wrong, Mo can move mouse to top-left corner to abort. NEVER use these for financial transactions without explicit confirmation.
-Windows: list_windows, get_active_window, switch_to_window, minimize_window, maximize_window, restore_window, close_window, resize_window, move_window, snap_window.
+Windows: list_windows, get_active_window, switch_to_window, minimize_window, maximize_window, restore_window, close_window, resize_window, move_window, snap_window, read_window_text.
 "switch to Chrome" / "bring up Word" → switch_to_window(title). "put Chrome on the left" → snap_window("Chrome", "left"). "side by side" → snap two windows to left/right.
-"what windows are open?" → list_windows. "what am I looking at?" → get_active_window. close_window sends polite close (app may prompt to save) — kill_process is force-kill.
+"what windows are open?" → list_windows. "what am I looking at?" → get_active_window. "what does it say?" / "read me that" → read_window_text() for the exact text. close_window sends polite close (app may prompt to save) — kill_process is force-kill.
 Browser automation: browser_is_open, browser_open, browser_navigate, browser_click, browser_type, browser_get_text, browser_get_title, browser_screenshot, browser_fill_form, browser_submit, browser_wait, browser_scroll, browser_close, browser_back, browser_get_links, browser_select.
 Browser opens visible by default so Mo can watch. Session persists — Mo only logs in once per browser session.
 Pattern: browser_open(url) → browser_type/click → browser_submit → browser_get_text. For login: browser_open → browser_type("#email", x) → browser_type("#password", y) → browser_submit.
@@ -3232,6 +3232,23 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {"type": "object", "properties": {}}
     },
     {
+        "name": "read_window_text",
+        "description": (
+            "Read the text a window shows, exactly, through UI Automation — works "
+            "while El Fager covers it, and only reads. Leave title empty for the "
+            "window Mo was in before he called you ('what does it say', 'read me "
+            "that'), or give part of a window's title. If it finds no text, "
+            "fall back to a screenshot."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string",
+                          "description": "Part of the window's title; empty for Mo's last window."}
+            }
+        }
+    },
+    {
         "name": "switch_to_window",
         "description": "Bring a window to the foreground by partial title match. E.g. 'Chrome', 'Word', 'Notepad'.",
         "input_schema": {
@@ -4586,7 +4603,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     "window": frozenset({
         "list_windows", "get_active_window", "switch_to_window", "minimize_window",
         "maximize_window", "restore_window", "close_window", "resize_window",
-        "move_window", "snap_window",
+        "move_window", "snap_window", "read_window_text",
     }),
     "browser": frozenset({
         "browser_is_open", "browser_open", "browser_navigate", "browser_click", "browser_type",
@@ -4726,7 +4743,8 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
                     "schedule meeting", "unread", "compose", "template",
                     "block distractions", "study mode"],
     "mouse":       ["click", "type", "press", "drag", "scroll", "move mouse", "right click", "double click", "keyboard", "hotkey", "ctrl+"],
-    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open"],
+    "window":      ["window", "switch to", "bring up", "minimize", "maximize", "close app", "snap", "side by side", "half screen", "windows open",
+                    "what does it say", "what's written", "read me that", "read that"],
     "browser":     ["browser", "open chrome", "navigate to", "go to website", "fill form", "click the button", "log in to", "scrape", "automate", "web page", "website"],
     "media":       ["play", "music", "song", "pause music", "skip", "next track", "spotify",
                     "what's playing", "volume up", "volume down"],
@@ -6030,6 +6048,9 @@ class Brain:
             elif name == "get_active_window":
                 from tools.window_tool import get_active_window
                 return get_active_window()
+            elif name == "read_window_text":
+                from tools import window_tool
+                return window_tool.read_window_text(tool_input.get("title", ""))
             elif name == "switch_to_window":
                 from tools.window_tool import switch_to_window
                 return switch_to_window(tool_input["title"])
