@@ -50,6 +50,31 @@ def _no_real_whatsapp(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_input(monkeypatch):
+    """Keys and clicks go to whatever window is in front. A WhatsApp test
+    pressed a real Enter into Mo's foreground window on every suite run. No
+    test may press, type, click or move; a test that needs one of these
+    replaces it with its own stub."""
+    def blocked(*args, **kwargs):
+        raise RuntimeError("real keyboard and mouse input is off in tests")
+
+    try:
+        import keyboard
+        for name in ("press_and_release", "send", "write", "press", "release"):
+            monkeypatch.setattr(keyboard, name, blocked)
+    except ImportError:
+        pass
+    try:
+        import pyautogui
+        for name in ("press", "hotkey", "write", "typewrite", "click", "doubleClick",
+                     "rightClick", "moveTo", "moveRel", "scroll", "keyDown", "keyUp",
+                     "dragTo", "mouseDown", "mouseUp"):
+            monkeypatch.setattr(pyautogui, name, blocked)
+    except ImportError:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _no_real_comet(monkeypatch):
     """Browser automation starts Comet with a debugging port when it can't
     attach to one. With Mo's own Comet already open, the browser-agent tests
