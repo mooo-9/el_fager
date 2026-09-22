@@ -1,6 +1,6 @@
 # El Fager — Personal AI Assistant
 
-Your JARVIS for Windows 11. Starts when you launch it, lives in the system tray while it runs, wakes up with `Ctrl+Space`, listens to you in English, thinks with Claude, and talks back.
+Your JARVIS for Windows 11. Starts when you launch it, lives in the system tray while it runs, wakes up with `Ctrl+F12`, listens to you in English, thinks with Claude, and talks back.
 
 ---
 
@@ -58,7 +58,7 @@ On first launch, two models download automatically:
 | Whisper `large-v3-turbo` (faster-whisper, override with `WHISPER_MODEL`) | ~1.6 GB | `~/.cache/huggingface/` | Background at startup — skipped entirely when `GROQ_API_KEY` is set (cloud transcription) |
 | Sentence-transformer `all-MiniLM-L6-v2` | ~90 MB | `~/.cache/torch/` | On first memory query |
 
-The Whisper download happens in the background — El Fager will show "Loading Whisper model..." if you press `Ctrl+Space` before it's ready. Just wait a moment.
+The Whisper download happens in the background — El Fager will show "Loading Whisper model..." if you press `Ctrl+F12` before it's ready. Just wait a moment.
 
 ---
 
@@ -66,12 +66,12 @@ The Whisper download happens in the background — El Fager will show "Loading W
 
 | Action | What Happens |
 |---|---|
-| `Ctrl+Space` or `Ctrl+F12` | Opens the overlay and starts listening immediately |
+| `Ctrl+F12` | Opens the overlay and starts listening immediately |
 | `Ctrl+Shift+Space` or `Ctrl+Shift+F12` | Opens the Command Center |
 | Speak naturally | English |
 | Stop speaking | El Fager detects silence (~1.5s) and starts thinking |
 | `Escape` | Closes the overlay and cancels any in-progress recording |
-| `Ctrl+Space` again | Closes overlay if already open |
+| `Ctrl+F12` again | Closes overlay if already open |
 | Type in the text box | Alternative to speaking — press Enter to submit |
 
 ---
