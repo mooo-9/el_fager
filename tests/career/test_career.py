@@ -44,6 +44,10 @@ class TestSettings:
         assert store.settings()["live"] is False
         assert store.settings()["daily_target"] == 20
 
+    def test_finance_and_credit_risk_are_searched(self):
+        terms = store.settings()["search_terms"]
+        assert "credit risk" in terms and "financial analyst" in terms
+
     def test_unknown_settings_are_ignored(self):
         s = store.update_settings(daily_target=50, nonsense=1)
         assert s["daily_target"] == 50 and "nonsense" not in s

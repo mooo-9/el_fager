@@ -8,8 +8,9 @@ DIR = Path(__file__).parent.parent.parent / "data" / "career"
 _lock = threading.RLock()
 
 # Search terms cover Mo's targets (internships and entry-level Data/Business
-# Analyst and Software/IT) and the Big 4's four service lines: technology
-# consulting, data & analytics, risk / IT audit, and audit & tax.
+# Analyst, Software/IT and Finance/Credit Risk) and the Big 4's four service
+# lines: technology consulting, data & analytics, risk / IT audit, and audit
+# & tax.
 DEFAULTS = {
     # Practice mode until Mo's CV is final: everything is found, scored and
     # drafted, nothing is sent.
@@ -31,6 +32,7 @@ DEFAULTS = {
         "software developer", "IT support", "ERP SAP", "graduate program",
         "fresh graduate", "internship", "technology consultant",
         "risk advisory", "IT audit", "audit associate", "tax associate",
+        "credit risk", "financial analyst",
     ],
 }
 
