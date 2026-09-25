@@ -34,19 +34,29 @@ class TestResolvePath:
 
 
 class TestReadPdf:
+    def _make_pdf(self, path, page_texts):
+        import fitz
+        doc = fitz.open()
+        for text in page_texts:
+            doc.new_page().insert_text((72, 72), text)
+        doc.save(path)
+        doc.close()
+
     def test_returns_extracted_text(self, tmp_path):
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "This is thesis content."
-        mock_pdf = MagicMock()
-        mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
-        mock_pdf.__exit__ = MagicMock(return_value=False)
-        mock_pdf.pages = [mock_page]
-        with patch("pdfplumber.open", return_value=mock_pdf):
-            result = FileAgent()._read_pdf(tmp_path / "test.pdf")
+        pdf = tmp_path / "test.pdf"
+        self._make_pdf(pdf, ["This is thesis content."])
+        result = FileAgent()._read_pdf(pdf)
         assert "thesis content" in result
 
+    def test_reads_only_first_ten_pages(self, tmp_path):
+        pdf = tmp_path / "long.pdf"
+        self._make_pdf(pdf, [f"page-{i}" for i in range(1, 13)])
+        result = FileAgent()._read_pdf(pdf)
+        assert "page-10" in result
+        assert "page-11" not in result
+
     def test_returns_empty_string_on_failure(self, tmp_path):
-        with patch("pdfplumber.open", side_effect=Exception("corrupt")):
+        with patch("fitz.open", side_effect=Exception("corrupt")):
             result = FileAgent()._read_pdf(tmp_path / "bad.pdf")
         assert result == ""
 
