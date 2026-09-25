@@ -445,6 +445,87 @@ class TestSources:
         assert boards["Talabat"]["smartrecruiters"] == [{"company": "DeliveryHero"}]
         assert boards["Amazon"]["amazon_jobs"] == [{"country": "EGY"}]
 
+    def test_the_global_firms_are_read_too(self):
+        boards = {c["name"]: c for c in companies.with_career_sites()}
+        assert boards["Oracle"]["oracle_cloud"] and boards["Dell Technologies"]["oracle_cloud"]
+        assert boards["Ericsson"]["eightfold"] and boards["PepsiCo"]["jibe"]
+        assert boards["BCG"]["phenom"] and boards["Majid Al Futtaim"]["phenom"]
+        assert boards["L'Oréal"]["pages"]
+
+    def test_every_kind_of_career_site_has_a_reader(self):
+        assert set(sources.READERS) == set(companies.CAREER_SITE_KEYS)
+
+    def test_oracle_cloud_in_egypt(self):
+        page = {"items": [{"requisitionList": [
+            {"Id": "344587", "Title": "SaaS Consultant", "PrimaryLocation": "CAIRO, Egypt",
+             "PostedDate": "2026-09-06"}]}]}
+        oc = {"host": "eeho.fa.us2.oraclecloud.com", "site": "CX_45001",
+              "job_url": "https://careers.oracle.com/en/sites/jobsearch/job/"}
+        with patch.object(sources, "_get_json", return_value=page) as get:
+            jobs = sources._oracle_cloud(oc, companies.match("Oracle"))
+        # The finder lives in the query string; any params, even {}, make httpx drop it.
+        (url,) = get.call_args.args
+        assert not get.call_args.kwargs
+        assert url.startswith("https://eeho.fa.us2.oraclecloud.com/hcmRestApi/")
+        assert "siteNumber=CX_45001" in url and "location=Egypt" in url
+        assert jobs == [{"title": "SaaS Consultant", "company": "Oracle",
+                         "location": "CAIRO, Egypt", "posted": "2026-09-06",
+                         "url": "https://careers.oracle.com/en/sites/jobsearch/job/344587",
+                         "source": "Oracle careers"}]
+
+    def test_eightfold_in_egypt(self):
+        page = {"data": {"count": 1, "positions": [
+            {"name": "Automation Engineer", "positionUrl": "/careers/job/563121777194376",
+             "locations": ["Lisbon,Lisboa,Portugal", "Smart Village,Cairo,Egypt"],
+             "postedTs": 1789468172}]}}
+        ef = {"host": "jobs.ericsson.com", "domain": "ericsson.com"}
+        with patch.object(sources, "_get_json", return_value=page) as get:
+            jobs = sources._eightfold(ef, companies.match("Ericsson"))
+        assert get.call_args.args[1]["location"] == "Egypt"
+        assert jobs[0]["title"] == "Automation Engineer"
+        assert jobs[0]["location"] == "Smart Village,Cairo,Egypt"
+        assert jobs[0]["url"] == "https://jobs.ericsson.com/careers/job/563121777194376"
+        assert jobs[0]["posted"].startswith("2026-")
+
+    def test_jibe_reads_every_page_and_keeps_egypt(self):
+        def job(slug, country="Egypt"):
+            return {"data": {"slug": slug, "title": f"Engineer {slug}", "city": "Giza",
+                             "country": country, "posted_date": "2026-09-07T00:00:00+0000"}}
+        pages = [{"totalCount": 3, "jobs": [job("1"), job("2", "Morocco")]},
+                 {"totalCount": 3, "jobs": [job("3")]}]
+        with patch.object(sources, "_get_json", side_effect=pages) as get:
+            jobs = sources._jibe({"host": "www.pepsicojobs.com"}, companies.match("PepsiCo"))
+        assert get.call_count == 2 and get.call_args.args[1] == {"location": "Egypt", "page": 2}
+        assert [j["url"] for j in jobs] == ["https://www.pepsicojobs.com/main/jobs/1",
+                                           "https://www.pepsicojobs.com/main/jobs/3"]
+        assert jobs[0]["posted"] == "2026-09-07"
+
+    def test_phenom_in_egypt(self):
+        found = {"refineSearch": {"data": {"jobs": [
+            {"jobId": "58478", "title": "Finance Co-Op/Intern", "country": "Egypt",
+             "cityStateCountry": "Cairo, Cairo, Egypt", "postedDate": "2026-06-22T00:00:00.000+0000"}]}}}
+        ph = {"host": "careers.bcg.com", "ref": "BCG1US"}
+        with patch.object(sources, "_post_json", return_value=found) as post:
+            jobs = sources._phenom(ph, companies.match("BCG"))
+        assert post.call_args.args[0] == "https://careers.bcg.com/widgets"
+        assert post.call_args.args[1]["selected_fields"] == {"country": ["Egypt"]}
+        assert jobs == [{"title": "Finance Co-Op/Intern", "company": "BCG",
+                         "location": "Cairo, Cairo, Egypt", "posted": "2026-06-22",
+                         "url": "https://careers.bcg.com/global/en/job/58478",
+                         "source": "BCG careers"}]
+
+    def test_a_careers_page_that_lists_its_jobs(self):
+        html = """<a href="/en_US/jobs/JobDetail/Plant-Safety-Manager/234267">Plant Safety Manager</a>
+                  <a href="/en_US/jobs/JobDetail/Plant-Safety-Manager/234267">Apply Now</a>
+                  <a href="/en_US/jobs/SearchJobs/">Search</a>"""
+        pg = {"url": "https://careers.loreal.com/en_US/jobs/SearchJobs/Egypt",
+              "job_path": "/en_US/jobs/JobDetail/"}
+        with patch.object(sources, "_get_text", return_value=html):
+            jobs = sources._page(pg, companies.match("L'Oréal"))
+        assert [(j["title"], j["url"]) for j in jobs] == [(
+            "Plant Safety Manager",
+            "https://careers.loreal.com/en_US/jobs/JobDetail/Plant-Safety-Manager/234267")]
+
 
 class TestRepliesAfterAnInterview:
     def test_a_later_plain_reply_keeps_the_interview(self):

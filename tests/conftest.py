@@ -54,7 +54,7 @@ def _no_real_job_page_browser(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_real_career_sites(monkeypatch):
     """The nightly search reads the target firms' own career sites (Workday,
-    SmartRecruiters, Amazon). No test may reach them; a test that needs a
+    Oracle, Phenom and the rest). No test may reach them; a test that needs a
     page patches these with its own."""
     from core.career import sources
 
@@ -63,6 +63,7 @@ def _no_real_career_sites(monkeypatch):
 
     monkeypatch.setattr(sources, "_get_json", blocked)
     monkeypatch.setattr(sources, "_post_json", blocked)
+    monkeypatch.setattr(sources, "_get_text", blocked)
 
 
 @pytest.fixture(autouse=True)
