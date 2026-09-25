@@ -1,9 +1,10 @@
 """
 JobSearchAgent -- finds internships and entry-level jobs in Egypt for Mo.
 
-Reads Wuzzuf's search page and LinkedIn's logged-out job listing directly.
-Bayt and Forasna, and either of the first two when it blocks reading, come
-through a web search limited to that site. It only reads postings: it never
+Reads Wuzzuf's search page and LinkedIn's logged-out job listing directly;
+Wuzzuf, which puts Cloudflare's check in front of a plain read, in a headless
+browser. Bayt and Forasna, and either of the first two when it blocks reading,
+come through a web search limited to that site. It only reads postings: it never
 applies. Every job it shows is remembered in data/jobs_seen.json, so the same
 posting never comes back as new.
 """
@@ -26,6 +27,7 @@ SOURCES = ["Wuzzuf", "LinkedIn", "Bayt", "Forasna"]
 
 _MAX_SHOWN = 15
 _TIMEOUT = 10
+_RENDER_TIMEOUT_MS = 20000
 
 _WUZZUF_URL = "https://wuzzuf.net/search/jobs/?q={q}&a=hpb"
 # The listing LinkedIn's own logged-out jobs page loads. f_E=1,2 is internship
@@ -95,8 +97,12 @@ class JobSearchAgent(BaseAgent):
                   "LinkedIn": (_LINKEDIN_URL, _parse_linkedin)}.get(source)
         if direct:
             url, parse = direct
-            html = self._fetch(url.format(q=urllib.parse.quote(role)))
+            url = url.format(q=urllib.parse.quote(role))
+            html = self._fetch(url)
             jobs = parse(html) if html else []
+            if not jobs and source == "Wuzzuf":
+                html = self._render(url)
+                jobs = parse(html) if html else []
             if jobs:
                 return jobs
         return self._web_search(source, role)
@@ -109,6 +115,25 @@ class JobSearchAgent(BaseAgent):
                              headers={"User-Agent": _BROWSER_UA,
                                       "Accept-Language": "en-US,en;q=0.9"})
             return resp.text if resp.status_code < 400 else ""
+        except Exception:
+            return ""
+
+    def _render(self, url: str) -> str:
+        """The page as headless Chromium has it once Cloudflare's "Just a
+        moment..." check has passed by itself (a few seconds), or ""."""
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(url, wait_until="domcontentloaded", timeout=_RENDER_TIMEOUT_MS)
+                    page.wait_for_function("!document.title.includes('Just a moment')",
+                                           timeout=_RENDER_TIMEOUT_MS)
+                    page.wait_for_load_state("domcontentloaded")
+                    return page.content()
+                finally:
+                    browser.close()
         except Exception:
             return ""
 

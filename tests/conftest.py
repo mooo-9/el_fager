@@ -44,6 +44,14 @@ def _isolated_jobs_seen(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_job_page_browser(monkeypatch):
+    """The job search reads Wuzzuf in a headless Chromium when a plain read
+    is blocked. No test may launch one and reach the real site."""
+    from core.agents.job_search_agent import JobSearchAgent
+    monkeypatch.setattr(JobSearchAgent, "_render", lambda self, url: "")
+
+
+@pytest.fixture(autouse=True)
 def _isolated_career(monkeypatch, tmp_path):
     """Mo's CV profile, his applications and the pipeline's settings live in
     data/career/. A test's fake batch must never land in his morning review."""

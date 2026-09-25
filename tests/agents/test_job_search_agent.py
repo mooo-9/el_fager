@@ -81,11 +81,14 @@ class TestParseWuzzuf:
         assert jobs[1]["company"] == "TMentors"
 
 
-def _agent(pages: dict, searches: dict | None = None):
-    """An agent whose direct reads return `pages[source]` HTML and whose web
-    searches return `searches[source]` (None = the search failed)."""
+def _agent(pages: dict, searches: dict | None = None, rendered: str = ""):
+    """An agent whose direct reads return `pages[source]` HTML, whose browser
+    read of Wuzzuf returns `rendered`, and whose web searches return
+    `searches[source]` (None = the search failed)."""
     searches = searches or {}
     agent = JobSearchAgent()
+    agent.renders = []
+    agent._render = lambda url: agent.renders.append(url) or rendered
 
     def fetch(url):
         if "wuzzuf" in url:
@@ -148,6 +151,24 @@ class TestRun:
                   "source": "Wuzzuf"}]
         out = _agent({}, {"Wuzzuf": found}).run("data analyst")
         assert "Data Analyst job at X in Cairo [Wuzzuf]" in out
+
+    def test_wuzzuf_behind_cloudflare_is_read_in_a_browser(self):
+        """Wuzzuf answers a plain read with Cloudflare's "Just a moment..."
+        page; a headless browser gets through it."""
+        agent = _agent({"Wuzzuf": "<title>Just a moment...</title>"}, rendered=WUZZUF_HTML)
+        out = agent.run("business analyst")
+        assert "Business Analyst -- Noon Academy, Maadi, Cairo, Egypt [Wuzzuf" in out
+        assert len(agent.renders) == 1 and "wuzzuf.net" in agent.renders[0]
+
+    def test_a_wuzzuf_page_read_plainly_needs_no_browser(self):
+        agent = _agent({"Wuzzuf": WUZZUF_HTML, "LinkedIn": LINKEDIN_HTML})
+        agent.run("data analyst")
+        assert agent.renders == []
+
+    def test_only_wuzzuf_is_read_in_a_browser(self):
+        agent = _agent({})
+        agent.run("data analyst")
+        assert agent.renders and all("wuzzuf.net" in u for u in agent.renders)
 
     def test_a_board_that_failed_for_every_role_is_named(self):
         out = _agent({"Wuzzuf": WUZZUF_HTML}, {"Bayt": None}).run("")
