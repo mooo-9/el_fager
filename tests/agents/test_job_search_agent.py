@@ -113,6 +113,26 @@ class TestRun:
         out = _agent({"LinkedIn": LINKEDIN_HTML}).run("data analyst")
         assert "Senior Data Analyst" not in out
 
+    def test_vice_presidents_are_left_out_too(self):
+        vp = LINKEDIN_HTML.replace("Senior Data Analyst", "Vice President, Business Development")
+        out = _agent({"LinkedIn": vp}).run("data analyst")
+        assert "Vice President" not in out and "Data Analyst Intern" in out
+
+    @pytest.mark.parametrize("bank", ["National Bank of Egypt", "CIB", "QNB Alahli", "HSBC",
+                                      "Banque Misr", "Arab African International Bank",
+                                      "Crédit Agricole Egypt", "بنك مصر"])
+    def test_bank_jobs_are_left_out(self, bank):
+        """Mo doesn't want to work at a bank."""
+        html = LINKEDIN_HTML.replace("<a>CIB</a>", f"<a>{bank}</a>").replace(
+            "Senior Data Analyst", "Data Analyst")
+        out = _agent({"LinkedIn": html}).run("data analyst")
+        assert bank not in out and "Vodafone Egypt" in out
+
+    def test_a_fintech_is_not_a_bank(self):
+        html = LINKEDIN_HTML.replace("<a>CIB</a>", "<a>Paymob</a>").replace(
+            "Senior Data Analyst", "Banking Product Analyst")
+        assert "Paymob" in _agent({"LinkedIn": html}).run("data analyst")
+
     def test_junior_titles_rank_first(self):
         out = _agent({"Wuzzuf": WUZZUF_HTML}).run("business analyst")
         lines = out.splitlines()

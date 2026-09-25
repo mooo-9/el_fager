@@ -47,7 +47,13 @@ _SEARCH_SITES = {
 
 # Postings above entry level, matched on whole words in the title.
 _SENIOR_RE = re.compile(
-    r"\b(senior|sr|lead|principal|head|manager|director|expert)\b", re.IGNORECASE)
+    r"\b(senior|sr|lead|principal|head|manager|director|expert"
+    r"|vice president|vp|avp|svp|evp)\b", re.IGNORECASE)
+# Banks, matched on the employer's name: Mo doesn't want to work at one.
+_BANK_RE = re.compile(
+    r"\b(bank|banque|banking|bancorp|cib|qnb|hsbc|nbe|aaib|saib|citi|citibank|alexbank"
+    r"|adib|mashreq|emirates nbd|attijariwafa)\b|cr[eé]dit agricole|بنك|مصرف",
+    re.IGNORECASE)
 _JUNIOR_RE = re.compile(
     r"\b(intern|internship|junior|jr|entry|graduate|grad|fresh|trainee)\b", re.IGNORECASE)
 
@@ -74,7 +80,7 @@ class JobSearchAgent(BaseAgent):
                 jobs.extend(found)
         failed = set(SOURCES) - read
 
-        jobs = [j for j in _dedupe(jobs) if not _SENIOR_RE.search(j["title"])]
+        jobs = [j for j in _dedupe(jobs) if not _unwanted(j)]
         seen = _load_seen()
         new = [j for j in jobs if j["url"] not in seen]
         shown = jobs if show_all else new
@@ -227,6 +233,11 @@ def _canonical(url: str) -> str:
 def _clean_search_title(title: str) -> str:
     # "Data Analyst Intern at TMentors| Maadi, Cairo on Wuzzuf | Egypt"
     return re.split(r"\s*\|\s*|\s+–\s+", title)[0].strip()
+
+
+def _unwanted(job: dict) -> bool:
+    """Above entry level, or at a bank."""
+    return bool(_SENIOR_RE.search(job["title"]) or _BANK_RE.search(job.get("company", "")))
 
 
 def _dedupe(jobs: list[dict]) -> list[dict]:

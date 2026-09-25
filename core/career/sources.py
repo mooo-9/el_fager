@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from core.agents.job_search_agent import (
-    SOURCES, JobSearchAgent, _SENIOR_RE, _dedupe, web_search_jobs,
+    SOURCES, JobSearchAgent, _dedupe, _unwanted, web_search_jobs,
 )
 from core.career import companies
 
@@ -17,7 +17,7 @@ _WORKDAY_MAX = 100
 
 
 def gather(settings: dict) -> list[dict]:
-    """Every job found, below senior level, one entry per posting, each tagged
+    """Every job found, below senior level and not at a bank, one entry per posting, each tagged
     with its target company's tier ("big4", "top" or ""). The Big 4 and Mo's
     other picks are also searched by name and on their own career sites."""
     agent = JobSearchAgent()
@@ -34,7 +34,7 @@ def gather(settings: dict) -> list[dict]:
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(lambda c: _safe(*c), calls))
 
-    jobs = [j for found in results for j in found if not _SENIOR_RE.search(j["title"])]
+    jobs = [j for found in results for j in found if not _unwanted(j)]
     jobs = _dedupe(jobs)
     for j in jobs:
         target = companies.match(j["company"])

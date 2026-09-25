@@ -344,6 +344,24 @@ class TestSources:
         assert [(j["title"], j["tier"], j["company_key"]) for j in jobs] == [
             ("Data Analyst", "big4", "PwC")]
 
+    def test_bank_jobs_never_reach_the_batch(self, monkeypatch):
+        monkeypatch.setattr(companies, "premium", lambda: [])
+        monkeypatch.setattr(companies, "with_career_sites", lambda: [])
+        found = [{"title": "Credit Risk Analyst", "company": "CIB Egypt", "location": "",
+                  "posted": "", "url": "https://wuzzuf.net/jobs/p/1", "source": "Wuzzuf"},
+                 {"title": "Credit Risk Analyst", "company": "Tamweely", "location": "",
+                  "posted": "", "url": "https://wuzzuf.net/jobs/p/2", "source": "Wuzzuf"}]
+        with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
+                   lambda self, src, term: found if src == "Wuzzuf" else []):
+            jobs = sources.gather({"search_terms": ["credit risk"]})
+        assert [j["company"] for j in jobs] == ["Tamweely"]
+
+    def test_no_bank_is_a_target(self):
+        names = {c["name"] for c in companies.all_companies()}
+        assert not names & {"CIB", "QNB", "National Bank of Egypt", "Banque Misr", "HSBC"}
+        from core.career import programmes
+        assert not [p for p in programmes.seeds() if p["company"] == "CIB"]
+
     def test_a_firms_name_search_keeps_only_its_own_postings(self):
         agent = MagicMock()
         agent._from_source.return_value = [
