@@ -1,0 +1,372 @@
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from core.career import (
+    appliers, companies, pipeline, profile, scorer, sources, store, tracker,
+)
+
+
+@pytest.fixture(autouse=True)
+def _career_dir(monkeypatch, tmp_path):
+    """Also set here so these run without the suite's conftest."""
+    monkeypatch.setattr(store, "DIR", tmp_path / "career")
+
+
+def _job(title, company, url, tier="", score=80, **extra):
+    target = companies.match(company)
+    return {"title": title, "company": company, "location": "Cairo", "posted": "",
+            "url": url, "source": "Wuzzuf", "tier": target["tier"] if target else tier,
+            "company_key": target["name"] if target else company, "score": score,
+            "fit": "fits", "missing": [], "level": "entry", "in_egypt": True, **extra}
+
+
+class TestCompanies:
+    @pytest.mark.parametrize("name,firm", [
+        ("PwC Middle East", "PwC"), ("EY", "EY"), ("Deloitte Innovation Hub", "Deloitte"),
+        ("KPMG Hazem Hassan", "KPMG"), ("_VOIS", "Vodafone / _VOIS"),
+        ("Vodafone Egypt", "Vodafone / _VOIS"),
+    ])
+    def test_postings_land_on_their_firm(self, name, firm):
+        assert companies.match(name)["name"] == firm
+
+    @pytest.mark.parametrize("name", ["Noon Academy", "Keysight", "Heyday Studio", ""])
+    def test_lookalikes_do_not(self, name):
+        assert companies.match(name) is None
+
+    def test_the_big_four(self):
+        assert [c["name"] for c in companies.big4()] == ["Deloitte", "PwC", "EY", "KPMG"]
+
+
+class TestSettings:
+    def test_practice_mode_is_the_default(self):
+        assert store.settings()["live"] is False
+        assert store.settings()["daily_target"] == 100
+
+    def test_unknown_settings_are_ignored(self):
+        s = store.update_settings(daily_target=50, nonsense=1)
+        assert s["daily_target"] == 50 and "nonsense" not in s
+
+
+class TestProfile:
+    def test_every_answer_starts_missing(self):
+        assert profile.missing_answers() == list(profile.ANSWER_KEYS)
+
+    def test_an_answer_is_saved(self):
+        assert profile.set_answer("military status", "Exempted").startswith("Saved")
+        assert "military_status" not in profile.missing_answers()
+
+    def test_an_unknown_question_is_refused(self):
+        assert profile.set_answer("favourite colour", "blue").startswith("Error")
+
+    def test_before_a_cv_the_profile_says_so(self):
+        assert "No CV imported yet" in profile.as_text()
+
+    def test_import_fills_empty_answers_but_keeps_mos_own(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        profile.set_answer("phone", "+20 100 000 0000")
+        fields = {"name": "Mohamed Ali", "headline": "BI student", "education": "Helwan BIS",
+                  "skills": ["SQL", "Power BI"], "experience": ["Intern at X"], "projects": [],
+                  "certifications": [], "languages": ["Arabic", "English"],
+                  "email": "mo@x.com", "phone": "0111", "linkedin_url": "", "graduation_year": "2027",
+                  "gpa": ""}
+        with patch.object(profile, "_cv_text", return_value="CV text " * 50), \
+             patch("core.career.claude.ask", return_value=fields):
+            out = profile.import_cv(str(cv))
+        p = profile.load()
+        assert out.startswith("CV imported: Mohamed Ali -- 2 skills")
+        assert p["answers"]["phone"] == "+20 100 000 0000"
+        assert p["answers"]["email"] == "mo@x.com"
+        assert p["cv_path"] == str(cv)
+        assert "Skills: SQL; Power BI" in profile.as_text()
+
+    def test_an_unreadable_cv_is_reported(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        with patch.object(profile, "_cv_text", return_value=""):
+            assert profile.import_cv(str(cv)).startswith("Error: couldn't read text")
+
+
+class TestScorer:
+    def test_finds_the_hr_address(self):
+        text = "Apply on wuzzuf. Send your CV to careers@valeo.com. (noreply@x.com)"
+        assert scorer.hr_email(text) == "careers@valeo.com"
+
+    def test_board_and_noreply_addresses_are_not_hr(self):
+        assert scorer.hr_email("support@wuzzuf.net noreply@company.com") == ""
+
+    def test_score_is_clamped(self):
+        with patch("core.career.claude.ask", return_value={
+                "score": 140, "fit": "x", "missing": [], "level": "entry", "in_egypt": True}):
+            assert scorer.score({"title": "Analyst"}, "profile")["score"] == 100
+
+
+class TestChannel:
+    @pytest.mark.parametrize("job,channel", [
+        ({"url": "https://wuzzuf.net/jobs/p/1", "hr_email": "hr@a.com"}, "email"),
+        ({"url": "https://wuzzuf.net/jobs/p/1"}, "wuzzuf"),
+        ({"url": "https://eg.linkedin.com/jobs/view/1"}, "linkedin"),
+        ({"url": "https://pwc.wd3.myworkdayjobs.com/x"}, "site"),
+    ])
+    def test_channel(self, job, channel):
+        assert appliers.channel_for(job) == channel
+
+
+def _seed(*apps):
+    for a in apps:
+        a.setdefault("status", "ready")
+        a.setdefault("channel", appliers.channel_for(a))
+        a.setdefault("draft", {"subject": "S", "body": "Dear team, ..."})
+        tracker.add(a)
+    return apps
+
+
+class TestPrepareBatch:
+    def _run(self, jobs, **settings):
+        if settings:
+            store.update_settings(**settings)
+        scores = {j["url"]: j.pop("score") for j in jobs}
+        with patch.object(sources, "gather", return_value=jobs), \
+             patch.object(scorer, "read_description", return_value="Posting text"), \
+             patch.object(scorer, "score", side_effect=lambda job, p: {
+                 "score": scores[job["url"]], "fit": "fits", "missing": [],
+                 "level": "entry", "in_egypt": True}) as score, \
+             patch("core.career.tailor.draft", return_value={"subject": "S", "body": "B"}), \
+             patch.object(pipeline, "_notify"):
+            out = pipeline.prepare_batch()
+        return out, score
+
+    def test_drafts_the_good_fits_and_skips_the_rest(self):
+        out, _ = self._run([_job("Analyst", "Fawry", "https://wuzzuf.net/jobs/p/1", score=85),
+                            _job("Analyst", "Nobody", "https://wuzzuf.net/jobs/p/2", score=30)])
+        assert sorted(a["status"] for a in tracker.all_apps().values()) == ["ready", "skipped"]
+        assert out.startswith("1 applications ready for your review (practice mode")
+
+    def test_big4_comes_first_and_is_capped_per_firm(self):
+        jobs = [_job(f"Graduate {i}", "PwC Middle East", f"https://pwc.x/{i}", score=70)
+                for i in range(5)]
+        jobs.append(_job("Analyst", "Fawry", "https://wuzzuf.net/jobs/p/9", score=95))
+        self._run(jobs)
+        ready = pipeline.ready_batch()
+        assert [a["company_key"] for a in ready] == ["PwC"] * 3 + ["Fawry"]
+        capped = [a for a in tracker.with_status("skipped")]
+        assert len(capped) == 2 and "this month" in capped[0]["events"][-1]["note"]
+
+    def test_over_the_target_waits_for_tomorrow_without_rescoring(self):
+        jobs = [_job(f"Analyst {i}", "Co", f"https://wuzzuf.net/jobs/p/{i}", score=90 - i)
+                for i in range(3)]
+        self._run(jobs, daily_target=2)
+        assert len(tracker.with_status("ready")) == 2
+        assert len(tracker.with_status("waiting")) == 1
+        _, score = self._run([])
+        score.assert_not_called()
+        assert len(tracker.with_status("ready")) == 3
+
+    def test_a_job_already_tracked_is_not_scored_again(self):
+        _seed(_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1"))
+        _, score = self._run([_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1")])
+        score.assert_not_called()
+
+
+class TestApprove:
+    def test_approve_all_but_the_unticked(self):
+        a, b = _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1"),
+                     _job("B", "Co", "https://wuzzuf.net/jobs/p/2"))
+        with patch.object(pipeline, "start_in_background", return_value=True):
+            out = pipeline.approve(skip=[b["id"]])
+        assert out.startswith("Approved 1, skipped 1.")
+        assert tracker.all_apps()[a["id"]]["status"] == "approved"
+        assert tracker.all_apps()[b["id"]]["status"] == "skipped"
+
+    def test_approve_only_some(self):
+        a, b = _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1"),
+                     _job("B", "Co", "https://wuzzuf.net/jobs/p/2"))
+        with patch.object(pipeline, "start_in_background", return_value=True):
+            pipeline.approve(only=[b["id"]])
+        assert tracker.all_apps()[a["id"]]["status"] == "skipped"
+
+
+class TestRunApproved:
+    def test_practice_mode_sends_nothing(self):
+        (a,) = _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1", status="approved"))
+        with patch.object(appliers, "apply") as apply, patch.object(pipeline, "_notify"):
+            out = pipeline.run_approved(pause=False)
+        apply.assert_not_called()
+        assert tracker.all_apps()[a["id"]]["status"] == "practice"
+        assert out == "1 practice runs (not sent)"
+
+    def test_live_without_a_cv_is_still_practice(self):
+        store.update_settings(live=True)
+        _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1", status="approved"))
+        with patch.object(appliers, "apply") as apply, patch.object(pipeline, "_notify"):
+            pipeline.run_approved(pause=False)
+        apply.assert_not_called()
+
+    def test_live_sends_and_keeps_linkedin_under_its_cap(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        profile.save({"cv_path": str(cv)})
+        store.update_settings(live=True, linkedin_daily_cap=1)
+        _seed(_job("A", "Co", "https://eg.linkedin.com/jobs/view/1", status="approved"),
+              _job("B", "Co", "https://eg.linkedin.com/jobs/view/2", status="approved"),
+              _job("C", "Co", "https://wuzzuf.net/jobs/p/3", status="approved"))
+        with patch.object(appliers, "apply", return_value=("applied", "ok")) as apply, \
+             patch.object(pipeline, "_notify"):
+            pipeline.run_approved(pause=False)
+        assert apply.call_count == 2
+        assert len(tracker.with_status("approved")) == 1      # the second LinkedIn one waits
+
+
+class TestAppliers:
+    def _app(self, channel, **extra):
+        return {"id": "x", "title": "Data Analyst", "company": "Valeo", "url": "https://v.com/j",
+                "channel": channel, "draft": {"subject": "Application", "body": "COVER LETTER"},
+                **extra}
+
+    def test_a_site_form_is_left_for_mo_to_submit(self):
+        task = appliers.browser_task(self._app("site"), {"answers": {"military_status": "Exempted"}})
+        assert "do NOT press the final Submit" in task
+        assert "Military status (exempted / completed / postponed): Exempted" in task
+        assert "COVER LETTER" in task
+
+    def test_browser_results_map_to_statuses(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        prof = {"cv_path": str(cv), "answers": {}}
+        for said, status in [("SUBMITTED - done", "applied"),
+                             ("READY FOR REVIEW", "needs_you"),
+                             ("BLOCKED: expected salary", "needs_you"),
+                             ("Browser task completed (reached max steps).", "failed")]:
+            with patch("core.agents.browser_agent.BrowserAgent.run", return_value=said) as run, \
+                 patch.object(appliers, "_ledger"):
+                assert appliers.apply_in_browser(self._app("wuzzuf"), prof)[0] == status
+            assert run.call_args.kwargs["upload_path"] == str(cv)
+            assert run.call_args.kwargs["close_tab"] is True
+
+    def test_a_site_form_stays_open_in_comet(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        with patch("core.agents.browser_agent.BrowserAgent.run", return_value="READY FOR REVIEW") as run:
+            appliers.apply_in_browser(self._app("site"), {"cv_path": str(cv), "answers": {}})
+        assert run.call_args.kwargs["close_tab"] is False
+
+    def test_email_goes_with_the_cv_attached(self, tmp_path):
+        cv = tmp_path / "Mohamed CV.pdf"
+        cv.write_bytes(b"%PDF-1.4 cv")
+        service = MagicMock()
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", True), \
+             patch("tools.gmail_tool.get_gmail_service", return_value=service), \
+             patch.object(appliers, "_ledger") as ledger:
+            status, note = appliers.send_email(self._app("email", hr_email="hr@valeo.com"),
+                                               {"cv_path": str(cv)})
+        assert status == "applied"
+        raw = service.users().messages().send.call_args.kwargs["body"]["raw"]
+        import base64
+        mime = base64.urlsafe_b64decode(raw).decode()
+        assert "hr@valeo.com" in mime and 'filename="Mohamed CV.pdf"' in mime
+        ledger.assert_called_once()
+
+    def test_email_without_gmail_fails_cleanly(self):
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", False):
+            assert appliers.send_email(self._app("email", hr_email="a@b.com"), {})[0] == "failed"
+
+
+class TestReplies:
+    def _service(self, messages):
+        service = MagicMock()
+        service.users().messages().list().execute.return_value = {
+            "messages": [{"id": m["id"]} for m in messages]}
+        by_id = {m["id"]: m for m in messages}
+        service.users().messages().get.side_effect = lambda userId, id, **kw: MagicMock(
+            execute=MagicMock(return_value={
+                "snippet": by_id[id]["snippet"],
+                "payload": {"headers": [{"name": "From", "value": by_id[id]["from"]},
+                                        {"name": "Subject", "value": by_id[id]["subject"]}]}}))
+        return service
+
+    def test_interviews_and_rejections_are_recorded_once(self):
+        a, b = _seed(_job("Analyst", "Valeo", "https://wuzzuf.net/jobs/p/1", status="applied"),
+                     _job("Analyst", "Fawry", "https://wuzzuf.net/jobs/p/2", status="applied"))
+        service = self._service([
+            {"id": "m1", "from": "Valeo HR <hr@valeo.com>", "subject": "Interview invitation",
+             "snippet": "We'd like to invite you"},
+            {"id": "m2", "from": "Fawry Careers", "subject": "Your application",
+             "snippet": "Unfortunately we have decided"},
+        ])
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", True), \
+             patch("tools.gmail_tool.get_gmail_service", return_value=service), \
+             patch.object(pipeline, "_notify") as notify:
+            first = pipeline.check_replies()
+            second = pipeline.check_replies()
+        assert tracker.all_apps()[a["id"]]["status"] == "interview"
+        assert tracker.all_apps()[b["id"]]["status"] == "rejected"
+        assert "INTERVIEW: Analyst at Valeo" in first
+        assert second == "No new replies from companies you applied to."
+        notify.assert_called_once()
+
+
+class TestStatus:
+    def test_says_practice_mode_and_whats_missing(self):
+        _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1"))
+        out = pipeline.status_text()
+        assert out.startswith("Mode: PRACTICE (nothing is sent).")
+        assert "1 ready" in out
+        assert "military_status" in out
+
+
+class TestSources:
+    def test_gathers_tags_tiers_and_drops_senior_roles(self, monkeypatch):
+        monkeypatch.setattr(companies, "big4", lambda: [])
+        found = {
+            ("Wuzzuf", "data analyst"): [
+                {"title": "Data Analyst", "company": "PwC Middle East", "location": "", "posted": "",
+                 "url": "https://wuzzuf.net/jobs/p/1", "source": "Wuzzuf"},
+                {"title": "Senior Data Analyst", "company": "Fawry", "location": "", "posted": "",
+                 "url": "https://wuzzuf.net/jobs/p/2", "source": "Wuzzuf"}],
+        }
+        with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
+                   lambda self, src, term: found.get((src, term), [])):
+            jobs = sources.gather({"search_terms": ["data analyst"]})
+        assert [(j["title"], j["tier"], j["company_key"]) for j in jobs] == [
+            ("Data Analyst", "big4", "PwC")]
+
+    def test_a_firms_name_search_keeps_only_its_own_postings(self):
+        agent = MagicMock()
+        agent._from_source.return_value = [
+            {"title": "Auditor", "company": "KPMG Egypt", "url": "u1"},
+            {"title": "Accountant", "company": "Some firm hiring ex-KPMG", "url": "u2"},
+            {"title": "Clerk", "company": "Other", "url": "u3"}]
+        kpmg = next(c for c in companies.big4() if c["name"] == "KPMG")
+        out = sources._board_by_name(agent, "Wuzzuf", kpmg)
+        assert [j["url"] for j in out] == ["u1", "u2"]
+
+    def test_workday_keeps_egypt_postings(self):
+        resp = MagicMock()
+        resp.json.return_value = {"jobPostings": [
+            {"title": "ETIC Graduate Program", "locationsText": "Cairo",
+             "externalPath": "/job/Cairo/ETIC_1", "postedOn": "Posted Today"},
+            {"title": "Audit Associate", "locationsText": "Dubai", "externalPath": "/job/Dubai/A_2"}]}
+        wd = {"host": "pwc.wd3.myworkdayjobs.com", "tenant": "pwc", "site": "Global_Campus_Careers"}
+        firm = next(c for c in companies.big4() if c["name"] == "PwC")
+        with patch("httpx.post", return_value=resp) as post:
+            jobs = sources._workday(wd, firm)
+        assert post.call_args.args[0] == \
+            "https://pwc.wd3.myworkdayjobs.com/wday/cxs/pwc/Global_Campus_Careers/jobs"
+        assert [j["url"] for j in jobs] == [
+            "https://pwc.wd3.myworkdayjobs.com/en-US/Global_Campus_Careers/job/Cairo/ETIC_1"]
+
+
+class TestRepliesAfterAnInterview:
+    def test_a_later_plain_reply_keeps_the_interview(self):
+        (a,) = _seed(_job("Analyst", "Valeo", "https://wuzzuf.net/jobs/p/1", status="interview"))
+        service = TestReplies()._service([
+            {"id": "m3", "from": "Valeo HR", "subject": "Directions to our office",
+             "snippet": "Our address is"}])
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", True), \
+             patch("tools.gmail_tool.get_gmail_service", return_value=service), \
+             patch.object(pipeline, "_notify"):
+            pipeline.check_replies()
+        app = tracker.all_apps()[a["id"]]
+        assert app["status"] == "interview" and app["reply_ids"] == ["m3"]

@@ -1,0 +1,131 @@
+"""The morning review: the night's drafted applications on one page, all
+ticked. Mo unticks what he doesn't want and approves the rest with one click.
+Served by the dashboard at /jobs; the batch itself comes from /api/jobs with
+the dashboard token, so the drafts aren't readable without it."""
+from core.career import companies, pipeline, profile, store
+
+
+def batch_json() -> dict:
+    s = store.settings()
+    live = s["live"] and profile.has_cv()
+    return {
+        "mode": "live" if live else "practice",
+        "missing": [profile.ANSWER_KEYS[k] for k in profile.missing_answers()],
+        "apps": [{
+            "id": a["id"], "title": a["title"], "company": a.get("company") or "",
+            "tier": a.get("tier", ""), "score": a.get("score", 0), "fit": a.get("fit", ""),
+            "missing": a.get("missing", []), "channel": a["channel"], "url": a["url"],
+            "location": a.get("location", ""), "to": a.get("hr_email", ""),
+            "subject": a["draft"]["subject"], "body": a["draft"]["body"],
+        } for a in pipeline.ready_batch()],
+        "tiers": list(companies.TIER_RANK),
+    }
+
+
+PAGE = r"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Job Applications</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+__FONTS__
+__TOKENS__
+ *{box-sizing:border-box}
+ html,body{margin:0}
+ body{background:var(--bg-void);color:var(--text-hi);font-family:var(--font-ui);
+   -webkit-font-smoothing:antialiased;padding:22px 16px 110px;max-width:880px;margin:0 auto}
+ .brand{font-size:13px;font-weight:600;letter-spacing:4px;color:var(--accent-ember)}
+ .brand a{color:var(--text-low);text-decoration:none}
+ h1{font-size:24px;font-weight:600;letter-spacing:-.3px;margin:12px 0 4px}
+ .sub{color:var(--text-mid);font-size:13px}
+ .banner{margin:14px 0;padding:10px 12px;border:1px solid var(--stroke-hairline);border-left:3px solid var(--sem-warn);
+   border-radius:var(--r-2);font-size:13px;color:var(--text-mid);background:var(--surface-1)}
+ .chips{display:flex;gap:var(--s-2);flex-wrap:wrap;margin:14px 0}
+ .chip{background:var(--surface-0);border:1px solid var(--stroke-hairline);color:var(--text-mid);border-radius:var(--r-pill);
+   padding:6px 14px;font-family:inherit;font-size:12px;cursor:pointer}
+ .chip.on{color:var(--accent-ember);border-color:var(--accent-ember);background:var(--accent-wash)}
+ .app{background:var(--surface-1);border:1px solid var(--stroke-hairline);border-radius:var(--r-3);
+   padding:12px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start}
+ .app.off{opacity:.45}
+ .app input{width:18px;height:18px;margin-top:3px;accent-color:var(--accent-ember);flex:0 0 auto}
+ .main{flex:1;min-width:0}
+ .t{font-size:15px;font-weight:600;overflow-wrap:anywhere}
+ .t a{color:inherit;text-decoration:none}
+ .meta{color:var(--text-mid);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+ .badge{font-family:var(--font-mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+   color:var(--accent-ember);border:1px solid var(--accent-ember);border-radius:var(--r-pill);padding:1px 7px;margin-left:6px}
+ .score{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text-hi)}
+ .fit{font-size:13px;color:var(--text-mid);margin-top:6px}
+ .gap{font-size:12px;color:var(--text-low);margin-top:3px}
+ details{margin-top:8px}
+ summary{cursor:pointer;color:var(--text-mid);font-size:12px}
+ pre{white-space:pre-wrap;font-family:inherit;font-size:13px;color:var(--text-hi);background:var(--surface-0);
+   border:1px solid var(--stroke-hairline);border-radius:var(--r-2);padding:10px;margin:8px 0 0}
+ .bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface-2);border-top:1px solid var(--stroke-hairline);
+   padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+ .go{color:var(--text-on-ember);background:var(--accent-ember);border:1px solid var(--accent-ember);border-radius:var(--r-pill);
+   padding:10px 22px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
+ .go:disabled{opacity:.5;cursor:default}
+ .msg{font-size:13px;color:var(--text-mid)}
+ .empty{color:var(--text-mid);font-size:14px;margin-top:30px;text-align:center}
+</style></head><body>
+<div class="brand"><a href="/">EL FAGER</a> // JOBS</div>
+<h1 id="head">Loading…</h1>
+<div class="sub" id="sub"></div>
+<div id="banners"></div>
+<div class="chips" id="chips"></div>
+<div id="list"></div>
+<div class="bar"><span class="msg" id="msg"></span>
+ <button class="go" id="go" onclick="approve()" disabled>Approve</button></div>
+<script>
+let data=null, filter='all';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function token(){
+ let t=localStorage.getItem('elf_token');
+ if(!t){t=prompt('Dashboard token (data/settings.json → dashboard_token):');if(t)localStorage.setItem('elf_token',t);}
+ return t||'';
+}
+async function load(){
+ const r=await fetch('/api/jobs',{headers:{'Authorization':'Bearer '+token()}});
+ if(r.status===401){localStorage.removeItem('elf_token');$('head').textContent='Wrong token — reload to try again';return;}
+ data=await r.json(); data.apps.forEach(a=>a.on=true); render();
+}
+const CH={email:'email with CV',wuzzuf:'Wuzzuf apply',linkedin:'LinkedIn Easy Apply',site:'form — you press Submit'};
+function render(){
+ const n=data.apps.length;
+ $('head').textContent=n?`${n} applications to review`:'Nothing to review';
+ $('sub').textContent=n?'Everything is ticked. Untick what you don’t want, then approve the rest.':'';
+ let b='';
+ if(data.mode==='practice')b+='<div class="banner">Practice mode: approving marks these as practice runs. Nothing is sent until your CV is imported and you switch to live.</div>';
+ if(data.missing.length)b+=`<div class="banner">Forms will ask for answers you haven’t given: ${esc(data.missing.join(', '))}. Tell El Fager, e.g. “my military status is exempted”.</div>`;
+ $('banners').innerHTML=b;
+ const counts={all:n,big4:data.apps.filter(a=>a.tier==='big4').length,top:data.apps.filter(a=>a.tier==='top').length};
+ $('chips').innerHTML=n?[['all','All'],['big4','Big 4'],['top','Top companies']].map(([k,l])=>
+   `<button class="chip ${filter===k?'on':''}" onclick="filter='${k}';render()">${l} · ${counts[k]}</button>`).join('')
+   +'<button class="chip" onclick="tick(true)">Tick all</button><button class="chip" onclick="tick(false)">Untick all</button>':'';
+ const shown=data.apps.filter(a=>filter==='all'||a.tier===filter);
+ $('list').innerHTML=n?shown.map(a=>`<div class="app ${a.on?'':'off'}">
+  <input type="checkbox" ${a.on?'checked':''} onchange="flip('${a.id}',this.checked)">
+  <div class="main">
+   <div class="t"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>${a.tier==='big4'?'<span class="badge">Big 4</span>':a.tier==='top'?'<span class="badge">Top</span>':''}</div>
+   <div class="meta">${esc(a.company)}${a.location?' · '+esc(a.location):''} · <span class="score">${a.score}</span>/100 · ${esc(CH[a.channel]||a.channel)}${a.to?' → '+esc(a.to):''}</div>
+   <div class="fit">${esc(a.fit)}</div>
+   ${a.missing.length?`<div class="gap">They ask for: ${esc(a.missing.join('; '))}</div>`:''}
+   <details><summary>Read the ${a.channel==='email'?'email':'cover letter'}</summary><pre>${esc(a.subject)}\n\n${esc(a.body)}</pre></details>
+  </div></div>`).join(''):'<div class="empty">The next batch is prepared overnight.</div>';
+ const k=data.apps.filter(a=>a.on).length;
+ $('go').disabled=!n; $('go').textContent=`Approve ${k}`;
+ $('msg').textContent=n?`${n-k} will be skipped`:'';
+}
+function flip(id,on){data.apps.find(a=>a.id===id).on=on;render();}
+function tick(on){data.apps.filter(a=>filter==='all'||a.tier===filter).forEach(a=>a.on=on);render();}
+async function approve(){
+ $('go').disabled=true; $('msg').textContent='Approving…';
+ const skip=data.apps.filter(a=>!a.on).map(a=>a.id);
+ const r=await fetch('/api/jobs_approve',{method:'POST',
+   headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:JSON.stringify({skip})});
+ const j=await r.json(); $('msg').textContent=j.result||j.error||'Done'; data.apps=[]; setTimeout(()=>{render();$('msg').textContent=j.result||'';},50);
+}
+load();
+</script></body></html>"""

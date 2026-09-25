@@ -44,6 +44,14 @@ def _isolated_jobs_seen(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_career(monkeypatch, tmp_path):
+    """Mo's CV profile, his applications and the pipeline's settings live in
+    data/career/. A test's fake batch must never land in his morning review."""
+    from core.career import store
+    monkeypatch.setattr(store, "DIR", tmp_path / "career")
+
+
+@pytest.fixture(autouse=True)
 def _no_real_whatsapp(monkeypatch):
     """Drafting a WhatsApp message searches Mo's real WhatsApp Desktop, and a
     confirm clicks and types into it. No test may do either — a test that

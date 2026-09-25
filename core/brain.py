@@ -4396,6 +4396,126 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "prepare_applications",
+        "description": (
+            "Start preparing today's batch of job applications in the background: search "
+            "the job boards and the Big 4 career sites, score each job against Mo's CV, and "
+            "draft a tailored application for each good fit. Nothing is sent -- the batch "
+            "waits for his review. Use for 'prepare my applications', 'run the job hunt'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "review_applications",
+        "description": (
+            "List the drafted applications waiting for Mo's approval (id, job, company, "
+            "score, channel) and the link to the review page. Use for 'what applications "
+            "are ready', 'show me the batch'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "approve_applications",
+        "description": (
+            "Approve the waiting batch of job applications and start sending them. With no "
+            "input it approves every ready one. skip: ids to leave out. only: approve just "
+            "these ids and skip the rest. Ids come from review_applications. Only call this "
+            "when Mo has clearly said to approve."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "skip": {"type": "array", "items": {"type": "string"}},
+                "only": {"type": "array", "items": {"type": "string"}}
+            }
+        }
+    },
+    {
+        "name": "application_status",
+        "description": (
+            "Where Mo's job applications stand: practice or live mode, counts by status "
+            "(ready, applied, interview, rejected...), sent this week, follow-ups due, and "
+            "form answers still missing. Use for 'how are my applications going'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "check_application_replies",
+        "description": (
+            "Read Mo's inbox for replies from companies he applied to, and record "
+            "interviews and rejections. Use for 'did anyone reply', 'any interviews'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "import_cv",
+        "description": (
+            "Read Mo's CV (a PDF or Word file path) into the profile the job applications "
+            "are scored and written from, and the file they attach. Use when he says "
+            "'import my CV from ...' or 'my new CV is at ...'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "set_application_answer",
+        "description": (
+            "Save Mo's answer to a question job application forms ask. question is one of: "
+            "phone, email, linkedin_url, military_status, graduation_year, gpa, "
+            "expected_salary, availability, english_level, willing_to_relocate. Use when he "
+            "says e.g. 'my military status is exempted'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "answer": {"type": "string"}
+            },
+            "required": ["question", "answer"]
+        }
+    },
+    {
+        "name": "application_settings",
+        "description": (
+            "Show or change the job-application settings; with no input it shows them. "
+            "live=true sends approved applications for real (needs his CV imported), "
+            "live=false is practice mode. nightly=true prepares a batch every night at "
+            "02:00. daily_target, min_score (0-100), linkedin_daily_cap and "
+            "big4_per_firm_per_month are numbers. Change only what Mo asked to change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "live": {"type": "boolean"},
+                "nightly": {"type": "boolean"},
+                "daily_target": {"type": "integer"},
+                "min_score": {"type": "integer"},
+                "linkedin_daily_cap": {"type": "integer"},
+                "big4_per_firm_per_month": {"type": "integer"}
+            }
+        }
+    },
+    {
+        "name": "interview_prep",
+        "description": (
+            "Write an interview prep sheet for a company (and role if known): their "
+            "interview stages, likely questions with answers drawn from Mo's CV, questions "
+            "to ask, what to revise. Use for 'prepare me for my interview at X'. Then offer "
+            "to quiz him on the questions one at a time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string"},
+                "role": {"type": "string"}
+            },
+            "required": ["company"]
+        }
+    },
+    {
         "name": "learn_skill",
         "description": (
             "Save a new SkillForge skill -- a reusable natural-language routine. Use when Mo "
@@ -4741,7 +4861,11 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     }),
     "usage": frozenset({"usage_report"}),
     "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
-    "jobs": frozenset({"job_search_agent"}),
+    "jobs": frozenset({
+        "job_search_agent", "prepare_applications", "review_applications",
+        "approve_applications", "application_status", "check_application_replies",
+        "import_cv", "set_application_answer", "application_settings", "interview_prep",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4861,6 +4985,8 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "jobs": [
         "job", "jobs", "internship", "internships", "vacancy", "vacancies",
         "hiring", "wuzzuf", "bayt", "forasna", "job search", "apply for",
+        "applications", "job application", "my cv", "resume", "interview", "interviews",
+        "big 4", "big four", "recruiter", "military status", "expected salary",
     ],
 }
 
@@ -4970,6 +5096,13 @@ _UNSEEN_CONFIRM = (
     "NOT SENT — nothing went out. Mo hasn't seen this draft yet, so it can't "
     "be confirmed in the same turn it was staged. Do not tell Mo it was sent. "
     "Tell him the draft is ready and ask him to say yes."
+)
+# Approving the job-application batch sends it under Mo's name. The nightly
+# job hunt runs as a background turn: it prepares the batch, only Mo approves.
+_MO_ONLY_TOOLS = frozenset({"approve_applications"})
+_BACKGROUND_REFUSAL = (
+    "NOT APPROVED — only Mo can approve applications, in his own conversation "
+    "or on the review page. Tell him the batch is ready for his review."
 )
 
 _HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
@@ -6427,6 +6560,12 @@ class Brain:
                 from core.agents.job_search_agent import JobSearchAgent
                 return JobSearchAgent().run(tool_input.get("query", ""),
                                             show_all=tool_input.get("show_all", False))
+            elif name in ("prepare_applications", "review_applications",
+                          "approve_applications", "application_status",
+                          "check_application_replies", "import_cv", "set_application_answer",
+                          "application_settings", "interview_prep"):
+                from tools import career_tool
+                return getattr(career_tool, name)(**tool_input)
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)
@@ -6690,10 +6829,13 @@ class Brain:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
                             refused = block.name in _CONFIRM_TOOLS and seen is None
+                            background = block.name in _MO_ONLY_TOOLS and history is not None
                             result_str = (
                                 _UNSEEN_CONFIRM if refused
+                                else _BACKGROUND_REFUSAL if background
                                 else self._dispatch_tool(block.name, block.input)
                             )
+                            refused = refused or background
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,

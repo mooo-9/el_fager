@@ -114,20 +114,26 @@ class JobSearchAgent(BaseAgent):
 
     def _web_search(self, source: str, role: str) -> "list[dict] | None":
         site, job_path = _SEARCH_SITES[source]
+        return web_search_jobs(f"site:{site} {role} Egypt", job_path, source)
+
+
+def web_search_jobs(query: str, job_path: "re.Pattern", source: str,
+                    company: str = "") -> "list[dict] | None":
+    """Job pages among a web search's results, or None when the search itself
+    failed. `job_path` tells a single job's page from the site's listings."""
+    try:
         try:
-            try:
-                from ddgs import DDGS
-            except ImportError:
-                from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                results = list(ddgs.text(f"site:{site} {role} Egypt",
-                                         timelimit="m", max_results=10))
-        except Exception:
-            return None
-        return [{"title": _clean_search_title(r.get("title", "")), "company": "",
-                 "location": "", "posted": "", "url": _canonical(r["href"]),
-                 "source": source}
-                for r in results if job_path.search(r.get("href", ""))]
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, timelimit="m", max_results=10))
+    except Exception:
+        return None
+    return [{"title": _clean_search_title(r.get("title", "")), "company": company,
+             "location": "", "posted": "", "url": _canonical(r["href"]),
+             "source": source}
+            for r in results if job_path.search(r.get("href", ""))]
 
 
 # ── Parsers ──────────────────────────────────────────────────────────────────
