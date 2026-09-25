@@ -42,7 +42,7 @@ class TestCompanies:
 class TestSettings:
     def test_practice_mode_is_the_default(self):
         assert store.settings()["live"] is False
-        assert store.settings()["daily_target"] == 100
+        assert store.settings()["daily_target"] == 20
 
     def test_unknown_settings_are_ignored(self):
         s = store.update_settings(daily_target=50, nonsense=1)
@@ -124,6 +124,12 @@ def _seed(*apps):
 
 
 class TestPrepareBatch:
+    @pytest.fixture(autouse=True)
+    def _cv(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        profile.save({"cv_path": str(cv)})
+
     def _run(self, jobs, **settings):
         if settings:
             store.update_settings(**settings)

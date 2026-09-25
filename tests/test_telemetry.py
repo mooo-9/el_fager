@@ -33,6 +33,13 @@ class TestCost:
         cost = tel.estimate_cost("claude-opus-4-8", _usage(1_000_000, 1_000_000))
         assert cost == pytest.approx(30.0)
 
+    def test_sonnet_5_pricing(self):
+        """El Fager's brain and the job hunt run on Sonnet 5, at $2/$10 --
+        billed at older Sonnet's $3/$15, the usage report overstated them."""
+        cost = tel.estimate_cost("claude-sonnet-5", _usage(1_000_000, 1_000_000))
+        assert cost == pytest.approx(12.0)
+        assert tel.estimate_cost("claude-sonnet-4-6", _usage(1_000_000, 1_000_000)) == pytest.approx(18.0)
+
     def test_haiku_pricing(self):
         cost = tel.estimate_cost("claude-haiku-4-5", _usage(1_000_000, 1_000_000))
         assert cost == pytest.approx(6.0)

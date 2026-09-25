@@ -74,8 +74,11 @@ Ledger. A form question the facts don't cover stops that application as
   so the nightly run can prepare a batch but never send it.
 - **Nothing invented:** scores, letters and form answers use only the CV and the
   answers Mo gave.
-- **Cost:** scoring and drafting use `claude-opus-5` (`core/career/claude.py`),
-  logged under "career" in telemetry; the usage audit shows the daily spend.
+- **Cost:** scoring, letters, interview prep and referral notes use
+  `claude-sonnet-5`, and `claude-opus-5` when they're for a Big 4 firm
+  (`core/career/claude.py`). 20 applications a day is about $0.50. Nothing is
+  scored or drafted until the CV is imported; programme deadlines are still
+  checked. Logged under "career" in telemetry; the usage audit shows the spend.
 
 ## Settings
 

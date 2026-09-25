@@ -20,6 +20,7 @@ _PRICING: list[tuple[str, float, float]] = [
     ("fable-5", 10.0, 50.0),
     ("mythos-5", 10.0, 50.0),
     ("opus", 5.0, 25.0),
+    ("sonnet-5", 2.0, 10.0),
     ("sonnet", 3.0, 15.0),
     ("haiku", 1.0, 5.0),
 ]

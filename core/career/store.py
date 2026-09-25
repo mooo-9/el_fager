@@ -14,7 +14,8 @@ DEFAULTS = {
     # Practice mode until Mo's CV is final: everything is found, scored and
     # drafted, nothing is sent.
     "live": False,
-    "daily_target": 100,
+    # Enough to reach the good fits each day and still read every letter.
+    "daily_target": 20,
     "min_score": 60,
     # LinkedIn restricts accounts that apply at machine pace.
     "linkedin_daily_cap": 20,
