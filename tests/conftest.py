@@ -52,6 +52,20 @@ def _no_real_job_page_browser(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_career_sites(monkeypatch):
+    """The nightly search reads the target firms' own career sites (Workday,
+    SmartRecruiters, Amazon). No test may reach them; a test that needs a
+    page patches these with its own."""
+    from core.career import sources
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("real career sites are off in tests")
+
+    monkeypatch.setattr(sources, "_get_json", blocked)
+    monkeypatch.setattr(sources, "_post_json", blocked)
+
+
+@pytest.fixture(autouse=True)
 def _isolated_career(monkeypatch, tmp_path):
     """Mo's CV profile, his applications and the pipeline's settings live in
     data/career/. A test's fake batch must never land in his morning review."""

@@ -330,6 +330,7 @@ class TestStatus:
 class TestSources:
     def test_gathers_tags_tiers_and_drops_senior_roles(self, monkeypatch):
         monkeypatch.setattr(companies, "premium", lambda: [])
+        monkeypatch.setattr(companies, "with_career_sites", lambda: [])
         found = {
             ("Wuzzuf", "data analyst"): [
                 {"title": "Data Analyst", "company": "PwC Middle East", "location": "", "posted": "",
@@ -354,19 +355,77 @@ class TestSources:
         assert [j["url"] for j in out] == ["u1", "u2"]
 
     def test_workday_keeps_egypt_postings(self):
-        resp = MagicMock()
-        resp.json.return_value = {"jobPostings": [
+        page = {"total": 2, "jobPostings": [
             {"title": "ETIC Graduate Program", "locationsText": "Cairo",
              "externalPath": "/job/Cairo/ETIC_1", "postedOn": "Posted Today"},
             {"title": "Audit Associate", "locationsText": "Dubai", "externalPath": "/job/Dubai/A_2"}]}
         wd = {"host": "pwc.wd3.myworkdayjobs.com", "tenant": "pwc", "site": "Global_Campus_Careers"}
         firm = next(c for c in companies.big4() if c["name"] == "PwC")
-        with patch("httpx.post", return_value=resp) as post:
+        with patch.object(sources, "_post_json", return_value=page) as post:
             jobs = sources._workday(wd, firm)
-        assert post.call_args.args[0] == \
-            "https://pwc.wd3.myworkdayjobs.com/wday/cxs/pwc/Global_Campus_Careers/jobs"
+        assert post.call_args.args[0] ==             "https://pwc.wd3.myworkdayjobs.com/wday/cxs/pwc/Global_Campus_Careers/jobs"
         assert [j["url"] for j in jobs] == [
             "https://pwc.wd3.myworkdayjobs.com/en-US/Global_Campus_Careers/job/Cairo/ETIC_1"]
+
+    def test_workday_reads_past_its_first_twenty(self):
+        """Workday answers 20 at a time, and says the total only on the first
+        page: Valeo's 32 Egypt postings came back as 20."""
+        def posting(i):
+            return {"title": f"Engineer {i}", "locationsText": "Cairo, Egypt",
+                    "externalPath": f"/job/Cairo/E_{i}"}
+        pages = [{"total": 32, "jobPostings": [posting(i) for i in range(20)]},
+                 {"total": 0, "jobPostings": [posting(i) for i in range(20, 32)]}]
+        wd = {"host": "valeo.wd3.myworkdayjobs.com", "tenant": "valeo", "site": "valeo_jobs"}
+        firm = companies.match("Valeo")
+        with patch.object(sources, "_post_json", side_effect=pages) as post:
+            jobs = sources._workday(wd, firm)
+        assert len(jobs) == 32 and post.call_count == 2
+        assert post.call_args.args[1]["offset"] == 20
+
+    def test_smartrecruiters_postings_in_egypt(self):
+        page = {"content": [{"id": "744000151793248", "name": "Delivery Support",
+                             "location": {"city": "El Katameya", "country": "eg"},
+                             "releasedDate": "2026-09-22T10:00:00.000Z"}]}
+        firm = companies.match("talabat")
+        with patch.object(sources, "_get_json", return_value=page) as get:
+            jobs = sources._smartrecruiters({"company": "DeliveryHero"}, firm)
+        assert get.call_args.args[0] ==             "https://api.smartrecruiters.com/v1/companies/DeliveryHero/postings"
+        assert get.call_args.args[1]["country"] == "eg"
+        assert jobs == [{"title": "Delivery Support", "company": "Talabat",
+                         "location": "El Katameya", "posted": "2026-09-22",
+                         "url": "https://jobs.smartrecruiters.com/DeliveryHero/744000151793248",
+                         "source": "Talabat careers"}]
+
+    def test_amazon_jobs_in_egypt(self):
+        page = {"jobs": [{"title": "Business Analyst - MENA", "city": "Cairo",
+                          "posted_date": "September 25, 2026",
+                          "job_path": "/en/jobs/10560210/business-analyst-mena"}]}
+        firm = companies.match("Amazon")
+        with patch.object(sources, "_get_json", return_value=page) as get:
+            jobs = sources._amazon({"country": "EGY"}, firm)
+        assert get.call_args.args[1]["normalized_country_code[]"] == "EGY"
+        assert jobs == [{"title": "Business Analyst - MENA", "company": "Amazon",
+                         "location": "Cairo", "posted": "September 25, 2026",
+                         "url": "https://www.amazon.jobs/en/jobs/10560210/business-analyst-mena",
+                         "source": "Amazon careers"}]
+
+    def test_every_firm_with_a_career_site_is_read_not_only_premium(self, monkeypatch):
+        """Valeo isn't premium, but its own Workday board is read."""
+        monkeypatch.setattr(companies, "premium", lambda: [])
+        monkeypatch.setattr(companies, "with_career_sites", lambda: [companies.match("Valeo")])
+        read = []
+        with patch.object(sources, "_workday", side_effect=lambda wd, firm: read.append(
+                (firm["name"], wd["tenant"])) or []),              patch("core.agents.job_search_agent.JobSearchAgent._from_source", return_value=[]):
+            sources.gather({"search_terms": []})
+        assert read == [("Valeo", "valeo")]
+
+    def test_the_new_boards_are_in_the_list(self):
+        boards = {c["name"]: c for c in companies.with_career_sites()}
+        for firm in ("Valeo", "Mondelez", "Mastercard", "Sanofi", "Unilever", "GSK",
+                     "Novartis", "Visa", "Pfizer"):
+            assert boards[firm]["workday"], firm
+        assert boards["Talabat"]["smartrecruiters"] == [{"company": "DeliveryHero"}]
+        assert boards["Amazon"]["amazon_jobs"] == [{"country": "EGY"}]
 
 
 class TestRepliesAfterAnInterview:

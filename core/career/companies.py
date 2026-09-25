@@ -44,6 +44,12 @@ def big4() -> list[dict]:
     return [c for c in all_companies() if c["tier"] == "big4"]
 
 
+def with_career_sites() -> list[dict]:
+    """The companies whose own careers site the nightly search reads."""
+    return [c for c in all_companies()
+            if any(c.get(k) for k in ("sites", "workday", "smartrecruiters", "amazon_jobs"))]
+
+
 def premium() -> list[dict]:
     """The Big 4 and the companies Mo picked to get the same treatment
     ("opus": true): their own career sites searched, the stronger model."""
