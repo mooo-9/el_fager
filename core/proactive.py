@@ -43,6 +43,8 @@ WATCHES = [
      "when": "6 AM–12 AM", "detail": "Every minute · runs what you asked for later"},
     {"check": "_check_missions", "name": "Missions",
      "when": "6 AM–12 AM", "detail": "Every minute · one step at a time"},
+    {"check": "_check_job_hunt", "name": "Job hunt",
+     "when": "7–11 AM", "detail": "Mornings · applications to review, programmes closing"},
     {"check": "_check_deadlines", "name": "Deadlines",
      "when": "7–11 AM", "detail": "Mornings · due today or tomorrow"},
     {"check": "_check_weather", "name": "Weather alert",
