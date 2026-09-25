@@ -15,6 +15,7 @@ Checks implemented:
   • Weekly review prompt (Friday / Saturday evening)
   • OAuth token age warning (Google tokens near the 7-day Testing-mode expiry)
   • Transcription-quality alert when too many of today's turns are gibberish
+  • Morning job hunt: batch to review, programme deadlines, referral notes
 """
 
 import json
@@ -220,6 +221,7 @@ class ProactiveEngine:
         self._check_missions()              # all waking hours
 
         if 7 <= hour <= 11:
+            self._check_job_hunt()
             self._check_deadlines()
             self._check_weather()
             self._check_overdue_invoices()
@@ -352,6 +354,31 @@ class ProactiveEngine:
             # Reported, not swallowed: a silent except is what let a broken
             # import hide here for two months.
             print(f"[Proactive] event check error: {e}")
+
+    def _check_job_hunt(self) -> None:
+        """Morning: the job hunt is Mo's main goal, so what's waiting on him
+        there comes first -- the batch to review, programme deadlines within a
+        week (to his phone too), referral notes to send."""
+        if self._cooldown("job_hunt", 20):
+            return
+        try:
+            from core.career import programmes, referrals, tracker
+            ready = len(tracker.with_status("ready"))
+            soon = programmes.closing_soon()
+            pending = len(referrals.to_send())
+            parts = []
+            if ready:
+                parts.append(f"{ready} job applications are ready for your review")
+            for p in soon[:2]:
+                parts.append(f"{p['name']} closes in {programmes.days_left(p)} days")
+            if pending:
+                parts.append(f"{pending} referral notes are waiting to be sent")
+            if not parts:
+                self._reset_cooldown("job_hunt")    # look again next cycle
+                return
+            self._deliver("Mo, " + "; ".join(parts) + ".", remote=bool(soon))
+        except Exception as e:
+            print(f"[Proactive] job hunt check error: {e}")
 
     def _check_deadlines(self) -> None:
         """Alert when a memorised deadline is today or tomorrow."""

@@ -35,7 +35,8 @@ You are El Fager — Mo's personal AI assistant running on his Windows laptop.
 
 About Mo:
 - Name: Mo (Mohamed), Cairo, Egypt
-- Final-year Business Informatics student
+- Business Informatics graduate, looking for his first job
+- His main goal right now: an interview at one of the biggest companies in Cairo (the Big 4 first). The job hunt comes before everything else — lead with it in briefings and whenever there's news on it.
 
 Personality:
 - Calm, sharp, direct — like a brilliant friend, not a corporate chatbot
@@ -114,7 +115,7 @@ When Mo asks to read or add to a Google Doc — use Docs tools. Doc ID can be ex
 Google Sheets tools: read_sheet, append_sheet_row.
 When Mo mentions a spreadsheet, grade log, or expense sheet — use Sheets tools. For append_sheet_row, values is a list of strings matching the sheet columns.
 If Google Workspace not set up, tell Mo to say 'search my Drive' to trigger the OAuth browser flow (uses the same credentials.json as Calendar/Gmail). Also remind Mo to enable Drive API, Docs API, and Sheets API in Google Cloud Console.
-Daily briefing: when the request contains 'daily briefing', call get_weather for Cairo weather, list_calendar_events for today, list_emails for unread emails, and list_facts with category='deadline' for upcoming deadlines. Respond with 3-5 concise spoken sentences covering all four. This is the one exception to the 1-2 sentence rule.
+Daily briefing: when the request contains 'daily briefing', call application_status first (the job hunt is Mo's main goal: open with interviews, the batch waiting for review and programme deadlines), then get_weather for Cairo weather, list_calendar_events for today, list_emails for unread emails, and list_facts with category='deadline' for upcoming deadlines. Respond with 3-5 concise spoken sentences, job hunt first. This is the one exception to the 1-2 sentence rule.
 Email templates: list_email_templates, get_email_template, save_email_template, delete_email_template.
 When Mo says "email my professor", "send the standup", or any phrased email request — call list_email_templates first to check if a matching template exists, then get_email_template to retrieve it, fill in the placeholders from context, and use send_email or compose_gmail to send.
 Currency: convert_currency, get_exchange_rates. When Mo mentions money amounts with currencies, or asks "how much is X in Y", call convert_currency. EGP is the default currency for Mo. For rates overview call get_exchange_rates.
@@ -4385,6 +4386,200 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "job_search_agent",
+        "description": (
+            "Job search agent -- finds internships and entry-level jobs in Egypt on Wuzzuf, "
+            "LinkedIn, Bayt and Forasna, and returns a ranked list with links. Use for: 'find "
+            "me jobs', 'any new internships?', 'data analyst jobs in Cairo', 'what's on "
+            "Wuzzuf'. query is the role Mo named ('data analyst internship'); omit it when he "
+            "names none and it searches all his target roles. It lists only jobs not shown "
+            "before; show_all=true lists them again. It only reads postings and never "
+            "applies: relay the list to Mo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "The role to search, e.g. 'data analyst internship'. Omit when Mo "
+                        "names no role: it then searches all his target roles."
+                    )
+                },
+                "show_all": {
+                    "type": "boolean",
+                    "description": "True to include jobs already shown ('show them again')."
+                }
+            }
+        }
+    },
+    {
+        "name": "prepare_applications",
+        "description": (
+            "Start preparing today's batch of job applications in the background: search "
+            "the job boards and the Big 4 career sites, score each job against Mo's CV, and "
+            "draft a tailored application for each good fit. Nothing is sent -- the batch "
+            "waits for his review. Use for 'prepare my applications', 'run the job hunt'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "review_applications",
+        "description": (
+            "List the drafted applications waiting for Mo's approval (id, job, company, "
+            "score, channel) and the link to the review page. Use for 'what applications "
+            "are ready', 'show me the batch'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "approve_applications",
+        "description": (
+            "Approve the waiting batch of job applications and start sending them. With no "
+            "input it approves every ready one. skip: ids to leave out. only: approve just "
+            "these ids and skip the rest. Ids come from review_applications. Only call this "
+            "when Mo has clearly said to approve."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "skip": {"type": "array", "items": {"type": "string"}},
+                "only": {"type": "array", "items": {"type": "string"}}
+            }
+        }
+    },
+    {
+        "name": "application_status",
+        "description": (
+            "Where Mo's job applications stand: practice or live mode, counts by status "
+            "(ready, applied, interview, rejected...), sent this week, follow-ups due, and "
+            "form answers still missing. Use for 'how are my applications going'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "check_application_replies",
+        "description": (
+            "Read Mo's inbox for replies from companies he applied to, and record "
+            "interviews and rejections. Use for 'did anyone reply', 'any interviews'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "import_cv",
+        "description": (
+            "Read Mo's CV (a PDF or Word file path) into the profile the job applications "
+            "are scored and written from, and the file they attach. Use when he says "
+            "'import my CV from ...' or 'my new CV is at ...'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "set_application_answer",
+        "description": (
+            "Save Mo's answer to a question job application forms ask. question is one of: "
+            "phone, email, linkedin_url, military_status, graduation_year, gpa, "
+            "expected_salary, availability, english_level, willing_to_relocate. Use when he "
+            "says e.g. 'my military status is exempted'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "answer": {"type": "string"}
+            },
+            "required": ["question", "answer"]
+        }
+    },
+    {
+        "name": "application_settings",
+        "description": (
+            "Show or change the job-application settings; with no input it shows them. "
+            "live=true sends approved applications for real (needs his CV imported), "
+            "live=false is practice mode. nightly=true prepares a batch every night at "
+            "02:00. daily_target, min_score (0-100), linkedin_daily_cap and "
+            "big4_per_firm_per_month and referrals_per_day are numbers. Change only what "
+            "Mo asked to change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "live": {"type": "boolean"},
+                "nightly": {"type": "boolean"},
+                "daily_target": {"type": "integer"},
+                "min_score": {"type": "integer"},
+                "linkedin_daily_cap": {"type": "integer"},
+                "big4_per_firm_per_month": {"type": "integer"},
+                "referrals_per_day": {"type": "integer"}
+            }
+        }
+    },
+    {
+        "name": "graduate_programmes",
+        "description": (
+            "The graduate programmes at the Big 4 and top companies in Cairo: open, upcoming "
+            "or closed, deadlines, and whether fresh graduates can apply. check=true reads "
+            "every programme page again first (slower). Use for 'which graduate programmes "
+            "are open', 'any deadlines coming up'."
+        ),
+        "input_schema": {"type": "object", "properties": {"check": {"type": "boolean"}}}
+    },
+    {
+        "name": "find_referrals",
+        "description": (
+            "Find people at a target company (alumni of Mo's university first) who could "
+            "refer him, and draft a LinkedIn connection note and a referral request for each. "
+            "Mo sends them himself. company is optional; without it, companies with his "
+            "applications in play come first. Use for 'who can refer me at PwC'."
+        ),
+        "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}
+    },
+    {
+        "name": "referral_list",
+        "description": (
+            "The referral notes waiting for Mo to send (id, person, company, profile link), "
+            "and how many were sent or led to a referral."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "mark_referral",
+        "description": (
+            "Record what happened with a referral contact: status is sent, replied, referred "
+            "or skipped. referral_id comes from referral_list. Use when Mo says 'I sent the "
+            "note to Ahmed' or 'Sara referred me'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "referral_id": {"type": "string"},
+                "status": {"type": "string", "enum": ["sent", "replied", "referred", "skipped"]}
+            },
+            "required": ["referral_id", "status"]
+        }
+    },
+    {
+        "name": "interview_prep",
+        "description": (
+            "Write an interview prep sheet for a company (and role if known): their "
+            "interview stages, likely questions with answers drawn from Mo's CV, questions "
+            "to ask, what to revise. Use for 'prepare me for my interview at X'. Then offer "
+            "to quiz him on the questions one at a time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string"},
+                "role": {"type": "string"}
+            },
+            "required": ["company"]
+        }
+    },
+    {
         "name": "learn_skill",
         "description": (
             "Save a new SkillForge skill -- a reusable natural-language routine. Use when Mo "
@@ -4730,6 +4925,12 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     }),
     "usage": frozenset({"usage_report"}),
     "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
+    "jobs": frozenset({
+        "job_search_agent", "prepare_applications", "review_applications",
+        "approve_applications", "application_status", "check_application_replies",
+        "import_cv", "set_application_answer", "application_settings", "interview_prep",
+        "graduate_programmes", "find_referrals", "referral_list", "mark_referral",
+    }),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4846,6 +5047,14 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "missions": [
         "mission", "missions", "big task", "multi-step", "step by step plan",
         "overnight", "work through", "plan and execute", "and then", "then write",
+    ],
+    "jobs": [
+        "job", "jobs", "internship", "internships", "vacancy", "vacancies",
+        "hiring", "wuzzuf", "bayt", "forasna", "job search", "apply for",
+        "applications", "job application", "my cv", "resume", "interview", "interviews",
+        "big 4", "big four", "recruiter", "military status", "expected salary",
+        "graduate program", "graduate programme", "referral", "referrals",
+        "briefing", "good morning", "sabah el kheir", "start my day",
     ],
 }
 
@@ -4967,6 +5176,13 @@ _UNSEEN_CONFIRM = (
     "NOT SENT — nothing went out. Mo hasn't seen this draft yet, so it can't "
     "be confirmed in the same turn it was staged. Do not tell Mo it was sent. "
     "Tell him the draft is ready and ask him to say yes."
+)
+# Approving the job-application batch sends it under Mo's name. The nightly
+# job hunt runs as a background turn: it prepares the batch, only Mo approves.
+_MO_ONLY_TOOLS = frozenset({"approve_applications"})
+_BACKGROUND_REFUSAL = (
+    "NOT APPROVED — only Mo can approve applications, in his own conversation "
+    "or on the review page. Tell him the batch is ready for his review."
 )
 
 _HISTORY_WINDOW = 24  # max messages (12 exchanges) sent per request
@@ -6423,6 +6639,17 @@ class Brain:
             elif name == "health_agent":
                 from core.agents.health_agent import HealthAgent
                 return HealthAgent().run(tool_input["task"])
+            elif name == "job_search_agent":
+                from core.agents.job_search_agent import JobSearchAgent
+                return JobSearchAgent().run(tool_input.get("query", ""),
+                                            show_all=tool_input.get("show_all", False))
+            elif name in ("prepare_applications", "review_applications",
+                          "approve_applications", "application_status",
+                          "check_application_replies", "import_cv", "set_application_answer",
+                          "application_settings", "interview_prep", "graduate_programmes",
+                          "find_referrals", "referral_list", "mark_referral"):
+                from tools import career_tool
+                return getattr(career_tool, name)(**tool_input)
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)
@@ -6566,6 +6793,10 @@ class Brain:
             deadlines = self.memory.get_upcoming_deadlines()
             if deadlines:
                 dynamic += f"\n\n{deadlines}"
+        from core.career.focus import status_line
+        job_hunt = status_line()
+        if job_hunt:
+            dynamic += f"\n\n{job_hunt}"
         if memory_context:
             dynamic += f"\n\n--- Relevant past context ---\n{memory_context}\n---"
         # History keeps only final text, not tool calls, so without this the
@@ -6696,10 +6927,13 @@ class Brain:
                         if block.type == "tool_use":
                             tools_used.append(block.name)
                             refused = block.name in _CONFIRM_TOOLS and seen is None
+                            background = block.name in _MO_ONLY_TOOLS and history is not None
                             result_str = (
                                 _UNSEEN_CONFIRM if refused
+                                else _BACKGROUND_REFUSAL if background
                                 else self._dispatch_tool(block.name, block.input)
                             )
+                            refused = refused or background
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
