@@ -4368,6 +4368,34 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "job_search_agent",
+        "description": (
+            "Job search agent -- finds internships and entry-level jobs in Egypt on Wuzzuf, "
+            "LinkedIn, Bayt and Forasna, and returns a ranked list with links. Use for: 'find "
+            "me jobs', 'any new internships?', 'data analyst jobs in Cairo', 'what's on "
+            "Wuzzuf'. query is the role Mo named ('data analyst internship'); omit it when he "
+            "names none and it searches all his target roles. It lists only jobs not shown "
+            "before; show_all=true lists them again. It only reads postings and never "
+            "applies: relay the list to Mo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "The role to search, e.g. 'data analyst internship'. Omit when Mo "
+                        "names no role: it then searches all his target roles."
+                    )
+                },
+                "show_all": {
+                    "type": "boolean",
+                    "description": "True to include jobs already shown ('show them again')."
+                }
+            }
+        }
+    },
+    {
         "name": "learn_skill",
         "description": (
             "Save a new SkillForge skill -- a reusable natural-language routine. Use when Mo "
@@ -4713,6 +4741,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
     }),
     "usage": frozenset({"usage_report"}),
     "missions": frozenset({"start_mission", "mission_status", "cancel_mission"}),
+    "jobs": frozenset({"job_search_agent"}),
 }
 
 _GROUP_TRIGGERS: dict[str, list[str]] = {
@@ -4828,6 +4857,10 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "missions": [
         "mission", "missions", "big task", "multi-step", "step by step plan",
         "overnight", "work through", "plan and execute", "and then", "then write",
+    ],
+    "jobs": [
+        "job", "jobs", "internship", "internships", "vacancy", "vacancies",
+        "hiring", "wuzzuf", "bayt", "forasna", "job search", "apply for",
     ],
 }
 
@@ -6390,6 +6423,10 @@ class Brain:
             elif name == "health_agent":
                 from core.agents.health_agent import HealthAgent
                 return HealthAgent().run(tool_input["task"])
+            elif name == "job_search_agent":
+                from core.agents.job_search_agent import JobSearchAgent
+                return JobSearchAgent().run(tool_input.get("query", ""),
+                                            show_all=tool_input.get("show_all", False))
             elif name == "learn_skill":
                 from tools.skill_tool import learn_skill as _learn_sk
                 return _learn_sk(**tool_input)

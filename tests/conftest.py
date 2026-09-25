@@ -36,6 +36,14 @@ def _isolated_voice_liked(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_jobs_seen(monkeypatch, tmp_path):
+    """Jobs the job search showed Mo are remembered in data/jobs_seen.json so
+    they don't come back as new. A test's fake jobs must never hide real ones."""
+    from core.agents import job_search_agent
+    monkeypatch.setattr(job_search_agent, "_FILE", tmp_path / "jobs_seen.json")
+
+
+@pytest.fixture(autouse=True)
 def _no_real_whatsapp(monkeypatch):
     """Drafting a WhatsApp message searches Mo's real WhatsApp Desktop, and a
     confirm clicks and types into it. No test may do either — a test that
