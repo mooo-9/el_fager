@@ -89,11 +89,11 @@ class FileAgent(BaseAgent):
 
     def _read_pdf(self, path: Path) -> str:
         try:
-            import pdfplumber
+            import fitz  # pymupdf
             texts = []
-            with pdfplumber.open(path) as pdf:
-                for page in pdf.pages[:10]:
-                    t = page.extract_text()
+            with fitz.open(path) as pdf:
+                for page in pdf.pages(stop=10):
+                    t = page.get_text()
                     if t:
                         texts.append(t)
             return "\n".join(texts)[:_MAX_CONTENT_CHARS]
