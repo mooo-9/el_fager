@@ -35,5 +35,10 @@ def match(company: str) -> "dict | None":
     return None
 
 
+def mentions(company: dict, text: str) -> bool:
+    """Whether `text` names this company (by any alias)."""
+    return any(c is company and p.search(text or "") for p, c in _patterns())
+
+
 def big4() -> list[dict]:
     return [c for c in all_companies() if c["tier"] == "big4"]

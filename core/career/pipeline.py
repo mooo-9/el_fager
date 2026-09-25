@@ -65,14 +65,41 @@ def prepare_batch() -> str:
             _record(app, "ready", "drafted")
             ready += 1
 
+    extras = _nightly_extras(s)
     big4 = sum(1 for a, d in drafted if d and a["tier"] == "big4")
     top = sum(1 for a, d in drafted if d and a["tier"] == "top")
     mode = "" if s["live"] and profile.has_cv() else " (practice mode: nothing will be sent)"
     summary = (f"{ready} applications ready for your review{mode}: {big4} Big 4, {top} top "
                f"companies, {ready - big4 - top} others. {skipped} skipped. "
                f"Review them at {review_url()}")
+    if extras:
+        summary += " " + extras
     _notify(summary)
     return summary
+
+
+def _nightly_extras(s: dict) -> str:
+    """The rest of the nightly hunt: programme pages once a week, and new
+    people to ask for referrals. Neither may stop the batch."""
+    from core.career import programmes, referrals
+    notes = []
+    try:
+        checked = [p.get("checked_at", "") for p in programmes.state().values()]
+        week_ago = (datetime.now() - timedelta(days=6)).isoformat()
+        if not checked or min(checked) < week_ago:
+            opened = programmes.check_all()
+            if opened:
+                notes.append(f"Programmes: {opened}.")
+    except Exception:
+        pass
+    try:
+        if s["referrals_per_day"] > 0:
+            found = referrals.find(count=s["referrals_per_day"])
+            if not found.startswith("No new"):
+                notes.append(found)
+    except Exception:
+        pass
+    return " ".join(notes)
 
 
 def _scored(job: dict, ptext: str) -> dict:

@@ -2,7 +2,7 @@
 ticked. Mo unticks what he doesn't want and approves the rest with one click.
 Served by the dashboard at /jobs; the batch itself comes from /api/jobs with
 the dashboard token, so the drafts aren't readable without it."""
-from core.career import companies, pipeline, profile, store
+from core.career import companies, pipeline, profile, programmes, referrals, store
 
 
 def batch_json() -> dict:
@@ -19,6 +19,13 @@ def batch_json() -> dict:
             "subject": a["draft"]["subject"], "body": a["draft"]["body"],
         } for a in pipeline.ready_batch()],
         "tiers": list(companies.TIER_RANK),
+        "closing": [{"name": p["name"], "days": programmes.days_left(p), "url": p["url"]}
+                    for p in programmes.closing_soon()],
+        "referrals": [{
+            "id": r["id"], "name": r["name"], "headline": r.get("headline", ""),
+            "company": r["company"], "url": r["url"], "alumni": bool(r.get("alumni")),
+            "role": r.get("role", ""), "note": r["note"], "message": r["message"],
+        } for r in referrals.to_send()],
     }
 
 
@@ -68,6 +75,10 @@ __TOKENS__
  .go:disabled{opacity:.5;cursor:default}
  .msg{font-size:13px;color:var(--text-mid)}
  .empty{color:var(--text-mid);font-size:14px;margin-top:30px;text-align:center}
+ .banner.hot{border-left-color:var(--accent-ember)}
+ .banner a{color:var(--accent-ember)}
+ h2{font-size:17px;font-weight:600;margin:28px 0 4px}
+ .row{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:8px}
 </style></head><body>
 <div class="brand"><a href="/">EL FAGER</a> // JOBS</div>
 <h1 id="head">Loading…</h1>
@@ -75,6 +86,7 @@ __TOKENS__
 <div id="banners"></div>
 <div class="chips" id="chips"></div>
 <div id="list"></div>
+<div id="refs"></div>
 <div class="bar"><span class="msg" id="msg"></span>
  <button class="go" id="go" onclick="approve()" disabled>Approve</button></div>
 <script>
@@ -97,6 +109,7 @@ function render(){
  $('head').textContent=n?`${n} applications to review`:'Nothing to review';
  $('sub').textContent=n?'Everything is ticked. Untick what you don’t want, then approve the rest.':'';
  let b='';
+ data.closing.forEach(p=>{b+=`<div class="banner hot"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> closes in ${p.days} day${p.days===1?'':'s'}. Apply on their site.</div>`;});
  if(data.mode==='practice')b+='<div class="banner">Practice mode: approving marks these as practice runs. Nothing is sent until your CV is imported and you switch to live.</div>';
  if(data.missing.length)b+=`<div class="banner">Forms will ask for answers you haven’t given: ${esc(data.missing.join(', '))}. Tell El Fager, e.g. “my military status is exempted”.</div>`;
  $('banners').innerHTML=b;
@@ -114,9 +127,36 @@ function render(){
    ${a.missing.length?`<div class="gap">They ask for: ${esc(a.missing.join('; '))}</div>`:''}
    <details><summary>Read the ${a.channel==='email'?'email':'cover letter'}</summary><pre>${esc(a.subject)}\n\n${esc(a.body)}</pre></details>
   </div></div>`).join(''):'<div class="empty">The next batch is prepared overnight.</div>';
+ renderRefs();
  const k=data.apps.filter(a=>a.on).length;
  $('go').disabled=!n; $('go').textContent=`Approve ${k}`;
  $('msg').textContent=n?`${n-k} will be skipped`:'';
+}
+function renderRefs(){
+ const r=data.referrals;
+ $('refs').innerHTML=r.length?`<h2>People who could refer you</h2>
+  <div class="sub">Send these yourself on LinkedIn: connect with the note, then send the message once they accept.</div>`+
+  r.map(p=>`<div class="app"><div class="main">
+   <div class="t"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${p.alumni?'<span class="badge">Alumni</span>':''}</div>
+   <div class="meta">${esc(p.headline||p.company)} · ${esc(p.company)}${p.role?' · for '+esc(p.role):''}</div>
+   <pre>${esc(p.note)}</pre>
+   <details><summary>Message after they accept</summary><pre>${esc(p.message)}</pre></details>
+   <div class="row">
+    <button class="chip" onclick="copyText('${p.id}','note')">Copy note</button>
+    <button class="chip" onclick="copyText('${p.id}','message')">Copy message</button>
+    <button class="chip" onclick="markRef('${p.id}','sent')">Mark sent</button>
+    <button class="chip" onclick="markRef('${p.id}','skipped')">Skip</button>
+   </div></div></div>`).join(''):'';
+}
+async function copyText(id,field){
+ const p=data.referrals.find(x=>x.id===id);
+ try{await navigator.clipboard.writeText(p[field]);$('msg').textContent='Copied';}catch(e){$('msg').textContent='Copy failed — select the text instead';}
+}
+async function markRef(id,status){
+ const r=await fetch('/api/referral_mark',{method:'POST',
+   headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:JSON.stringify({id,status})});
+ const j=await r.json(); $('msg').textContent=j.result||j.error||'';
+ if(j.ok){data.referrals=data.referrals.filter(x=>x.id!==id);renderRefs();}
 }
 function flip(id,on){data.apps.find(a=>a.id===id).on=on;render();}
 function tick(on){data.apps.filter(a=>filter==='all'||a.tier===filter).forEach(a=>a.on=on);render();}
@@ -125,7 +165,7 @@ async function approve(){
  const skip=data.apps.filter(a=>!a.on).map(a=>a.id);
  const r=await fetch('/api/jobs_approve',{method:'POST',
    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:JSON.stringify({skip})});
- const j=await r.json(); $('msg').textContent=j.result||j.error||'Done'; data.apps=[]; setTimeout(()=>{render();$('msg').textContent=j.result||'';},50);
+ const j=await r.json(); data.apps=[]; render(); $('msg').textContent=j.result||j.error||'Done';
 }
 load();
 </script></body></html>"""

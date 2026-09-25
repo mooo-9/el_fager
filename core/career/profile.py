@@ -14,6 +14,7 @@ ANSWER_KEYS = {
     "email": "Email address for applications",
     "linkedin_url": "LinkedIn profile URL",
     "military_status": "Military status (exempted / completed / postponed)",
+    "university": "University",
     "graduation_year": "Graduation year",
     "gpa": "GPA or grade",
     "expected_salary": "Expected monthly salary (EGP)",
@@ -132,7 +133,7 @@ def as_text(profile: "dict | None" = None) -> str:
     are practice runs."""
     p = profile if profile is not None else load()
     if not p.get("cv_text"):
-        return ("Mohamed (Mo), Cairo, Egypt. Final-year Business Informatics student. "
+        return ("Mohamed (Mo), Cairo, Egypt. Business Informatics graduate. "
                 "No CV imported yet: nothing else is known.")
     answers = p.get("answers", {})
     lines = [f"Name: {p.get('name', '')}", f"Headline: {p.get('headline', '')}",

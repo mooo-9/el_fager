@@ -11,7 +11,7 @@ _SCHEMA = {
 }
 
 _SYSTEM = (
-    "You write job applications for Mohamed, a Business Informatics student in Cairo. "
+    "You write job applications for Mohamed, a Business Informatics graduate in Cairo. "
     "Use only facts in his profile: never invent experience, skills, grades or numbers. "
     "Plain, confident English, no clichés, under 180 words. Connect two or three of his "
     "real strengths to what the posting asks for. If the profile is thin, keep it short "

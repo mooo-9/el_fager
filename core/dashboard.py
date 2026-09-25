@@ -915,7 +915,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     _POST_ROUTES = ("/api/command", "/api/send_preview", "/api/send_confirm",
-                    "/api/jobs_approve")
+                    "/api/jobs_approve", "/api/referral_mark")
 
     def _authorized(self) -> bool:
         expected = _expected_token()
@@ -951,6 +951,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(200, fn(payload))
             except Exception as e:
                 self._json(500, {"ok": False, "error": str(e)[:120]})
+            return
+
+        if self.path == "/api/referral_mark":
+            from core.career import referrals
+            result = referrals.mark(str(payload.get("id", "")), str(payload.get("status", "")))
+            self._json(200, {"ok": not result.startswith("Error"), "result": result})
             return
 
         if self.path == "/api/jobs_approve":

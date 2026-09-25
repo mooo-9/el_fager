@@ -22,12 +22,13 @@ _SCHEMA = {
 }
 
 _SYSTEM = (
-    "You screen job postings for one candidate in Egypt who is finishing a Business "
-    "Informatics degree and wants internships or entry-level roles. Score 0-100 how "
-    "likely an application gets a first interview: requirements he meets, the level "
-    "(internships, graduate programmes and 0-2 years fit; 3+ years required does not), "
-    "and the field. 'missing' lists requirements the posting states that his profile "
-    "doesn't show. Judge only from the posting and the profile given."
+    "You screen job postings for one candidate in Egypt: a recent Business Informatics "
+    "graduate looking for his first job. Score 0-100 how likely an application gets a "
+    "first interview: requirements he meets, the level (graduate programmes, fresh-graduate "
+    "and 0-2 years roles fit; internships only if open to graduates, not current students "
+    "only; 3+ years required does not), and the field. 'missing' lists requirements the "
+    "posting states that his profile doesn't show. Judge only from the posting and the "
+    "profile given."
 )
 
 

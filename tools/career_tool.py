@@ -54,7 +54,8 @@ def interview_prep(company: str, role: str = "") -> str:
 def application_settings(live: "bool | None" = None, nightly: "bool | None" = None,
                          daily_target: "int | None" = None, min_score: "int | None" = None,
                          linkedin_daily_cap: "int | None" = None,
-                         big4_per_firm_per_month: "int | None" = None) -> str:
+                         big4_per_firm_per_month: "int | None" = None,
+                         referrals_per_day: "int | None" = None) -> str:
     from core.career import profile, store
     notes = []
     if live and not profile.has_cv():
@@ -62,7 +63,8 @@ def application_settings(live: "bool | None" = None, nightly: "bool | None" = No
     changes = {k: v for k, v in {
         "live": live, "daily_target": daily_target, "min_score": min_score,
         "linkedin_daily_cap": linkedin_daily_cap,
-        "big4_per_firm_per_month": big4_per_firm_per_month}.items() if v is not None}
+        "big4_per_firm_per_month": big4_per_firm_per_month,
+        "referrals_per_day": referrals_per_day}.items() if v is not None}
     if nightly is not None:
         notes.append(_set_nightly(nightly))
     s = store.update_settings(**changes)
@@ -94,3 +96,27 @@ def _set_nightly(on: bool) -> str:
         tasks.delete(current)
         store.update_settings(nightly_task_id="")
     return "Nightly job hunt off."
+
+
+def graduate_programmes(check: bool = False) -> str:
+    from core.career import programmes
+    if check:
+        opened = programmes.check_all()
+        head = f"Checked. Newly open: {opened}.\n" if opened else "Checked.\n"
+        return head + programmes.summary_text()
+    return programmes.summary_text()
+
+
+def find_referrals(company: str = "") -> str:
+    from core.career import referrals, store
+    return referrals.find(company or None, count=store.settings()["referrals_per_day"])
+
+
+def referral_list() -> str:
+    from core.career import referrals
+    return referrals.list_text()
+
+
+def mark_referral(referral_id: str, status: str) -> str:
+    from core.career import referrals
+    return referrals.mark(referral_id, status)

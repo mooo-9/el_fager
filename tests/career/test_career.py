@@ -134,6 +134,7 @@ class TestPrepareBatch:
                  "score": scores[job["url"]], "fit": "fits", "missing": [],
                  "level": "entry", "in_egypt": True}) as score, \
              patch("core.career.tailor.draft", return_value={"subject": "S", "body": "B"}), \
+             patch.object(pipeline, "_nightly_extras", return_value=""), \
              patch.object(pipeline, "_notify"):
             out = pipeline.prepare_batch()
         return out, score

@@ -26,6 +26,23 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
 5. **"Switch job applications to live"** once the CV is final. Until then it is
    practice mode: approving marks "would have sent", nothing leaves the machine.
 
+## Mo's main goal: an interview at one of the biggest companies in Cairo
+
+- **Every brain turn** carries a one-line job-hunt status (`core/career/focus.py`):
+  interviews, the batch waiting for review, programme deadlines, referral notes.
+  The persona says the job hunt comes first; the daily briefing opens with it.
+- **Morning nudge** (proactive engine, 7–11 AM): what's waiting on him; a
+  programme closing within a week also goes to his phone.
+- **Graduate programmes** (`core/career/programmes.json`): the Big 4's and top
+  companies' programme pages, read weekly by the nightly hunt, for status,
+  deadline and whether fresh graduates can apply. "Which graduate programmes
+  are open?"
+- **Referrals** (`core/career/referrals.py`): each night, up to
+  `referrals_per_day` people at target companies (alumni of his university
+  first; set it with "my university is ...") with a drafted connection note and
+  referral request. They appear on the review page with Copy buttons; Mo sends
+  them himself and marks them sent.
+
 ## Where jobs come from
 
 - Every search term (`search_terms` in `store.DEFAULTS`) on Wuzzuf, LinkedIn,
