@@ -14,15 +14,16 @@ Reply with a JSON object only — no markdown, no explanation, just raw JSON:
   "status": "continue" | "done" | "need_login",
   "message": "<one sentence describing what you see or what you just did>",
   "action": {
-    "type": "navigate" | "click" | "type" | "scroll" | "wait" | "none",
+    "type": "navigate" | "click" | "type" | "select" | "upload" | "scroll" | "wait" | "none",
     "url": "<full URL, required for navigate>",
-    "selector": "<CSS selector, required for click/type>",
-    "text": "<text to enter, required for type>",
+    "selector": "<CSS selector, required for click/type/select/upload>",
+    "text": "<text to enter, required for type; the option's visible label for select>",
     "direction": "up" | "down",
     "seconds": <float>
   }
 }
 
+Use "upload" on a file input to attach the file the task provides; "select" picks a dropdown option.
 Use "need_login" when you see a login page and need credentials — include the service name (e.g. "google") in message.
 Set status to "done" when the task is fully complete.
 """
@@ -40,7 +41,8 @@ class BrowserAgent(BaseAgent):
     def description(self) -> str:
         return "Automates any website -- navigate, fill forms, click buttons, handle logins."
 
-    def run(self, task: str, start_url: str = None) -> str:
+    def run(self, task: str, start_url: str = None, upload_path: str = None,
+            close_tab: bool = False) -> str:
         from playwright.sync_api import sync_playwright
 
         client = anthropic.Anthropic()
@@ -48,6 +50,9 @@ class BrowserAgent(BaseAgent):
         instrument_client(client, "browser_agent")
         vault = Vault()
         history: list[str] = []
+        # The one file an "upload" may attach. The model names a field, never
+        # a path, so it can't pick a different file off Mo's disk.
+        self._upload_path = upload_path
 
         with sync_playwright() as p:
             from tools.comet_tool import CometUnavailable, automation_context
@@ -62,7 +67,14 @@ class BrowserAgent(BaseAgent):
                 # In Mo's own Comet (`owned` False) the tab stays: it holds what
                 # he asked for — he found his video and then watched it close.
                 # Leaving the with-block only disconnects from his browser.
+                # A caller running many tasks (job applications) asks for its
+                # own tab to go, so they don't pile up.
                 if not owned:
+                    if close_tab:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
                     return
                 for obj in (page, browser):
                     try:
@@ -185,6 +197,12 @@ class BrowserAgent(BaseAgent):
                 page.get_by_text(action["selector"]).first.click(timeout=5000)
         elif action_type == "type":
             page.fill(action["selector"], action["text"])
+        elif action_type == "select":
+            page.select_option(action["selector"], label=action["text"])
+        elif action_type == "upload":
+            if not getattr(self, "_upload_path", None):
+                raise ValueError("this task has no file to upload")
+            page.set_input_files(action["selector"], self._upload_path)
         elif action_type == "scroll":
             page.mouse.wheel(0, 500 if action.get("direction") == "down" else -500)
         elif action_type == "wait":

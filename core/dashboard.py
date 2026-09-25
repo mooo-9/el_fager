@@ -875,6 +875,17 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path in ("/", "/index.html"):
             mark_viewed()
             self._send(200, "text/html; charset=utf-8", _PAGE.encode("utf-8"))
+        elif self.path == "/jobs":
+            from core.career.review_page import PAGE
+            page = PAGE.replace("__TOKENS__", _token_css()).replace("__FONTS__", _font_css())
+            self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
+        elif self.path == "/api/jobs":
+            # The drafts are Mo's applications: readable only with the token.
+            if not self._authorized():
+                self._send(401, "application/json", b'{"error": "missing or invalid token"}')
+                return
+            from core.career.review_page import batch_json
+            self._json(200, batch_json())
         elif self.path == "/manifest.webmanifest":
             self._send(200, "application/manifest+json", _MANIFEST.encode("utf-8"))
         elif self.path == "/icon.svg":
@@ -903,7 +914,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    _POST_ROUTES = ("/api/command", "/api/send_preview", "/api/send_confirm")
+    _POST_ROUTES = ("/api/command", "/api/send_preview", "/api/send_confirm",
+                    "/api/jobs_approve", "/api/referral_mark")
+
+    def _authorized(self) -> bool:
+        expected = _expected_token()
+        return bool(expected) and self.headers.get("Authorization", "") == f"Bearer {expected}"
 
     def do_POST(self):
         # Drain the body before replying to anything. A 404 or a 401 that
@@ -919,9 +935,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path not in self._POST_ROUTES:
             self._send(404, "text/plain", b"not found")
             return
-        expected = _expected_token()
-        supplied = self.headers.get("Authorization", "")
-        if not expected or supplied != f"Bearer {expected}":
+        if not self._authorized():
             self._send(401, "application/json",
                        b'{"error": "missing or invalid token"}')
             return
@@ -935,6 +949,21 @@ class _Handler(BaseHTTPRequestHandler):
             fn = stage_send if self.path == "/api/send_preview" else confirm_send
             try:
                 self._json(200, fn(payload))
+            except Exception as e:
+                self._json(500, {"ok": False, "error": str(e)[:120]})
+            return
+
+        if self.path == "/api/referral_mark":
+            from core.career import referrals
+            result = referrals.mark(str(payload.get("id", "")), str(payload.get("status", "")))
+            self._json(200, {"ok": not result.startswith("Error"), "result": result})
+            return
+
+        if self.path == "/api/jobs_approve":
+            from core.career import pipeline
+            skip = [str(i) for i in payload.get("skip", [])]
+            try:
+                self._json(200, {"ok": True, "result": pipeline.approve(skip=skip)})
             except Exception as e:
                 self._json(500, {"ok": False, "error": str(e)[:120]})
             return

@@ -194,3 +194,51 @@ def test_a_failed_action_is_reported_to_the_next_step_not_raised():
 
     history = get_action.call_args_list[1].args[4]
     assert any("failed" in step.lower() for step in history)
+
+
+def test_execute_select_picks_an_option_by_its_label():
+    agent = BrowserAgent()
+    page = MagicMock()
+    agent._execute(page, {"type": "select", "selector": "#military", "text": "Exempted"})
+    page.select_option.assert_called_once_with("#military", label="Exempted")
+
+
+def test_execute_upload_attaches_only_the_file_the_task_gave():
+    """The model names the field; the path comes from the caller, so a job form
+    can't be made to upload some other file from Mo's disk."""
+    agent = BrowserAgent()
+    agent._upload_path = "C:/cv.pdf"
+    page = MagicMock()
+    agent._execute(page, {"type": "upload", "selector": "input[type=file]",
+                          "path": "C:/secrets.txt"})
+    page.set_input_files.assert_called_once_with("input[type=file]", "C:/cv.pdf")
+
+
+def test_execute_upload_without_a_file_is_refused():
+    import pytest
+    agent = BrowserAgent()
+    agent._upload_path = None
+    with pytest.raises(ValueError):
+        agent._execute(MagicMock(), {"type": "upload", "selector": "input[type=file]"})
+
+
+def test_a_task_that_asks_closes_its_own_tab_but_never_his_browser():
+    """Dozens of job applications a day would each leave a tab in Mo's Comet."""
+    agent = BrowserAgent()
+    mock_page = MagicMock()
+    mock_page.screenshot.return_value = b"fake_png"
+    mock_browser = MagicMock()
+    mock_context = MagicMock()
+    mock_context.new_page.return_value = mock_page
+
+    with patch.object(agent, "_get_action", return_value=_done("SUBMITTED")), \
+         patch("time.sleep"), \
+         patch("playwright.sync_api.sync_playwright") as mock_pw, \
+         patch("tools.comet_tool.automation_context",
+               return_value=(mock_browser, mock_context, False)):
+        mock_pw.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+        assert agent.run("apply", close_tab=True) == "SUBMITTED"
+
+    mock_page.close.assert_called_once()
+    mock_browser.close.assert_not_called()
