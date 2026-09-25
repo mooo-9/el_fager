@@ -49,6 +49,9 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
   Bayt and Forasna.
 - The Big 4 by name on Wuzzuf and LinkedIn, plus their own sites: Deloitte's
   Middle East careers site, PwC's Workday, EY's student and careers sites.
+- Mo's other picks, treated like the Big 4 (`"opus": true` in `companies.json`):
+  IBM, Accenture, Schneider Electric, P&G, Siemens, Microsoft and Nestlé —
+  searched by name on the boards and on their own career sites.
 - Target companies (`core/career/companies.json`) go first in the review: Big 4,
   then top employers in Egypt. Add a company there with its aliases.
 
@@ -75,8 +78,8 @@ Ledger. A form question the facts don't cover stops that application as
 - **Nothing invented:** scores, letters and form answers use only the CV and the
   answers Mo gave.
 - **Cost:** scoring, letters, interview prep and referral notes use
-  `claude-sonnet-5`, and `claude-opus-5` when they're for a Big 4 firm
-  (`core/career/claude.py`). 20 applications a day is about $0.50. Nothing is
+  `claude-sonnet-5`, and `claude-opus-5` when they're for the Big 4 or one of
+  Mo's picks above (`core/career/claude.py`). 20 applications a day is about $0.50. Nothing is
   scored or drafted until the CV is imported; programme deadlines are still
   checked. Logged under "career" in telemetry; the usage audit shows the spend.
 

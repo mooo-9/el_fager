@@ -3,9 +3,10 @@ telemetry under "career", so the daily cost shows in the usage audit."""
 import json
 
 MODEL = "claude-sonnet-5"
-# The Big 4 are the goal: scoring, letters, interview prep and referral notes
-# aimed at them get the stronger model. They're few (capped per firm a month).
-BIG4_MODEL = "claude-opus-5"
+# The Big 4, and the companies Mo picked ("opus" in companies.json), are the
+# goal: scoring, letters, interview prep and referral notes aimed at them get
+# the stronger model.
+PREMIUM_MODEL = "claude-opus-5"
 
 _client = None
 
@@ -19,14 +20,10 @@ def _get_client():
     return _client
 
 
-def model_for(tier: str) -> str:
-    return BIG4_MODEL if tier == "big4" else MODEL
-
-
-def model_for_company(name: str) -> str:
+def model_for(company: str) -> str:
     from core.career import companies
-    target = companies.match(name)
-    return model_for(target["tier"] if target else "")
+    target = companies.match(company)
+    return PREMIUM_MODEL if target and target in companies.premium() else MODEL
 
 
 def ask(prompt: str, *, system: str, schema: "dict | None" = None,

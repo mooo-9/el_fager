@@ -42,3 +42,9 @@ def mentions(company: dict, text: str) -> bool:
 
 def big4() -> list[dict]:
     return [c for c in all_companies() if c["tier"] == "big4"]
+
+
+def premium() -> list[dict]:
+    """The Big 4 and the companies Mo picked to get the same treatment
+    ("opus": true): their own career sites searched, the stronger model."""
+    return [c for c in all_companies() if c["tier"] == "big4" or c.get("opus")]

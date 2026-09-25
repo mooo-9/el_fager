@@ -55,7 +55,7 @@ def score(job: dict, profile_text: str) -> dict:
         f"Job: {job['title']} at {job.get('company') or 'unknown company'}, "
         f"{job.get('location') or 'Egypt'}\n\nPosting:\n{posting}",
         system=_SYSTEM, schema=_SCHEMA, effort="low", max_tokens=4000,
-        model=claude.model_for(job.get("tier", "")),
+        model=claude.model_for(job.get("company_key") or job.get("company", "")),
     )
     if result is None:
         return {"score": 0, "fit": "Couldn't be scored.", "missing": [], "level": "entry",

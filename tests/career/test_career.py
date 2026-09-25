@@ -325,7 +325,7 @@ class TestStatus:
 
 class TestSources:
     def test_gathers_tags_tiers_and_drops_senior_roles(self, monkeypatch):
-        monkeypatch.setattr(companies, "big4", lambda: [])
+        monkeypatch.setattr(companies, "premium", lambda: [])
         found = {
             ("Wuzzuf", "data analyst"): [
                 {"title": "Data Analyst", "company": "PwC Middle East", "location": "", "posted": "",

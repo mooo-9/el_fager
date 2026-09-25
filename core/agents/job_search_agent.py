@@ -191,9 +191,12 @@ def _text(tag) -> str:
 
 def _canonical(url: str) -> str:
     """The job's address without tracking parameters, so one posting has one
-    key: LinkedIn adds a fresh trackingId to every listing."""
+    key: LinkedIn adds a fresh trackingId to every listing. An `id` is kept:
+    it's the only thing telling one Accenture job page from another."""
     parts = urllib.parse.urlsplit(url)
-    return urllib.parse.urlunsplit((parts.scheme, parts.netloc.lower(), parts.path.rstrip("/"), "", ""))
+    ids = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query) if k in ("id", "jobId")]
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc.lower(), parts.path.rstrip("/"),
+                                    urllib.parse.urlencode(ids), ""))
 
 
 def _clean_search_title(title: str) -> str:
