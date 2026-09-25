@@ -90,7 +90,8 @@ def draft(person: dict, role: str = "") -> "dict | None":
         f"Person: {person['name']}, {person['headline'] or 'works'} at {person['company']}"
         f"{' (went to the same university)' if person.get('alumni') else ''}.\n"
         f"Role he wants to be referred for: {role or '(none named -- ask for advice)'}",
-        system=_SYSTEM, schema=_SCHEMA, effort="low", max_tokens=3000)
+        system=_SYSTEM, schema=_SCHEMA, effort="low", max_tokens=3000,
+        model=claude.model_for(person["company"]))
     if out:
         out["note"] = out["note"][:_NOTE_LIMIT]
     return out

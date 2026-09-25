@@ -24,6 +24,14 @@ def prepare_batch() -> str:
     """Find, score and draft up to the daily target. The drafts wait as
     "ready" for Mo's review; nothing is sent here."""
     s = store.settings()
+    if not profile.has_cv():
+        # Scores and letters written without a CV are guesses, and they cost
+        # money every night. Programme deadlines don't depend on it.
+        extras = _nightly_extras(s, referrals=False)
+        summary = ("No CV imported yet, so no jobs were scored or drafted. Say 'import my "
+                   "CV from <path>' to start." + (f" {extras}" if extras else ""))
+        _notify(summary)
+        return summary
     prof = profile.load()
     ptext = profile.as_text(prof)
     known = tracker.all_apps()
@@ -78,10 +86,11 @@ def prepare_batch() -> str:
     return summary
 
 
-def _nightly_extras(s: dict) -> str:
+def _nightly_extras(s: dict, referrals: bool = True) -> str:
     """The rest of the nightly hunt: programme pages once a week, and new
     people to ask for referrals. Neither may stop the batch."""
-    from core.career import programmes, referrals
+    from core.career import programmes
+    from core.career import referrals as refs
     notes = []
     try:
         checked = [p.get("checked_at", "") for p in programmes.state().values()]
@@ -93,8 +102,8 @@ def _nightly_extras(s: dict) -> str:
     except Exception:
         pass
     try:
-        if s["referrals_per_day"] > 0:
-            found = referrals.find(count=s["referrals_per_day"])
+        if referrals and s["referrals_per_day"] > 0:
+            found = refs.find(count=s["referrals_per_day"])
             if not found.startswith("No new"):
                 notes.append(found)
     except Exception:

@@ -2,7 +2,11 @@
 telemetry under "career", so the daily cost shows in the usage audit."""
 import json
 
-MODEL = "claude-opus-5"
+MODEL = "claude-sonnet-5"
+# The Big 4, and the companies Mo picked ("opus" in companies.json), are the
+# goal: scoring, letters, interview prep and referral notes aimed at them get
+# the stronger model.
+PREMIUM_MODEL = "claude-opus-5"
 
 _client = None
 
@@ -16,15 +20,21 @@ def _get_client():
     return _client
 
 
+def model_for(company: str) -> str:
+    from core.career import companies
+    target = companies.match(company)
+    return PREMIUM_MODEL if target and target in companies.premium() else MODEL
+
+
 def ask(prompt: str, *, system: str, schema: "dict | None" = None,
-        effort: str = "medium", max_tokens: int = 8000):
+        effort: str = "medium", max_tokens: int = 8000, model: str = MODEL):
     """Claude's answer: parsed JSON when `schema` is given, text otherwise.
     None when the model declines."""
     output_config: dict = {"effort": effort}
     if schema:
         output_config["format"] = {"type": "json_schema", "schema": schema}
     response = _get_client().messages.create(
-        model=MODEL,
+        model=model,
         max_tokens=max_tokens,
         system=system,
         output_config=output_config,

@@ -41,4 +41,5 @@ def draft(job: dict, profile_text: str, channel: str) -> "dict | None":
         f"Job: {job['title']} at {job.get('company') or 'the company'}\n\n"
         f"Posting:\n{job.get('description') or '(not available)'}",
         system=_SYSTEM, schema=_SCHEMA, effort="medium",
+        model=claude.model_for(job.get("company_key") or job.get("company", "")),
     )

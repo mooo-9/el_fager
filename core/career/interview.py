@@ -28,7 +28,7 @@ def prep(company: str, role: str = "") -> str:
         "aptitude tests, video interviews and assessment centres if they apply); "
         "2) eight likely questions, each with how he should answer from his profile; "
         "3) three questions for him to ask them; 4) what to revise the night before.",
-        system=_SYSTEM, effort="medium",
+        system=_SYSTEM, effort="medium", model=claude.model_for(company),
     )
     return sheet or "Couldn't write the prep sheet -- try again."
 

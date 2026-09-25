@@ -14,11 +14,12 @@ _TIMEOUT = 15
 
 def gather(settings: dict) -> list[dict]:
     """Every job found, below senior level, one entry per posting, each tagged
-    with its target company's tier ("big4", "top" or "")."""
+    with its target company's tier ("big4", "top" or ""). The Big 4 and Mo's
+    other picks are also searched by name and on their own career sites."""
     agent = JobSearchAgent()
     calls = [(agent._from_source, (src, term))
              for term in settings["search_terms"] for src in SOURCES]
-    for firm in companies.big4():
+    for firm in companies.premium():
         calls += [(_board_by_name, (agent, src, firm)) for src in ("Wuzzuf", "LinkedIn")]
         calls += [(_site, (site, firm)) for site in firm.get("sites", [])]
         calls += [(_workday, (wd, firm)) for wd in firm.get("workday", [])]
