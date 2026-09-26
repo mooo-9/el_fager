@@ -44,6 +44,13 @@ class TestSettings:
         assert store.settings()["live"] is False
         assert store.settings()["daily_target"] == 20
 
+    def test_entry_level_versions_of_his_roles_are_searched(self):
+        """Most jobs the second practice run skipped asked for years of
+        experience; these terms find the ones that don't."""
+        terms = set(store.settings()["search_terms"])
+        assert {"junior data analyst", "junior business analyst",
+                "fresh graduate data analyst"} <= terms
+
     def test_the_search_is_aimed_at_ai_data_and_business_analysis(self):
         """Mo's CV targets AI, data analyst and business analyst roles; the
         nightly scoring budget isn't spent on the old mix."""

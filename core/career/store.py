@@ -30,6 +30,7 @@ DEFAULTS = {
         "data analyst", "business analyst", "business intelligence", "power bi",
         "data analytics", "data science", "machine learning", "artificial intelligence",
         "AI engineer", "data analyst intern", "business analyst intern",
+        "junior data analyst", "junior business analyst", "fresh graduate data analyst",
         "graduate program",
     ],
 }
