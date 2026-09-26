@@ -126,6 +126,32 @@ class TestScorer:
         assert "within the next 3 months" in system and "fresh graduate" in system
 
 
+class TestLetters:
+    """The first practice run's letters stated real facts more strongly than
+    the CV ("used Python" became "built pipelines", "Excellent or Above
+    Average" became "excellent") and added "comfortable presenting findings",
+    which nothing in the CV says."""
+
+    def _ask(self, channel="form"):
+        from core.career import tailor
+        with patch("core.career.claude.ask", return_value={"subject": "S", "body": "B"}) as ask:
+            tailor.draft({"title": "Data Analyst", "company": "Valeo"}, "profile", channel)
+        return ask.call_args.kwargs["system"], ask.call_args.args[0]
+
+    def test_no_claim_is_stronger_than_the_profile_states_it(self):
+        system, _ = self._ask()
+        assert "no stronger than the profile" in system
+        assert "verbs" in system and "ratings" in system
+
+    def test_no_soft_skill_or_trait_the_profile_doesnt_state(self):
+        system, _ = self._ask()
+        assert "soft skills" in system
+
+    def test_a_form_letter_opens_with_a_greeting(self):
+        _, prompt = self._ask("form")
+        assert "Dear Hiring Team," in prompt
+
+
 class TestChannel:
     @pytest.mark.parametrize("job,channel", [
         ({"url": "https://wuzzuf.net/jobs/p/1", "hr_email": "hr@a.com"}, "email"),

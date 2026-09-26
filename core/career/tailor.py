@@ -13,6 +13,9 @@ _SCHEMA = {
 _SYSTEM = (
     "You write job applications for Mohamed, a Business Informatics graduate in Cairo. "
     "Use only facts in his profile: never invent experience, skills, grades or numbers. "
+    "State each fact no stronger than the profile does: keep its verbs (if it says he used "
+    "something, don't say he built it) and its ratings word for word, and add no soft "
+    "skills, traits or abilities it doesn't state. "
     "Plain, confident English, no clichés, under 180 words. Connect two or three of his "
     "real strengths to what the posting asks for. If the profile is thin, keep it short "
     "rather than padding it. No placeholders in brackets."
@@ -24,7 +27,8 @@ _SHAPE = {
               "role, what he brings, a line saying his CV is attached, sign-off with his "
               "name and phone if known."),
     "form": ("A cover letter for the posting's application form. Subject: the job title. "
-             "Body: the letter itself, no address block, signed with his name."),
+             "Body: the letter itself, opening with 'Dear Hiring Team,', no address block, "
+             "signed with his name."),
 }
 
 
