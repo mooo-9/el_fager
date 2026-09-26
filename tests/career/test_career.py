@@ -235,6 +235,35 @@ class TestPrepareBatch:
         assert [c.args[0]["url"] for c in score.call_args_list] == [
             "https://valeo.x/1", "https://wuzzuf.net/jobs/p/2"]
 
+    @pytest.mark.parametrize("text,years", [
+        ("Requires 3+ years analytics experience in e-commerce.", 3),
+        ("3-7 years experience with SQL and Python.", 3),
+        ("A minimum of 5 years of experience in data analysis.", 5),
+        ("5+ years of professional experience building models.", 5),
+        ("2+ years of experience with Power BI.", 2),
+        ("0-2 years of experience; fresh graduates welcome.", 0),
+        ("Founded 25 years ago, we are a leading company.", 0),
+        ("", 0)])
+    def test_years_of_experience_a_posting_asks_for(self, text, years):
+        assert pipeline._years_asked(text) == years
+
+    def test_postings_asking_3_or_more_years_are_skipped_before_scoring(self):
+        """In the second practice run most of the 36 skips asked for years Mo
+        doesn't have; each cost a scoring call and a slot a reachable job
+        could have had."""
+        jobs = [_job("Data Analyst", "Co", f"https://wuzzuf.net/jobs/p/s{i}", score=70,
+                     description="We need 5+ years of experience in analytics.")
+                for i in range(2)]
+        jobs += [_job("Data Analyst", "Co", f"https://wuzzuf.net/jobs/p/f{i}", score=70,
+                      description="Fresh graduates welcome. 0-1 years of experience.")
+                 for i in range(2)]
+        _, score = self._run(jobs, daily_target=1)
+        assert sorted(c.args[0]["url"] for c in score.call_args_list) == [
+            "https://wuzzuf.net/jobs/p/f0", "https://wuzzuf.net/jobs/p/f1"]
+        skipped = tracker.with_status("skipped")
+        assert len(skipped) == 2
+        assert skipped[0]["events"][-1]["note"] == "asks for 5+ years"
+
     def test_target_firms_and_everyone_else_share_the_scoring_slots(self):
         """Top firms went first, so in the first practice run not one Wuzzuf
         or LinkedIn data analyst job was scored. They take turns now."""

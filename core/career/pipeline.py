@@ -29,6 +29,48 @@ def _in_field(job: dict) -> bool:
     return bool(_FIELD_RE.search(job["title"]))
 
 
+# Postings asking this many years of experience or more aren't scored: in the
+# second practice run most skips were exactly these, each costing a scoring
+# call and a slot a reachable job could have had.
+_MAX_YEARS = 3
+# "3+ years of experience", "3-7 years analytics experience", "Experience: 4+ years".
+_YEARS_RE = re.compile(
+    r"(\d{1,2})\s*\+?\s*(?:(?:-|–|to)\s*\d{1,2}\s*\+?\s*)?years?\b[^.\n]{0,40}?\bexperience"
+    r"|\bexperience\b[^.\n]{0,25}?(\d{1,2})\s*\+?\s*(?:(?:-|–|to)\s*\d{1,2}\s*)?years?\b",
+    re.IGNORECASE)
+
+
+def _years_asked(text: str) -> int:
+    """The fewest years of experience the posting asks for; 0 if it names none."""
+    found = [int(m.group(1) or m.group(2)) for m in _YEARS_RE.finditer(text or "")]
+    return min(found) if found else 0
+
+
+def _within_reach(jobs: list, budget: int) -> "tuple[list, int]":
+    """Up to `budget` jobs in order, each carrying its posting text, passing
+    over postings that ask for _MAX_YEARS+ years (recorded as skipped).
+    Reading a posting costs no Claude call; scoring it does."""
+    kept, dropped = [], 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for start in range(0, len(jobs), 8):
+            if len(kept) >= budget:
+                break
+            chunk = jobs[start:start + 8]
+            texts = pool.map(lambda j: j.get("description") or scorer.read_description(j["url"]),
+                             chunk)
+            for job, text in zip(chunk, texts):
+                job = {**job, "description": text}
+                years = _years_asked(text)
+                if years >= _MAX_YEARS:
+                    _record({**job, "score": 0, "fit": f"Asks for {years}+ years of experience.",
+                             "missing": [], "channel": appliers.channel_for(job)},
+                            "skipped", f"asks for {years}+ years")
+                    dropped += 1
+                else:
+                    kept.append(job)
+    return kept[:budget], dropped
+
+
 def _take_turns(firms: list, others: list) -> list:
     """One from each list in turn, then the rest of the longer one."""
     out = []
@@ -68,14 +110,14 @@ def prepare_batch() -> str:
     new = (_take_turns([j for j in field if j["tier"]], [j for j in field if not j["tier"]])
            + [j for j in new if not _in_field(j)])
     # Scoring costs a Claude call per job: twice the target is enough to fill it.
-    new = new[: max(0, s["daily_target"] * 2 - len(waiting))]
+    new, too_senior = _within_reach(new, max(0, s["daily_target"] * 2 - len(waiting)))
     with ThreadPoolExecutor(max_workers=4) as pool:
         scored = list(pool.map(lambda j: _scored(j, ptext), new))
 
     candidates = sorted(waiting + scored,
                         key=lambda a: (companies.TIER_RANK[a["tier"]], -a["score"]))
     firm_counts = _big4_counts_this_month()
-    picked, skipped = [], 0
+    picked, skipped = [], too_senior
     for app in candidates:
         reason = _skip_reason(app, s, firm_counts)
         if reason:
