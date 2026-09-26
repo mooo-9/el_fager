@@ -112,6 +112,19 @@ class TestScorer:
                 "score": 140, "fit": "x", "missing": [], "level": "entry", "in_egypt": True}):
             assert scorer.score({"title": "Analyst"}, "profile")["score"] == 100
 
+    def test_a_graduate_in_a_few_weeks_is_scored_as_a_fresh_graduate(self):
+        """The first practice run marked Mo down on almost every job as
+        "still a student until Oct 2026" -- eight days before he graduated.
+        The scorer is given today's date and told how to treat that."""
+        with patch("core.career.claude.ask", return_value={
+                "score": 70, "fit": "x", "missing": [], "level": "entry",
+                "in_egypt": True}) as ask:
+            scorer.score({"title": "Analyst"}, "profile")
+        from datetime import date
+        assert f"Today is {date.today().isoformat()}" in ask.call_args.args[0]
+        system = ask.call_args.kwargs["system"]
+        assert "within the next 3 months" in system and "fresh graduate" in system
+
 
 class TestChannel:
     @pytest.mark.parametrize("job,channel", [

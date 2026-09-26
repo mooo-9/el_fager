@@ -1,5 +1,6 @@
 """How well one job fits Mo, from its posting and his profile."""
 import re
+from datetime import date
 
 
 # "send your CV to hr@company.com". Board and example addresses aren't HR.
@@ -25,9 +26,10 @@ _SYSTEM = (
     "graduate looking for his first job. Score 0-100 how likely an application gets a "
     "first interview: requirements he meets, the level (graduate programmes, fresh-graduate "
     "and 0-2 years roles fit; internships only if open to graduates, not current students "
-    "only; 3+ years required does not), and the field. 'missing' lists requirements the "
-    "posting states that his profile doesn't show. Judge only from the posting and the "
-    "profile given."
+    "only; 3+ years required does not), and the field. If his graduation date has passed "
+    "or falls within the next 3 months, he is a fresh graduate: don't mark him down for "
+    "still studying. 'missing' lists requirements the posting states that his profile "
+    "doesn't show. Judge only from the posting and the profile given."
 )
 
 
@@ -49,6 +51,7 @@ def score(job: dict, profile_text: str) -> dict:
     from core.career import claude
     posting = job.get("description") or "(posting text unavailable -- judge from the title)"
     result = claude.ask(
+        f"Today is {date.today().isoformat()}.\n\n"
         f"Candidate profile:\n{profile_text}\n\n"
         f"Job: {job['title']} at {job.get('company') or 'unknown company'}, "
         f"{job.get('location') or 'Egypt'}\n\nPosting:\n{posting}",
