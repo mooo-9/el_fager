@@ -1,7 +1,6 @@
 """How well one job fits Mo, from its posting and his profile."""
 import re
 
-_DESCRIPTION_CHARS = 4000
 
 # "send your CV to hr@company.com". Board and example addresses aren't HR.
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -33,9 +32,8 @@ _SYSTEM = (
 
 
 def read_description(url: str) -> str:
-    from tools.web_tool import fetch_page
-    text = fetch_page(url, max_chars=_DESCRIPTION_CHARS)
-    return "" if text.startswith("[") else text
+    from core.career import postings
+    return postings.text(url)
 
 
 def hr_email(text: str) -> str:

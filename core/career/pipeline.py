@@ -139,7 +139,8 @@ def _nightly_extras(s: dict, referrals: bool = True) -> str:
 
 def _scored(job: dict, ptext: str) -> dict:
     app = dict(job)
-    app["description"] = scorer.read_description(job["url"])
+    # Some job lists carry the full text (PepsiCo's); the rest are read.
+    app["description"] = job.get("description") or scorer.read_description(job["url"])
     app["hr_email"] = scorer.hr_email(app["description"])
     app.update(scorer.score(app, ptext))
     app["channel"] = appliers.channel_for(app)

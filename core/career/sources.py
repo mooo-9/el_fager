@@ -173,7 +173,9 @@ def _eightfold(ef: dict, firm: dict) -> list[dict]:
 
 
 def _jibe(jb: dict, firm: dict) -> list[dict]:
-    """Jibe's public job search (PepsiCo's careers site), page by page."""
+    """Jibe's public job search (PepsiCo's careers site), page by page. Its
+    list carries each job's full text, which the job page only draws in."""
+    from core.career.postings import MAX_CHARS, _plain
     postings, seen, page = [], 0, 1
     while page <= _JIBE_MAX_PAGES:
         found = _get_json(f"https://{jb['host']}/api/jobs", {"location": "Egypt", "page": page})
@@ -185,7 +187,8 @@ def _jibe(jb: dict, firm: dict) -> list[dict]:
         page += 1
     return [{"title": d["title"], "company": firm["name"], "location": d.get("city", ""),
              "posted": d.get("posted_date", "")[:10],
-             "url": f"https://{jb['host']}/main/jobs/{d['slug']}", "source": f"{firm['name']} careers"}
+             "url": f"https://{jb['host']}/main/jobs/{d['slug']}", "source": f"{firm['name']} careers",
+             "description": _plain(d.get("description", ""))[:MAX_CHARS]}
             for d in postings]
 
 
