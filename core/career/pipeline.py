@@ -17,15 +17,24 @@ _BROWSER_PAUSE = (45, 120)
 _COUNTS_AS_APPLIED = ("ready", "approved", "practice", "applied", "needs_you",
                       "interview", "rejected", "replied")
 
-# Titles in Mo's field: AI, data analyst and business analyst roles, and
-# graduate programmes.
+# Titles in Mo's field: AI, data analyst and business analyst roles. "Analyst"
+# or "graduate" alone isn't: the first practice run spent 17 of 40 slots on
+# PepsiCo supply-chain and HR analysts.
 _FIELD_RE = re.compile(
-    r"\b(data|analyst|analytics|analysis|business intelligence|bi|power bi"
-    r"|machine learning|ml|ai|artificial intelligence|graduate)\b", re.IGNORECASE)
+    r"\b(data analy\w*|data scien\w*|business analy\w*|analytics|business intelligence"
+    r"|bi|power bi|machine learning|ml|ai|artificial intelligence|nlp|llm)\b", re.IGNORECASE)
 
 
 def _in_field(job: dict) -> bool:
     return bool(_FIELD_RE.search(job["title"]))
+
+
+def _take_turns(firms: list, others: list) -> list:
+    """One from each list in turn, then the rest of the longer one."""
+    out = []
+    for i in range(max(len(firms), len(others))):
+        out += firms[i:i + 1] + others[i:i + 1]
+    return out
 
 
 # ── Prepare ──────────────────────────────────────────────────────────────────
@@ -50,10 +59,14 @@ def prepare_batch() -> str:
     # they're already scored.
     waiting = tracker.with_status("waiting")
     new = [j for j in sources.gather(s) if tracker.job_id(j["url"]) not in known]
-    # Jobs in Mo's field first, then by tier: top firms' careers sites list all
-    # their Egypt jobs, and their sales and plant roles would otherwise take
-    # every scoring slot.
-    new.sort(key=lambda j: (not _in_field(j), companies.TIER_RANK[j["tier"]]))
+    # Jobs in Mo's field first: top firms' careers sites list all their Egypt
+    # jobs, and their sales and plant roles would otherwise take every scoring
+    # slot. Within the field, target firms (Big 4 first) and the boards' other
+    # employers take turns, so neither crowds the other out.
+    new.sort(key=lambda j: companies.TIER_RANK[j["tier"]])
+    field = [j for j in new if _in_field(j)]
+    new = (_take_turns([j for j in field if j["tier"]], [j for j in field if not j["tier"]])
+           + [j for j in new if not _in_field(j)])
     # Scoring costs a Claude call per job: twice the target is enough to fill it.
     new = new[: max(0, s["daily_target"] * 2 - len(waiting))]
     with ThreadPoolExecutor(max_workers=4) as pool:

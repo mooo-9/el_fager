@@ -175,12 +175,30 @@ class TestPrepareBatch:
         assert [c.args[0]["url"] for c in score.call_args_list] == [
             "https://valeo.x/1", "https://wuzzuf.net/jobs/p/2"]
 
+    def test_target_firms_and_everyone_else_share_the_scoring_slots(self):
+        """Top firms went first, so in the first practice run not one Wuzzuf
+        or LinkedIn data analyst job was scored. They take turns now."""
+        firms = [_job(f"Data Analyst {i}", "Valeo", f"https://valeo.x/{i}", score=70)
+                 for i in range(30)]
+        boards = [_job(f"Data Analyst {i}", "Some Startup", f"https://wuzzuf.net/jobs/p/{i}",
+                       score=70) for i in range(30)]
+        _, score = self._run(firms + boards)
+        scored = [c.args[0]["url"] for c in score.call_args_list]
+        assert len(scored) == 40
+        assert sum("valeo" in u for u in scored) == 20 and sum("wuzzuf" in u for u in scored) == 20
+
     @pytest.mark.parametrize("title,wanted", [
         ("Data Analyst", True), ("Business Intelligence Developer", True),
         ("Power BI Specialist", True), ("Machine Learning Engineer", True),
         ("AI Developer", True), ("Data Scientist", True), ("Business Analyst - MENA", True),
-        ("ETIC Graduate Program", True), ("Sales District Leader Designate", False),
-        ("Electrical Maintenance Engineer", False), ("Chef de Partie", False)])
+        ("People Analytics Specialist", True), ("NLP Engineer", True),
+        ("Sales District Leader Designate", False),
+        ("Electrical Maintenance Engineer", False), ("Chef de Partie", False),
+        # "analyst" or "graduate" alone isn't his field: the first practice run
+        # spent 17 of 40 slots on PepsiCo supply-chain and HR analysts.
+        ("SC Planning Associate Analyst", False), ("People Operations Assoc Analyst", False),
+        ("ETIC, Tax Operations Analyst - Associate", False),
+        ("ETIC, Cybersecurity Graduate Program", False)])
     def test_what_counts_as_mos_field(self, title, wanted):
         assert pipeline._in_field({"title": title}) is wanted
 
