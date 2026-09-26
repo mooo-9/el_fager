@@ -422,6 +422,27 @@ class TestAppliers:
         assert "hr@valeo.com" in mime and 'filename="Mohamed CV.pdf"' in mime
         ledger.assert_called_once()
 
+    @pytest.mark.parametrize("name,content_type", [
+        ("Mohamed CV.pdf", "application/pdf"),
+        ("Mohamed CV.docx",
+         "application/vnd.openxmlformats-officedocument.wordprocessingml.document")])
+    def test_the_cv_goes_as_its_own_file_type(self, tmp_path, name, content_type):
+        """The live test to Mo's inbox sent the PDF as application/octet-stream,
+        which some recruiters' mail apps and hiring systems won't preview."""
+        cv = tmp_path / name
+        cv.write_bytes(b"cv")
+        service = MagicMock()
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", True), \
+             patch("tools.gmail_tool.get_gmail_service", return_value=service), \
+             patch.object(appliers, "_ledger"):
+            appliers.send_email(self._app("email", hr_email="hr@valeo.com"), {"cv_path": str(cv)})
+        import base64
+        import email
+        raw = service.users().messages().send.call_args.kwargs["body"]["raw"]
+        msg = email.message_from_bytes(base64.urlsafe_b64decode(raw))
+        (cv_part,) = [p for p in msg.walk() if p.get_filename() == name]
+        assert cv_part.get_content_type() == content_type
+
     def test_email_without_gmail_fails_cleanly(self):
         with patch("tools.gmail_tool.GMAIL_AVAILABLE", False):
             assert appliers.send_email(self._app("email", hr_email="a@b.com"), {})[0] == "failed"

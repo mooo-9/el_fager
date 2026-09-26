@@ -18,6 +18,10 @@ from pathlib import Path
 from core.career import profile as career_profile
 
 _PROVENANCE = "APPROVED IN THE MORNING REVIEW"
+# The CV's own type, so recruiters' mail apps preview it; unknown types go as
+# plain bytes.
+_CV_TYPES = {".pdf": "pdf", ".docx": "vnd.openxmlformats-officedocument.wordprocessingml.document",
+             ".doc": "msword"}
 BROWSER_CHANNELS = ("wuzzuf", "linkedin", "site")
 
 
@@ -51,7 +55,9 @@ def send_email(app: dict, profile: dict) -> tuple[str, str]:
     msg["to"] = app["hr_email"]
     msg["subject"] = app["draft"]["subject"]
     msg.attach(MIMEText(app["draft"]["body"], "plain", "utf-8"))
-    attachment = MIMEApplication(cv.read_bytes(), Name=cv.name)
+    attachment = MIMEApplication(cv.read_bytes(),
+                                 _subtype=_CV_TYPES.get(cv.suffix.lower(), "octet-stream"),
+                                 Name=cv.name)
     attachment["Content-Disposition"] = f'attachment; filename="{cv.name}"'
     msg.attach(attachment)
     try:
