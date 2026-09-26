@@ -161,6 +161,29 @@ class TestPrepareBatch:
         assert sorted(a["status"] for a in tracker.all_apps().values()) == ["ready", "skipped"]
         assert out.startswith("1 applications ready for your review (practice mode")
 
+    def test_jobs_in_mos_field_are_scored_before_unrelated_top_firm_jobs(self):
+        """Top firms' careers sites list every Egypt job they have. Sorted by
+        tier alone, their sales and plant roles took every scoring slot before
+        a single data analyst job was reached."""
+        unrelated = [_job(t, "PepsiCo", f"https://www.pepsicojobs.com/main/jobs/{i}", score=70)
+                     for i, t in enumerate(["Sales Supervisor", "Maintenance Engineer",
+                                            "Warehouse Coordinator"])]
+        relevant = [_job("Data Analyst", "Valeo", "https://valeo.x/1", score=70),
+                    _job("Junior Business Analyst", "Some Startup",
+                         "https://wuzzuf.net/jobs/p/2", score=70)]
+        _, score = self._run(unrelated + relevant, daily_target=1)
+        assert [c.args[0]["url"] for c in score.call_args_list] == [
+            "https://valeo.x/1", "https://wuzzuf.net/jobs/p/2"]
+
+    @pytest.mark.parametrize("title,wanted", [
+        ("Data Analyst", True), ("Business Intelligence Developer", True),
+        ("Power BI Specialist", True), ("Machine Learning Engineer", True),
+        ("AI Developer", True), ("Data Scientist", True), ("Business Analyst - MENA", True),
+        ("ETIC Graduate Program", True), ("Sales District Leader Designate", False),
+        ("Electrical Maintenance Engineer", False), ("Chef de Partie", False)])
+    def test_what_counts_as_mos_field(self, title, wanted):
+        assert pipeline._in_field({"title": title}) is wanted
+
     def test_big4_comes_first_and_is_capped_per_firm(self):
         jobs = [_job(f"Graduate {i}", "PwC Middle East", f"https://pwc.x/{i}", score=70)
                 for i in range(5)]

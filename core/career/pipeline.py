@@ -17,6 +17,16 @@ _BROWSER_PAUSE = (45, 120)
 _COUNTS_AS_APPLIED = ("ready", "approved", "practice", "applied", "needs_you",
                       "interview", "rejected", "replied")
 
+# Titles in Mo's field: AI, data analyst and business analyst roles, and
+# graduate programmes.
+_FIELD_RE = re.compile(
+    r"\b(data|analyst|analytics|analysis|business intelligence|bi|power bi"
+    r"|machine learning|ml|ai|artificial intelligence|graduate)\b", re.IGNORECASE)
+
+
+def _in_field(job: dict) -> bool:
+    return bool(_FIELD_RE.search(job["title"]))
+
 
 # ── Prepare ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +50,10 @@ def prepare_batch() -> str:
     # they're already scored.
     waiting = tracker.with_status("waiting")
     new = [j for j in sources.gather(s) if tracker.job_id(j["url"]) not in known]
-    new.sort(key=lambda j: companies.TIER_RANK[j["tier"]])
+    # Jobs in Mo's field first, then by tier: top firms' careers sites list all
+    # their Egypt jobs, and their sales and plant roles would otherwise take
+    # every scoring slot.
+    new.sort(key=lambda j: (not _in_field(j), companies.TIER_RANK[j["tier"]]))
     # Scoring costs a Claude call per job: twice the target is enough to fill it.
     new = new[: max(0, s["daily_target"] * 2 - len(waiting))]
     with ThreadPoolExecutor(max_workers=4) as pool:
