@@ -136,7 +136,28 @@ class TestLetters:
         from core.career import tailor
         with patch("core.career.claude.ask", return_value={"subject": "S", "body": "B"}) as ask:
             tailor.draft({"title": "Data Analyst", "company": "Valeo"}, "profile", channel)
-        return ask.call_args.kwargs["system"], ask.call_args.args[0]
+        writer = ask.call_args_list[0]
+        return writer.kwargs["system"], writer.args[0]
+
+    def test_every_letter_is_checked_against_the_profile(self):
+        """Live, one letter in four still invented a phrase ("REST
+        API-adjacent work") and kept a stray "//". A second pass reads the
+        letter against the profile and returns the corrected one."""
+        from core.career import tailor
+        answers = [{"subject": "S", "body": "Dear Hiring Team, I built REST APIs. //"},
+                   {"subject": "S", "body": "Dear Hiring Team, I coded in C#."}]
+        with patch("core.career.claude.ask", side_effect=answers) as ask:
+            out = tailor.draft({"title": "Data Analyst", "company": "Valeo"}, "MY PROFILE", "form")
+        assert out == {"subject": "S", "body": "Dear Hiring Team, I coded in C#."}
+        check = ask.call_args_list[1]
+        assert "MY PROFILE" in check.args[0] and "I built REST APIs. //" in check.args[0]
+        assert "doesn't support" in check.kwargs["system"]
+        assert "180 words" in check.kwargs["system"]
+
+    def test_a_letter_that_couldnt_be_checked_is_not_kept(self):
+        from core.career import tailor
+        with patch("core.career.claude.ask", side_effect=[{"subject": "S", "body": "B"}, None]):
+            assert tailor.draft({"title": "Data Analyst"}, "profile", "form") is None
 
     def test_no_claim_is_stronger_than_the_profile_states_it(self):
         system, _ = self._ask()

@@ -32,18 +32,38 @@ _SHAPE = {
 }
 
 
+# Live, one letter in four still invented a phrase and kept a stray "//", so
+# every letter is read against the profile before anyone sees it.
+_CHECK_SYSTEM = (
+    "You check a cover letter before it is sent under the candidate's name. Compare every "
+    "sentence with his profile. Rewrite, in the profile's own wording, or remove any claim "
+    "the profile doesn't support or states more weakly: verbs, ratings, skills, numbers, "
+    "traits. Remove stray symbols and formatting leftovers. Keep the greeting and sign-off, "
+    "and trim to under 180 words, keeping the points that best fit the job. Return the "
+    "corrected letter, unchanged where nothing was wrong."
+)
+
+
 def draft(job: dict, profile_text: str, channel: str) -> "dict | None":
-    """{"subject", "body"}, or None when Claude declines."""
+    """{"subject", "body"}, checked against the profile; None when Claude
+    declines either step."""
     from core.career import claude
     shape = _SHAPE["email" if channel == "email" else "form"]
     firm_note = ""
     if job.get("tier") == "big4":
         firm_note = ("\nThis is a Big 4 firm: name the service line the role belongs to "
                      "and why that line, in one sentence.")
-    return claude.ask(
+    model = claude.model_for(job.get("company_key") or job.get("company", ""))
+    letter = claude.ask(
         f"{shape}{firm_note}\n\nHis profile:\n{profile_text}\n\n"
         f"Job: {job['title']} at {job.get('company') or 'the company'}\n\n"
         f"Posting:\n{job.get('description') or '(not available)'}",
-        system=_SYSTEM, schema=_SCHEMA, effort="medium",
-        model=claude.model_for(job.get("company_key") or job.get("company", "")),
+        system=_SYSTEM, schema=_SCHEMA, effort="medium", model=model,
+    )
+    if letter is None:
+        return None
+    return claude.ask(
+        f"His profile:\n{profile_text}\n\nThe letter:\nSubject: {letter['subject']}\n\n"
+        f"{letter['body']}",
+        system=_CHECK_SYSTEM, schema=_SCHEMA, effort="low", model=model,
     )
