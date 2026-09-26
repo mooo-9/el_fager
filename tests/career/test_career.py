@@ -498,6 +498,25 @@ class TestSources:
         from core.career import programmes
         assert not [p for p in programmes.seeds() if p["company"] == "CIB"]
 
+    def test_one_job_listed_twice_is_scored_once(self, monkeypatch):
+        """The second practice run spent two slots on repeats: BCG X's job on
+        LinkedIn and BCG's own site, and Amazon's reposted by ACCA Careers."""
+        monkeypatch.setattr(companies, "premium", lambda: [])
+        monkeypatch.setattr(companies, "with_career_sites", lambda: [])
+        def job(title, company, url):
+            return {"title": title, "company": company, "location": "", "posted": "",
+                    "url": url, "source": "LinkedIn"}
+        found = [job("Forward Deployed AI Engineer, Egypt - BCG X", "BCG X", "u1"),
+                 job("Forward Deployed AI Engineer, Egypt - BCG X", "BCG", "u2"),
+                 job("Business Analyst - MENA, A-Now", "Amazon", "u3"),
+                 job("Business Analyst - MENA, A-Now", "ACCA Careers", "u4"),
+                 job("Data Analyst", "EGEC", "u5"),
+                 job("Data Analyst", "dubizzle Egypt", "u6")]
+        with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
+                   lambda self, src, term: found if src == "LinkedIn" else []):
+            jobs = sources.gather({"search_terms": ["x"]})
+        assert [j["url"] for j in jobs] == ["u1", "u3", "u5", "u6"]
+
     def test_a_firms_name_search_keeps_only_its_own_postings(self):
         agent = MagicMock()
         agent._from_source.return_value = [

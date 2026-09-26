@@ -42,7 +42,29 @@ def gather(settings: dict) -> list[dict]:
         target = companies.match(j["company"])
         j["tier"] = target["tier"] if target else ""
         j["company_key"] = target["name"] if target else j["company"]
-    return jobs
+    return _once_each(jobs)
+
+
+# A title this long is one posting wherever it's listed ("Business Analyst -
+# MENA, A-Now" under Amazon and reposted by ACCA Careers); "Data Analyst" isn't.
+_SPECIFIC_TITLE = 25
+
+
+def _once_each(jobs: list[dict]) -> list[dict]:
+    """One entry per job: the same title at the same target firm under
+    another name (BCG X on LinkedIn, BCG on its site), or the same specific
+    title anywhere, counts once. The first found is kept."""
+    out, seen = [], set()
+    for j in jobs:
+        title = j["title"].strip().lower()
+        keys = {(title, j["company_key"].lower())}
+        if len(title) >= _SPECIFIC_TITLE:
+            keys.add((title, ""))
+        if keys & seen:
+            continue
+        seen |= keys
+        out.append(j)
+    return out
 
 
 def _safe(fn, args) -> list[dict]:
