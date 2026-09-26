@@ -7,10 +7,9 @@ DIR = Path(__file__).parent.parent.parent / "data" / "career"
 
 _lock = threading.RLock()
 
-# Search terms cover Mo's targets (internships and entry-level Data/Business
-# Analyst, Software/IT and Finance/Credit Risk) and the Big 4's four service
-# lines: technology consulting, data & analytics, risk / IT audit, and audit
-# & tax.
+# Search terms cover Mo's targets: internships and entry-level AI, data
+# analyst and business analyst roles (his CV aims at these), plus graduate
+# programmes; the Big 4's data & analytics line comes in through them.
 DEFAULTS = {
     # Practice mode until Mo's CV is final: everything is found, scored and
     # drafted, nothing is sent.
@@ -28,11 +27,10 @@ DEFAULTS = {
     # The autonomous task that runs the job hunt every night, once Mo turns it on.
     "nightly_task_id": "",
     "search_terms": [
-        "data analyst", "business analyst", "business intelligence",
-        "software developer", "IT support", "ERP SAP", "graduate program",
-        "fresh graduate", "internship", "technology consultant",
-        "risk advisory", "IT audit", "audit associate", "tax associate",
-        "credit risk", "financial analyst",
+        "data analyst", "business analyst", "business intelligence", "power bi",
+        "data analytics", "data science", "machine learning", "artificial intelligence",
+        "AI engineer", "data analyst intern", "business analyst intern",
+        "graduate program",
     ],
 }
 

@@ -44,9 +44,15 @@ class TestSettings:
         assert store.settings()["live"] is False
         assert store.settings()["daily_target"] == 20
 
-    def test_finance_and_credit_risk_are_searched(self):
-        terms = store.settings()["search_terms"]
-        assert "credit risk" in terms and "financial analyst" in terms
+    def test_the_search_is_aimed_at_ai_data_and_business_analysis(self):
+        """Mo's CV targets AI, data analyst and business analyst roles; the
+        nightly scoring budget isn't spent on the old mix."""
+        terms = set(store.settings()["search_terms"])
+        assert {"data analyst", "business analyst", "power bi", "machine learning",
+                "artificial intelligence"} <= terms
+        assert not {"credit risk", "financial analyst", "IT support", "ERP SAP",
+                    "software developer", "audit associate", "tax associate",
+                    "internship", "fresh graduate"} & terms
 
     def test_unknown_settings_are_ignored(self):
         s = store.update_settings(daily_target=50, nonsense=1)

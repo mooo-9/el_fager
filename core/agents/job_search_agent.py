@@ -19,9 +19,9 @@ from core.agents.base_agent import BaseAgent
 
 _FILE = Path(__file__).parent.parent.parent / "data" / "jobs_seen.json"
 
-# What Mo is after: internships and entry-level Data/Business Analyst and
-# Software/IT roles. Searched when he doesn't name a role.
-TARGET_ROLES = ["data analyst", "business analyst", "software developer", "IT support"]
+# What Mo is after: internships and entry-level AI, data analyst and business
+# analyst roles. Searched when he doesn't name a role.
+TARGET_ROLES = ["data analyst", "business analyst", "business intelligence", "machine learning"]
 
 SOURCES = ["Wuzzuf", "LinkedIn", "Bayt", "Forasna"]
 

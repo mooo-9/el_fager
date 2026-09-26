@@ -202,6 +202,10 @@ class TestRun:
         assert set(roles) == set(jsa.TARGET_ROLES)
         assert out.startswith("No new jobs for data analyst, business analyst")
 
+    def test_asked_for_no_role_it_searches_ai_data_and_ba(self):
+        assert "machine learning" in jsa.TARGET_ROLES
+        assert not {"software developer", "IT support"} & set(jsa.TARGET_ROLES)
+
     def test_the_same_job_on_two_boards_is_listed_once(self):
         dup = [{"title": "Business Analyst", "company": "Noon Academy", "location": "",
                 "posted": "", "url": "https://www.bayt.com/en/egypt/jobs/business-analyst-5551",
