@@ -81,6 +81,16 @@ def _take_turns(firms: list, others: list) -> list:
 
 # ── Prepare ──────────────────────────────────────────────────────────────────
 
+# The 26 Sep 2026 run at a daily target of 20 cost $0.97 in API calls: about
+# 5 cents for each job the target asks for (scoring twice that many, drafting).
+_COST_PER_TARGET_JOB_USD = 0.05
+
+
+def run_estimate() -> float:
+    """What one prepare_batch run is expected to cost, in USD."""
+    return store.settings()["daily_target"] * _COST_PER_TARGET_JOB_USD
+
+
 def prepare_batch() -> str:
     """Find, score and draft up to the daily target. The drafts wait as
     "ready" for Mo's review; nothing is sent here."""

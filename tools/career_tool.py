@@ -9,6 +9,13 @@ _NIGHTLY_TASK = ("Run the nightly job hunt: call check_application_replies, then
 
 def prepare_applications() -> str:
     from core.career import pipeline
+    from core.telemetry import cost_this_month, monthly_budget
+    # A run the budget can't cover would be cut off halfway by the monthly cap.
+    budget, spent, estimate = monthly_budget(), cost_this_month(), pipeline.run_estimate()
+    if budget > 0 and spent + estimate > budget:
+        return (f"Not starting the job hunt: this month has used ${spent:.2f} of the "
+                f"${budget:.2f} API budget, and a run costs about ${estimate:.2f}. "
+                "It can run on the 1st, or now with a lower daily target.")
     if not pipeline.start_in_background(pipeline.prepare_batch):
         return "The pipeline is already running -- the batch will be ready when it finishes."
     return ("Preparing today's batch in the background: searching the boards and the Big 4 "
