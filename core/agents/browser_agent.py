@@ -42,12 +42,12 @@ class BrowserAgent(BaseAgent):
         return "Automates any website -- navigate, fill forms, click buttons, handle logins."
 
     def run(self, task: str, start_url: str = None, upload_path: str = None,
-            close_tab: bool = False) -> str:
+            close_tab: bool = False, telemetry_source: str = "browser_agent") -> str:
         from playwright.sync_api import sync_playwright
 
         client = anthropic.Anthropic()
         from core.telemetry import instrument_client
-        instrument_client(client, "browser_agent")
+        instrument_client(client, telemetry_source)
         vault = Vault()
         history: list[str] = []
         # The one file an "upload" may attach. The model names a field, never

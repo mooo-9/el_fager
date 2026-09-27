@@ -398,6 +398,7 @@ class TestAppliers:
                 assert appliers.apply_in_browser(self._app("wuzzuf"), prof)[0] == status
             assert run.call_args.kwargs["upload_path"] == str(cv)
             assert run.call_args.kwargs["close_tab"] is True
+            assert run.call_args.kwargs["telemetry_source"] == "career"
 
     def test_a_site_form_stays_open_in_comet(self, tmp_path):
         cv = tmp_path / "cv.pdf"

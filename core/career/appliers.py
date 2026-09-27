@@ -106,8 +106,9 @@ def apply_in_browser(app: dict, profile: dict) -> tuple[str, str]:
     agent = BrowserAgent()
     agent.MAX_STEPS = 30          # multi-step forms run past the default 20
     # A site form stays open for Mo to check and submit; the others close their tab.
+    # Its calls count as job-hunt spend, like the rest of the pipeline's.
     message = agent.run(browser_task(app, profile), start_url=app["url"], upload_path=cv,
-                        close_tab=app["channel"] != "site")
+                        close_tab=app["channel"] != "site", telemetry_source="career")
     upper = message.strip().upper()
     if upper.startswith("SUBMITTED"):
         _ledger(app["channel"], app["url"], app)

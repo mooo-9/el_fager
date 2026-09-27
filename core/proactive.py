@@ -43,6 +43,8 @@ WATCHES = [
      "when": "6 AM–12 AM", "detail": "Every minute · runs what you asked for later"},
     {"check": "_check_missions", "name": "Missions",
      "when": "6 AM–12 AM", "detail": "Every minute · one step at a time"},
+    {"check": "_check_api_budget", "name": "API budget",
+     "when": "6 AM–12 AM", "detail": "Monthly · at 80% of the API budget, and when it runs out"},
     {"check": "_check_job_hunt", "name": "Job hunt",
      "when": "7–11 AM", "detail": "Mornings · applications to review, programmes closing"},
     {"check": "_check_deadlines", "name": "Deadlines",
@@ -63,8 +65,6 @@ WATCHES = [
      "when": "7–10 PM", "detail": "Evenings · nothing logged today"},
     {"check": "_check_budget_exceeded", "name": "Budget exceeded",
      "when": "7–10 PM", "detail": "Evenings · over a category budget"},
-    {"check": "_check_api_budget", "name": "API budget",
-     "when": "7–10 PM", "detail": "Evenings · what the models cost this month"},
     {"check": "_check_transcription_quality", "name": "Transcription quality",
      "when": "7–10 PM", "detail": "Evenings · too many garbled turns today"},
     {"check": "_check_weekly_review", "name": "Weekly review",
@@ -221,6 +221,7 @@ class ProactiveEngine:
         self._check_upcoming_events()       # all waking hours
         self._check_autonomous_tasks()      # all waking hours
         self._check_missions()              # all waking hours
+        self._check_api_budget()            # all waking hours
 
         if 7 <= hour <= 11:
             self._check_job_hunt()
@@ -235,7 +236,6 @@ class ProactiveEngine:
             self._check_journal()
             self._check_expenses()
             self._check_budget_exceeded()
-            self._check_api_budget()
             self._check_transcription_quality()
 
         if now.weekday() in (4, 5) and 17 <= hour <= 20:
@@ -687,34 +687,33 @@ class ProactiveEngine:
         except Exception:
             pass
 
-    _DEFAULT_API_BUDGET_USD = 5.0
-
     def _check_api_budget(self) -> None:
-        """Evening warning when today's Claude API spend exceeds the budget.
-        Budget: data/settings.json 'api_daily_budget_usd' (0 disables)."""
-        if self._cooldown("api_budget", 20):
-            return
+        """Says so once a month at 80% of the monthly API budget, and once when
+        it is used up and the brain has moved to the local model until the 1st.
+        Budget: data/settings.json 'api_monthly_budget_usd' (0 disables)."""
         try:
-            budget = self._DEFAULT_API_BUDGET_USD
-            settings_path = Path("data/settings.json")
-            if settings_path.exists():
-                try:
-                    settings = json.loads(settings_path.read_text(encoding="utf-8"))
-                    budget = float(settings.get("api_daily_budget_usd",
-                                                self._DEFAULT_API_BUDGET_USD))
-                except Exception:
-                    pass
+            from core.telemetry import cost_this_month, monthly_budget
+            budget = monthly_budget()
             if budget <= 0:
                 return
-            from core.telemetry import cost_today
-            spent = cost_today()
-            if spent > budget:
-                self._deliver(
-                    f"Mo, heads up -- I've cost about ${spent:.2f} in API calls "
-                    f"today, over your ${budget:.2f} daily budget."
-                )
+            spent = cost_this_month()
+            if spent >= budget:
+                key = "api_budget_used_up"
+                text = (f"Mo, this month's ${budget:.2f} API budget is used up "
+                        f"(${spent:.2f}). Until the 1st I'm on the local model: "
+                        "I can talk, but I can't use my tools.")
+            elif spent >= budget * 0.8:
+                key = "api_budget_warned"
+                text = (f"Mo, heads up -- I've used ${spent:.2f} of this month's "
+                        f"${budget:.2f} API budget.")
             else:
-                self._reset_cooldown("api_budget")
+                return
+            month = datetime.now().strftime("%Y-%m")
+            if self._state.get(key) == month:
+                return
+            self._state[key] = month
+            self._save_state()
+            self._deliver(text)
         except Exception:
             pass
 

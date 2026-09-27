@@ -6,6 +6,8 @@ from typing import Any
 
 import anthropic
 
+from core.telemetry import BudgetExceeded
+
 
 def _is_transient_error(exc: Exception) -> bool:
     """True for errors worth retrying: rate limits, timeouts, flaky connections."""
@@ -287,7 +289,7 @@ Automation flow (propose, never impose): if run_skill's result asks you to offer
 When a proactive message mentioned a repeated ask, or Mo says "any skill suggestions?" -> skill_proposals. If Mo says yes to one -> learn_skill from it; if no -> dismiss_skill_proposal(id).
 "import my routines" / "turn my tasks into skills" / "automate my week" -> import_routines (creates + schedules skills from calendar and gym program).
 "sync my skills" (make skills available in Claude Code) -> sync_skills_to_claude. Also offer this after importing routines.
-API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
+API cost transparency: when Mo asks "what did you cost me" / "how much have you spent" / "what has the job hunt cost" -> usage_report(days) (1=today, 7=week). Answer with the real numbers, briefly.
 Missions (multi-step background goals):
 Tools: start_mission, mission_status, cancel_mission.
 When Mo gives a BIG multi-part goal that cannot finish in one reply ("research X, compare Y, then write a summary", "plan and execute Z overnight") -> decompose it into 2-8 concrete self-contained steps and call start_mission(goal, steps). Steps run in the background, roughly one per minute; results flow into later steps; Mo is told on completion or blockage.
@@ -4718,7 +4720,9 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Report El Fager's own Claude API usage and cost. Use when Mo asks "
             "'what did you cost me', 'how much have you spent', 'api usage', "
-            "'your running costs'. days=1 for today, 7 for the week."
+            "'your running costs', 'what has the job hunt cost'. Includes the "
+            "job hunt's spend for the window and since it started. "
+            "days=1 for today, 7 for the week."
         ),
         "input_schema": {
             "type": "object",
@@ -5042,7 +5046,8 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
     "usage": [
         "cost me", "you cost", "api usage", "api cost", "your cost",
         "how much have you spent", "token usage", "running costs",
-        "what did you spend",
+        "what did you spend", "job hunt cost", "job search cost",
+        "applications cost", "spent on the job",
     ],
     "missions": [
         "mission", "missions", "big task", "multi-step", "step by step plan",
@@ -6728,7 +6733,12 @@ class Brain:
         on_text: optional callable fired with each text delta as it streams
         from the API (used by the voice pipeline to start TTS on the first
         sentence instead of waiting for the full response). When None the
-        call is a plain blocking create() — identical to the old behaviour."""
+        call is a plain blocking create() — identical to the old behaviour.
+
+        Raises BudgetExceeded, before anything is sent, once the month's API
+        budget is spent."""
+        from core.telemetry import check_budget
+        check_budget()
         started = time.monotonic()
         if on_text is None:
             response = self.client.messages.create(**kwargs)
@@ -6984,6 +6994,7 @@ class Brain:
             anthropic.APITimeoutError,
             anthropic.RateLimitError,
             anthropic.InternalServerError,
+            BudgetExceeded,     # the month's budget is spent: the local model until the 1st
         ):
             self._offline_mode = True
             from core.local_llm import local_chat

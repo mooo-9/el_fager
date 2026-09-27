@@ -20,6 +20,16 @@ def _isolated_trust_ledger(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_telemetry(monkeypatch, tmp_path):
+    """Every API call is costed into data/telemetry/, and that month's total
+    is what the monthly budget stops El Fager on. A test's fake calls must not
+    count against Mo's budget, and his real spend must not put a test over it."""
+    from core import telemetry
+    monkeypatch.setattr(telemetry, "_TELEMETRY_DIR", tmp_path / "telemetry")
+    monkeypatch.setattr(telemetry, "_SETTINGS_FILE", tmp_path / "telemetry_settings.json")
+
+
+@pytest.fixture(autouse=True)
 def _isolated_voice_learned(monkeypatch, tmp_path):
     """Songs El Fager plays teach Whisper their names, in data/voice_learned.json.
     A test that plays a fake song must not teach Mo's real El Fager "Song 39"."""

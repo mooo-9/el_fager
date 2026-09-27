@@ -79,6 +79,25 @@ def test_run_done_immediately():
     mock_browser.close.assert_called_once()
 
 
+def test_run_records_spend_under_the_callers_label():
+    labels = []
+    for kwargs in ({}, {"telemetry_source": "career"}):
+        agent = BrowserAgent()
+        mock_context = MagicMock()
+        mock_context.new_page.return_value.screenshot.return_value = b"fake_png"
+        with patch.object(agent, "_get_action", return_value=_done()), \
+             patch("time.sleep"), \
+             patch("core.telemetry.instrument_client") as instrument, \
+             patch("playwright.sync_api.sync_playwright") as mock_pw, \
+             patch("tools.comet_tool.automation_context",
+                   return_value=(MagicMock(), mock_context, True)):
+            mock_pw.return_value.__enter__ = MagicMock(return_value=MagicMock())
+            mock_pw.return_value.__exit__ = MagicMock(return_value=False)
+            agent.run("find something", **kwargs)
+        labels.append(instrument.call_args.args[1])
+    assert labels == ["browser_agent", "career"]
+
+
 def test_run_requests_login_when_no_vault_creds():
     agent = BrowserAgent()
     need_login = {"status": "need_login", "message": "google", "action": {"type": "none"}}

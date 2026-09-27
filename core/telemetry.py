@@ -3,7 +3,9 @@ Telemetry — API usage logging and cost metering for El Fager.
 
 Every Claude API call the brain makes is appended as one JSON line to
 data/telemetry/YYYY-MM-DD.jsonl with a computed cost estimate. Telemetry must
-NEVER raise — observability failures must not break the assistant.
+NEVER raise — observability failures must not break the assistant. The one
+exception is check_budget(): once the month's spend reaches the monthly budget
+it stops the next API call with BudgetExceeded.
 
 Pricing cached 2026-07-05 (per 1M tokens, USD) from the claude-api reference.
 Cache reads bill at ~0.1x input price; cache writes at ~1.25x (5-min TTL).
@@ -14,6 +16,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 _TELEMETRY_DIR = Path("data/telemetry")
+_SETTINGS_FILE = Path("data/settings.json")
+_DEFAULT_MONTHLY_BUDGET_USD = 10.0
 
 # (input $/1M, output $/1M) — matched by substring against the model id
 _PRICING: list[tuple[str, float, float]] = [
@@ -131,9 +135,57 @@ def cost_today() -> float:
     return summarize(days=1)["cost_usd"]
 
 
+def _cost_in(pattern: str, source: "str | None" = None) -> float:
+    """Spend across the daily files matching `pattern`, optionally one source."""
+    total = 0.0
+    try:
+        for fpath in _TELEMETRY_DIR.glob(pattern):
+            for line in fpath.read_text(encoding="utf-8").splitlines():
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if source is None or e.get("source") == source:
+                    total += float(e.get("cost_usd", 0) or 0)
+    except Exception:
+        pass
+    return round(total, 6)
+
+
+def all_time_cost(source: str) -> float:
+    """Every recorded day's spend for one source ("career" is the job hunt)."""
+    return _cost_in("20*.jsonl", source)
+
+
+def cost_this_month() -> float:
+    return _cost_in(f"{datetime.now():%Y-%m}-*.jsonl")
+
+
+class BudgetExceeded(Exception):
+    """This month's API spend has reached the monthly budget."""
+
+
+def monthly_budget() -> float:
+    """data/settings.json 'api_monthly_budget_usd'; 0 turns the cap off."""
+    try:
+        settings = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+        return float(settings.get("api_monthly_budget_usd", _DEFAULT_MONTHLY_BUDGET_USD))
+    except Exception:
+        return _DEFAULT_MONTHLY_BUDGET_USD
+
+
+def check_budget() -> None:
+    """Raise BudgetExceeded once this month's spend has reached the budget.
+    Runs before every API call; the one place telemetry raises on purpose."""
+    budget = monthly_budget()
+    if budget > 0 and cost_this_month() >= budget:
+        raise BudgetExceeded(f"This month's ${budget:.2f} API budget is used up.")
+
+
 def instrument_client(client, source: str):
-    """Wrap client.messages.create so every call is timed and recorded.
-    Idempotent; never raises. Returns the same client for chaining."""
+    """Wrap client.messages.create so every call is timed and recorded, and
+    refused with BudgetExceeded once the monthly budget is spent.
+    Idempotent. Returns the same client for chaining."""
     try:
         import time as _time
         if getattr(client.messages, "_elf_instrumented", False):
@@ -141,6 +193,7 @@ def instrument_client(client, source: str):
         original = client.messages.create
 
         def _create(*args, **kwargs):
+            check_budget()
             started = _time.monotonic()
             response = original(*args, **kwargs)
             try:
