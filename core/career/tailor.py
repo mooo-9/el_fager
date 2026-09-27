@@ -44,26 +44,33 @@ _CHECK_SYSTEM = (
 )
 
 
-def draft(job: dict, profile_text: str, channel: str) -> "dict | None":
-    """{"subject", "body"}, checked against the profile; None when Claude
-    declines either step."""
+def draft_all(jobs: list, profile_text: str) -> list:
+    """{"subject", "body"} for each job (by its "channel"), in order, checked
+    against the profile; None where Claude declined either step. The letters
+    go as one batch, then their checks as a second."""
     from core.career import claude
-    shape = _SHAPE["email" if channel == "email" else "form"]
-    firm_note = ""
-    if job.get("tier") == "big4":
-        firm_note = ("\nThis is a Big 4 firm: name the service line the role belongs to "
-                     "and why that line, in one sentence.")
-    model = claude.model_for(job.get("company_key") or job.get("company", ""))
-    letter = claude.ask(
-        f"{shape}{firm_note}\n\nHis profile:\n{profile_text}\n\n"
-        f"Job: {job['title']} at {job.get('company') or 'the company'}\n\n"
-        f"Posting:\n{job.get('description') or '(not available)'}",
-        system=_SYSTEM, schema=_SCHEMA, effort="medium", model=model,
-    )
-    if letter is None:
-        return None
-    return claude.ask(
-        f"His profile:\n{profile_text}\n\nThe letter:\nSubject: {letter['subject']}\n\n"
-        f"{letter['body']}",
-        system=_CHECK_SYSTEM, schema=_SCHEMA, effort="low", model=model,
-    )
+    models, letter_asks = [], []
+    for job in jobs:
+        shape = _SHAPE["email" if job.get("channel") == "email" else "form"]
+        firm_note = ""
+        if job.get("tier") == "big4":
+            firm_note = ("\nThis is a Big 4 firm: name the service line the role belongs to "
+                         "and why that line, in one sentence.")
+        models.append(claude.model_for(job.get("company_key") or job.get("company", "")))
+        letter_asks.append({
+            "prompt": (f"{shape}{firm_note}\n\nHis profile:\n{profile_text}\n\n"
+                       f"Job: {job['title']} at {job.get('company') or 'the company'}\n\n"
+                       f"Posting:\n{job.get('description') or '(not available)'}"),
+            "system": _SYSTEM, "schema": _SCHEMA, "effort": "medium", "model": models[-1],
+        })
+    letters = claude.ask_batch(letter_asks)
+    written = [i for i, letter in enumerate(letters) if letter is not None]
+    checked = claude.ask_batch([{
+        "prompt": (f"His profile:\n{profile_text}\n\nThe letter:\n"
+                   f"Subject: {letters[i]['subject']}\n\n{letters[i]['body']}"),
+        "system": _CHECK_SYSTEM, "schema": _SCHEMA, "effort": "low", "model": models[i],
+    } for i in written])
+    out: list = [None] * len(jobs)
+    for i, letter in zip(written, checked):
+        out[i] = letter
+    return out

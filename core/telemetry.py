@@ -32,6 +32,7 @@ _FALLBACK = (3.0, 15.0)  # sonnet-tier
 
 _CACHE_READ_MULT = 0.1
 _CACHE_WRITE_MULT = 1.25
+_BATCH_MULT = 0.5       # Message Batches bill every token at half price
 
 
 def _prices_for(model: str) -> tuple[float, float]:
@@ -59,9 +60,11 @@ def estimate_cost(model: str, usage) -> float:
 
 
 def record_api_usage(source: str, model: str, usage, latency_ms: float,
-                     tools_used: list[str] | None = None) -> None:
-    """Append one usage record. Swallows every error by design."""
+                     tools_used: list[str] | None = None, batch: bool = False) -> None:
+    """Append one usage record. Swallows every error by design. A Message
+    Batch answer (batch=True) is billed at half price."""
     try:
+        cost = estimate_cost(model, usage)
         entry = {
             "timestamp": datetime.now().isoformat(),
             "source": source,
@@ -72,10 +75,12 @@ def record_api_usage(source: str, model: str, usage, latency_ms: float,
                 usage, "cache_creation_input_tokens", 0) or 0,
             "cache_read_input_tokens": getattr(
                 usage, "cache_read_input_tokens", 0) or 0,
-            "cost_usd": estimate_cost(model, usage),
+            "cost_usd": round(cost * _BATCH_MULT, 6) if batch else cost,
             "latency_ms": round(float(latency_ms), 1),
             "tools_used": tools_used or [],
         }
+        if batch:
+            entry["batch"] = True
         _TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
         day = datetime.now().strftime("%Y-%m-%d")
         with (_TELEMETRY_DIR / f"{day}.jsonl").open("a", encoding="utf-8") as f:

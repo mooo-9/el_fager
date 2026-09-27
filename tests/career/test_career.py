@@ -115,21 +115,22 @@ class TestScorer:
         assert scorer.hr_email("support@wuzzuf.net noreply@company.com") == ""
 
     def test_score_is_clamped(self):
-        with patch("core.career.claude.ask", return_value={
-                "score": 140, "fit": "x", "missing": [], "level": "entry", "in_egypt": True}):
-            assert scorer.score({"title": "Analyst"}, "profile")["score"] == 100
+        with patch("core.career.claude.ask_batch", return_value=[{
+                "score": 140, "fit": "x", "missing": [], "level": "entry", "in_egypt": True}]):
+            assert scorer.score_all([{"title": "Analyst"}], "profile")[0]["score"] == 100
 
     def test_a_graduate_in_a_few_weeks_is_scored_as_a_fresh_graduate(self):
         """The first practice run marked Mo down on almost every job as
         "still a student until Oct 2026" -- eight days before he graduated.
         The scorer is given today's date and told how to treat that."""
-        with patch("core.career.claude.ask", return_value={
+        with patch("core.career.claude.ask_batch", return_value=[{
                 "score": 70, "fit": "x", "missing": [], "level": "entry",
-                "in_egypt": True}) as ask:
-            scorer.score({"title": "Analyst"}, "profile")
+                "in_egypt": True}]) as ask:
+            scorer.score_all([{"title": "Analyst"}], "profile")
         from datetime import date
-        assert f"Today is {date.today().isoformat()}" in ask.call_args.args[0]
-        system = ask.call_args.kwargs["system"]
+        [asked] = ask.call_args.args[0]
+        assert f"Today is {date.today().isoformat()}" in asked["prompt"]
+        system = asked["system"]
         assert "within the next 3 months" in system and "fresh graduate" in system
 
 
@@ -141,10 +142,12 @@ class TestLetters:
 
     def _ask(self, channel="form"):
         from core.career import tailor
-        with patch("core.career.claude.ask", return_value={"subject": "S", "body": "B"}) as ask:
-            tailor.draft({"title": "Data Analyst", "company": "Valeo"}, "profile", channel)
-        writer = ask.call_args_list[0]
-        return writer.kwargs["system"], writer.args[0]
+        with patch("core.career.claude.ask_batch",
+                   return_value=[{"subject": "S", "body": "B"}]) as ask:
+            tailor.draft_all([{"title": "Data Analyst", "company": "Valeo", "channel": channel}],
+                             "profile")
+        [writer] = ask.call_args_list[0].args[0]
+        return writer["system"], writer["prompt"]
 
     def test_every_letter_is_checked_against_the_profile(self):
         """Live, one letter in four still invented a phrase ("REST
@@ -153,18 +156,21 @@ class TestLetters:
         from core.career import tailor
         answers = [{"subject": "S", "body": "Dear Hiring Team, I built REST APIs. //"},
                    {"subject": "S", "body": "Dear Hiring Team, I coded in C#."}]
-        with patch("core.career.claude.ask", side_effect=answers) as ask:
-            out = tailor.draft({"title": "Data Analyst", "company": "Valeo"}, "MY PROFILE", "form")
+        with patch("core.career.claude.ask_batch", side_effect=[[a] for a in answers]) as ask:
+            [out] = tailor.draft_all([{"title": "Data Analyst", "company": "Valeo",
+                                       "channel": "form"}], "MY PROFILE")
         assert out == {"subject": "S", "body": "Dear Hiring Team, I coded in C#."}
-        check = ask.call_args_list[1]
-        assert "MY PROFILE" in check.args[0] and "I built REST APIs. //" in check.args[0]
-        assert "doesn't support" in check.kwargs["system"]
-        assert "180 words" in check.kwargs["system"]
+        [check] = ask.call_args_list[1].args[0]
+        assert "MY PROFILE" in check["prompt"] and "I built REST APIs. //" in check["prompt"]
+        assert "doesn't support" in check["system"]
+        assert "180 words" in check["system"]
 
     def test_a_letter_that_couldnt_be_checked_is_not_kept(self):
         from core.career import tailor
-        with patch("core.career.claude.ask", side_effect=[{"subject": "S", "body": "B"}, None]):
-            assert tailor.draft({"title": "Data Analyst"}, "profile", "form") is None
+        with patch("core.career.claude.ask_batch",
+                   side_effect=[[{"subject": "S", "body": "B"}], [None]]):
+            assert tailor.draft_all([{"title": "Data Analyst", "channel": "form"}],
+                                    "profile") == [None]
 
     def test_no_claim_is_stronger_than_the_profile_states_it(self):
         system, _ = self._ask()
@@ -211,16 +217,22 @@ class TestPrepareBatch:
         if settings:
             store.update_settings(**settings)
         scores = {j["url"]: j.pop("score") for j in jobs}
+        scored = []
+
+        def score_all(batch, p):
+            scored.extend(job["url"] for job in batch)
+            return [{"score": scores[job["url"]], "fit": "fits", "missing": [],
+                     "level": "entry", "in_egypt": True} for job in batch]
+
         with patch.object(sources, "gather", return_value=jobs), \
              patch.object(scorer, "read_description", return_value="Posting text"), \
-             patch.object(scorer, "score", side_effect=lambda job, p: {
-                 "score": scores[job["url"]], "fit": "fits", "missing": [],
-                 "level": "entry", "in_egypt": True}) as score, \
-             patch("core.career.tailor.draft", return_value={"subject": "S", "body": "B"}), \
+             patch.object(scorer, "score_all", side_effect=score_all), \
+             patch("core.career.tailor.draft_all",
+                   side_effect=lambda batch, p: [{"subject": "S", "body": "B"}] * len(batch)), \
              patch.object(pipeline, "_nightly_extras", return_value=""), \
              patch.object(pipeline, "_notify"):
             out = pipeline.prepare_batch()
-        return out, score
+        return out, scored
 
     def test_drafts_the_good_fits_and_skips_the_rest(self):
         out, _ = self._run([_job("Analyst", "Fawry", "https://wuzzuf.net/jobs/p/1", score=85),
@@ -238,8 +250,8 @@ class TestPrepareBatch:
         relevant = [_job("Data Analyst", "Valeo", "https://valeo.x/1", score=70),
                     _job("Junior Business Analyst", "Some Startup",
                          "https://wuzzuf.net/jobs/p/2", score=70)]
-        _, score = self._run(unrelated + relevant, daily_target=1)
-        assert [c.args[0]["url"] for c in score.call_args_list] == [
+        _, scored = self._run(unrelated + relevant, daily_target=1)
+        assert scored == [
             "https://valeo.x/1", "https://wuzzuf.net/jobs/p/2"]
 
     @pytest.mark.parametrize("text,years", [
@@ -264,8 +276,8 @@ class TestPrepareBatch:
         jobs += [_job("Data Analyst", "Co", f"https://wuzzuf.net/jobs/p/f{i}", score=70,
                       description="Fresh graduates welcome. 0-1 years of experience.")
                  for i in range(2)]
-        _, score = self._run(jobs, daily_target=1)
-        assert sorted(c.args[0]["url"] for c in score.call_args_list) == [
+        _, scored = self._run(jobs, daily_target=1)
+        assert sorted(scored) == [
             "https://wuzzuf.net/jobs/p/f0", "https://wuzzuf.net/jobs/p/f1"]
         skipped = tracker.with_status("skipped")
         assert len(skipped) == 2
@@ -278,8 +290,7 @@ class TestPrepareBatch:
                  for i in range(30)]
         boards = [_job(f"Data Analyst {i}", "Some Startup", f"https://wuzzuf.net/jobs/p/{i}",
                        score=70) for i in range(30)]
-        _, score = self._run(firms + boards)
-        scored = [c.args[0]["url"] for c in score.call_args_list]
+        _, scored = self._run(firms + boards)
         assert len(scored) == 40
         assert sum("valeo" in u for u in scored) == 20 and sum("wuzzuf" in u for u in scored) == 20
 
@@ -314,14 +325,14 @@ class TestPrepareBatch:
         self._run(jobs, daily_target=2)
         assert len(tracker.with_status("ready")) == 2
         assert len(tracker.with_status("waiting")) == 1
-        _, score = self._run([])
-        score.assert_not_called()
+        _, scored = self._run([])
+        assert scored == []
         assert len(tracker.with_status("ready")) == 3
 
     def test_a_job_already_tracked_is_not_scored_again(self):
         _seed(_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1"))
-        _, score = self._run([_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1")])
-        score.assert_not_called()
+        _, scored = self._run([_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1")])
+        assert scored == []
 
 
 class TestApprove:

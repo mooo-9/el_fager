@@ -85,6 +85,19 @@ def _isolated_career(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_career_claude(monkeypatch):
+    """The job hunt sends its scoring and letters as Message Batches. A test
+    that reached the real API would pay for a batch of fake jobs out of Mo's
+    $10 a month. A test that needs a client patches claude._get_client."""
+    from core.career import claude
+
+    def blocked():
+        raise RuntimeError("real Claude calls from the job hunt are off in tests")
+
+    monkeypatch.setattr(claude, "_get_client", blocked)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_whatsapp(monkeypatch):
     """Drafting a WhatsApp message searches Mo's real WhatsApp Desktop, and a
     confirm clicks and types into it. No test may do either — a test that

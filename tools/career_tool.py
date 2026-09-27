@@ -19,8 +19,9 @@ def prepare_applications() -> str:
     if not pipeline.start_in_background(pipeline.prepare_batch):
         return "The pipeline is already running -- the batch will be ready when it finishes."
     return ("Preparing today's batch in the background: searching the boards and the Big 4 "
-            "career sites, scoring each job, and drafting applications. It takes a few "
-            f"minutes; review it at {pipeline.review_url()} when it's done.")
+            "career sites, scoring each job, and drafting applications. It's done at half "
+            "price, so it usually takes under an hour and at most a day; "
+            f"review it at {pipeline.review_url()} when it's done.")
 
 
 def review_applications() -> str:

@@ -83,7 +83,8 @@ def _take_turns(firms: list, others: list) -> list:
 
 # The 26 Sep 2026 run at a daily target of 20 cost $0.97 in API calls: about
 # 5 cents for each job the target asks for (scoring twice that many, drafting).
-_COST_PER_TARGET_JOB_USD = 0.05
+# Scoring and letters now go as Message Batches, at half price.
+_COST_PER_TARGET_JOB_USD = 0.025
 
 
 def run_estimate() -> float:
@@ -121,8 +122,8 @@ def prepare_batch() -> str:
            + [j for j in new if not _in_field(j)])
     # Scoring costs a Claude call per job: twice the target is enough to fill it.
     new, too_senior = _within_reach(new, max(0, s["daily_target"] * 2 - len(waiting)))
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        scored = list(pool.map(lambda j: _scored(j, ptext), new))
+    new = [_prepared(j) for j in new]
+    scored = [{**app, **fit} for app, fit in zip(new, scorer.score_all(new, ptext))]
 
     candidates = sorted(waiting + scored,
                         key=lambda a: (companies.TIER_RANK[a["tier"]], -a["score"]))
@@ -140,8 +141,7 @@ def prepare_batch() -> str:
             if app["tier"] == "big4":
                 firm_counts[app["company_key"]] = firm_counts.get(app["company_key"], 0) + 1
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        drafted = list(pool.map(lambda a: (a, tailor.draft(a, ptext, a["channel"])), picked))
+    drafted = list(zip(picked, tailor.draft_all(picked, ptext)))
     ready = 0
     for app, draft in drafted:
         if draft is None:
@@ -189,12 +189,12 @@ def _nightly_extras(s: dict, referrals: bool = True) -> str:
     return " ".join(notes)
 
 
-def _scored(job: dict, ptext: str) -> dict:
+def _prepared(job: dict) -> dict:
+    """The job ready for scoring: its posting text, HR address and channel."""
     app = dict(job)
     # Some job lists carry the full text (PepsiCo's); the rest are read.
     app["description"] = job.get("description") or scorer.read_description(job["url"])
     app["hr_email"] = scorer.hr_email(app["description"])
-    app.update(scorer.score(app, ptext))
     app["channel"] = appliers.channel_for(app)
     return app
 

@@ -104,9 +104,8 @@ class TestTheScorerGetsIt:
         """PepsiCo's job list carries each full description."""
         job = {"title": "Data Analyst", "company": "PepsiCo", "url": "https://www.pepsicojobs.com/main/jobs/1",
                "description": "Full PepsiCo text", "tier": "top"}
-        with patch.object(scorer, "read_description") as read, \
-             patch.object(scorer, "score", return_value={"score": 70}):
-            app = pipeline._scored(job, "profile")
+        with patch.object(scorer, "read_description") as read:
+            app = pipeline._prepared(job)
         read.assert_not_called()
         assert app["description"] == "Full PepsiCo text"
 

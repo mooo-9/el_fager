@@ -45,21 +45,27 @@ def hr_email(text: str) -> str:
     return ""
 
 
-def score(job: dict, profile_text: str) -> dict:
-    """{"score", "fit", "missing", "level", "in_egypt"} for one job. The
-    posting's own text is read when it can be; otherwise the title decides."""
+def score_all(jobs: list, profile_text: str) -> list:
+    """{"score", "fit", "missing", "level", "in_egypt"} for each job, in order,
+    asked as one batch. The posting's own text is used when it was read;
+    otherwise the title decides."""
     from core.career import claude
-    posting = job.get("description") or "(posting text unavailable -- judge from the title)"
-    result = claude.ask(
-        f"Today is {date.today().isoformat()}.\n\n"
-        f"Candidate profile:\n{profile_text}\n\n"
-        f"Job: {job['title']} at {job.get('company') or 'unknown company'}, "
-        f"{job.get('location') or 'Egypt'}\n\nPosting:\n{posting}",
-        system=_SYSTEM, schema=_SCHEMA, effort="low", max_tokens=4000,
-        model=claude.model_for(job.get("company_key") or job.get("company", "")),
-    )
-    if result is None:
-        return {"score": 0, "fit": "Couldn't be scored.", "missing": [], "level": "entry",
-                "in_egypt": True}
-    result["score"] = max(0, min(100, int(result["score"])))
-    return result
+    asks = []
+    for job in jobs:
+        posting = job.get("description") or "(posting text unavailable -- judge from the title)"
+        asks.append({
+            "prompt": (f"Today is {date.today().isoformat()}.\n\n"
+                       f"Candidate profile:\n{profile_text}\n\n"
+                       f"Job: {job['title']} at {job.get('company') or 'unknown company'}, "
+                       f"{job.get('location') or 'Egypt'}\n\nPosting:\n{posting}"),
+            "system": _SYSTEM, "schema": _SCHEMA, "effort": "low", "max_tokens": 4000,
+            "model": claude.model_for(job.get("company_key") or job.get("company", "")),
+        })
+    out = []
+    for result in claude.ask_batch(asks):
+        if result is None:
+            result = {"score": 0, "fit": "Couldn't be scored.", "missing": [],
+                      "level": "entry", "in_egypt": True}
+        result["score"] = max(0, min(100, int(result["score"])))
+        out.append(result)
+    return out

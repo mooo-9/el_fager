@@ -60,16 +60,16 @@ class TestPrepare:
             json.dumps({"source": "chat", "cost_usd": usd}) + "\n", encoding="utf-8")
 
     def test_a_run_the_budget_cant_cover_does_not_start(self):
-        self._spent_this_month(9.2)              # $9.20 + ~$1.00 for 20 jobs > $10
+        self._spent_this_month(9.6)              # $9.60 + ~$0.50 for 20 jobs > $10
         with patch.object(pipeline, "start_in_background") as start:
             out = career_tool.prepare_applications()
         start.assert_not_called()
         assert out.startswith("Not starting the job hunt")
-        assert "$9.20 of the $10.00" in out and "about $1.00" in out
+        assert "$9.60 of the $10.00" in out and "about $0.50" in out
 
     def test_a_lower_daily_target_fits_what_is_left(self):
-        self._spent_this_month(9.2)
-        store.update_settings(daily_target=10)   # ~$0.50: fits in the $0.80 left
+        self._spent_this_month(9.6)
+        store.update_settings(daily_target=10)   # ~$0.25: fits in the $0.40 left
         with patch.object(pipeline, "start_in_background", return_value=True) as start:
             assert career_tool.prepare_applications().startswith("Preparing today's batch")
         start.assert_called_once()
