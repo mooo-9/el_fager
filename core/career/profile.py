@@ -4,9 +4,18 @@ application forms keep asking for.
 Nothing here is invented: answers Mo hasn't given stay empty, and the review
 page lists them so he can fill them in by voice ("my expected salary is ...").
 """
+import re
 from pathlib import Path
 
 from core.career import store
+
+# Mo keeps two CVs: the main one for AI, data and business-analysis roles, and
+# an ERP one. A job whose title names ERP work is scored, written and sent
+# from the ERP CV, once it is imported; everything else from the main one.
+_ERP_RE = re.compile(r"\b(erp|sap|odoo|netsuite|d365|dynamics 365"
+                     r"|oracle (?:ebs|fusion|financials|apps))\b", re.IGNORECASE)
+_CV_FIELDS = ("name", "headline", "education", "skills", "experience",
+              "projects", "certifications", "languages")
 
 # The questions Egyptian application forms ask most. Empty until Mo answers.
 ANSWER_KEYS = {
@@ -60,9 +69,21 @@ def has_cv() -> bool:
     return bool(p.get("cv_path")) and Path(p["cv_path"]).exists()
 
 
-def import_cv(path: str) -> str:
-    """Read Mo's CV (PDF or Word) into the profile. Answers the CV holds
-    (phone, GPA...) fill empty answers; ones Mo gave by hand are kept."""
+def is_erp(job: dict) -> bool:
+    return bool(_ERP_RE.search(job.get("title") or ""))
+
+
+def for_job(profile: dict, job: dict) -> dict:
+    """The profile an application to `job` is written and sent from: the ERP
+    CV's for an ERP role once it's imported, the main one otherwise."""
+    erp = profile.get("erp") or {}
+    return {**profile, **erp} if erp.get("cv_path") and is_erp(job) else profile
+
+
+def import_cv(path: str, erp: bool = False) -> str:
+    """Read Mo's CV (PDF or Word) into the profile -- the ERP one when `erp`.
+    Answers the CV holds (phone, GPA...) fill empty answers; ones Mo gave by
+    hand are kept."""
     cv = Path(path).expanduser()
     if not cv.exists():
         return f"Error: no file at {cv}"
@@ -86,16 +107,20 @@ def import_cv(path: str) -> str:
     for key in ("email", "phone", "linkedin_url", "graduation_year", "gpa"):
         if fields.get(key) and not answers.get(key):
             answers[key] = fields[key]
-    profile.update({k: v for k, v in fields.items() if k in
-                    ("name", "headline", "education", "skills", "experience",
-                     "projects", "certifications", "languages")})
-    profile.update({"cv_path": str(cv), "cv_text": text, "answers": answers})
+    cv_part = {k: v for k, v in fields.items() if k in _CV_FIELDS}
+    cv_part.update({"cv_path": str(cv), "cv_text": text})
+    if erp:
+        profile["erp"] = cv_part
+    else:
+        profile.update(cv_part)
+    profile["answers"] = answers
     save(profile)
 
     missing = missing_answers(profile)
     note = f" Still missing: {', '.join(missing)}." if missing else ""
-    return (f"CV imported: {profile['name'] or cv.name} -- {len(profile['skills'])} skills, "
-            f"{len(profile['experience'])} experience entries.{note}")
+    which = "ERP CV (for ERP roles)" if erp else "CV"
+    return (f"{which} imported: {cv_part['name'] or cv.name} -- {len(cv_part['skills'])} "
+            f"skills, {len(cv_part['experience'])} experience entries.{note}")
 
 
 def _cv_text(cv: Path) -> str:

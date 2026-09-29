@@ -99,6 +99,32 @@ class TestProfile:
         assert p["cv_path"] == str(cv)
         assert "Skills: SQL; Power BI" in profile.as_text()
 
+    def test_erp_roles_use_the_erp_cv_and_the_rest_the_main_one(self, tmp_path):
+        main, erp = tmp_path / "main.pdf", tmp_path / "erp.pdf"
+        for cv in (main, erp):
+            cv.write_bytes(b"%PDF")
+        fields = {"name": "Mo", "headline": "", "education": "", "skills": [],
+                  "experience": [], "projects": [], "certifications": [], "languages": [],
+                  "email": "", "phone": "", "linkedin_url": "", "graduation_year": "",
+                  "gpa": ""}
+        with patch.object(profile, "_cv_text", return_value="CV text " * 50), \
+             patch("core.career.claude.ask",
+                   side_effect=[{**fields, "skills": ["Python"]}, {**fields, "skills": ["SAP"]}]):
+            profile.import_cv(str(main))
+            # No ERP CV yet: an ERP role still goes out with the main one.
+            assert profile.for_job(profile.load(), {"title": "SAP Consultant"})["cv_path"] \
+                == str(main)
+            assert profile.import_cv(str(erp), erp=True).startswith("ERP CV")
+        p = profile.load()
+        assert p["cv_path"] == str(main)                    # the main CV is untouched
+        for title, cv, skill in [("Junior ERP Consultant", erp, "SAP"),
+                                 ("Odoo Functional Trainee", erp, "SAP"),
+                                 ("Data Analyst", main, "Python"),
+                                 ("Business Analyst", main, "Python")]:
+            chosen = profile.for_job(p, {"title": title})
+            assert chosen["cv_path"] == str(cv), title
+            assert f"Skills: {skill}" in profile.as_text(chosen), title
+
     def test_an_unreadable_cv_is_reported(self, tmp_path):
         cv = tmp_path / "cv.pdf"
         cv.write_bytes(b"%PDF")
@@ -164,6 +190,18 @@ class TestLetters:
         assert "MY PROFILE" in check["prompt"] and "I built REST APIs. //" in check["prompt"]
         assert "doesn't support" in check["system"]
         assert "180 words" in check["system"]
+
+    def test_letters_and_checks_take_their_time(self):
+        """Mo reviews them in the morning and wants them right, not fast."""
+        from core.career import tailor
+        with patch("core.career.claude.ask_batch",
+                   side_effect=[[{"subject": "S", "body": "B"}]] * 2) as ask:
+            tailor.draft_all([{"title": "Data Analyst", "channel": "form"}], "profile")
+        [writer], [check] = (c.args[0] for c in ask.call_args_list)
+        assert writer["effort"] == check["effort"] == "high"
+        with patch("core.career.claude.ask_batch", return_value=[None]) as ask:
+            scorer.score_all([{"title": "Analyst"}], "profile")
+        assert ask.call_args.args[0][0]["effort"] == "medium"
 
     def test_a_letter_that_couldnt_be_checked_is_not_kept(self):
         from core.career import tailor
@@ -349,8 +387,14 @@ class TestApprove:
         a, b = _seed(_job("A", "Co", "https://wuzzuf.net/jobs/p/1"),
                      _job("B", "Co", "https://wuzzuf.net/jobs/p/2"))
         with patch.object(pipeline, "start_in_background", return_value=True):
-            pipeline.approve(only=[b["id"]])
-        assert tracker.all_apps()[a["id"]]["status"] == "skipped"
+            out = pipeline.approve(only=[b["id"]])
+        assert out.startswith("Approved 1, skipped 0, 1 saved for later.")
+        # What Mo didn't tick stays, letter and all, for him to send later.
+        kept = tracker.all_apps()[a["id"]]
+        assert kept["status"] == "ready" and kept["draft"]
+        with patch.object(pipeline, "start_in_background", return_value=True):
+            pipeline.approve(only=[a["id"]])
+        assert tracker.all_apps()[a["id"]]["status"] == "approved"
 
 
 class TestRunApproved:

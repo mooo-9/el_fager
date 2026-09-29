@@ -6,6 +6,7 @@ Chromium stays unbuilt until the cockpit is actually opened, and that state
 maps onto the orb's own vocabulary.
 """
 import json
+import time
 from datetime import date, timedelta
 from unittest.mock import MagicMock
 
@@ -21,6 +22,12 @@ def settings_file(tmp_path, monkeypatch):
     path.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(overlay_mod, "_SETTINGS_FILE", path)
     return path
+
+
+def _seed_schedules(jobs):
+    """The scheduler's jobs, in the file conftest points at a temp dir."""
+    from core import scheduler
+    scheduler._SCHEDULES_FILE.write_text(json.dumps(jobs), encoding="utf-8")
 
 
 def _make_cockpit(qapp):
@@ -582,10 +589,10 @@ class TestAutomationRows:
              "trigger": {"type": "cron", "day_of_week": "fri", "hour": 18, "minute": 0}},
         ]
 
-    def _rows(self, schedules=(), history=(), tasks=(), skills=()):
+    def _rows(self, schedules=(), history=(), tasks=(), skills=(), hunting=False):
         from ui.cockpit import _automation_rows
         return _automation_rows(list(schedules), list(history), list(tasks),
-                                list(skills), self._now())
+                                list(skills), self._now(), hunting=hunting)
 
     def _scheduled(self, *a, **kw):
         return [r for r in self._rows(*a, **kw) if r["kind"] == "scheduled"]
@@ -655,6 +662,46 @@ class TestAutomationRows:
         assert first["when"] == pa.WATCHES[0]["when"]
         assert first["detail"] == pa.WATCHES[0]["detail"]
 
+    def _hunt(self, **kw):
+        [hunt] = [r for r in self._rows(**kw) if r["kind"] == "on_request"]
+        return hunt
+
+    def test_the_job_hunt_waits_for_mo_to_press_run(self):
+        hunt = self._hunt(schedules=self._jobs())
+        assert hunt["name"] == "Job hunt" and hunt["run"] == ("job_hunt", "job_hunt")
+        assert hunt["when"] == "" and "tonight at 2 AM" in hunt["detail"]
+
+    def test_armed_it_shows_tonight_and_offers_cancel_not_a_second_row(self):
+        from tools.career_tool import HUNT_JOB_ID
+        armed = {"id": HUNT_JOB_ID, "name": "Job hunt", "enabled": True,
+                 "trigger": {"type": "date", "run_date": "2026-09-16T02:00:00"},
+                 "action": {"type": "tool", "tool": "run_job_hunt", "args": {}}}
+        rows = self._rows(schedules=self._jobs() + [armed])
+        assert [r["name"] for r in rows if r["kind"] == "scheduled"].count("Job hunt") == 0
+        hunt = self._hunt(schedules=[armed])
+        assert hunt["when"] == "2 AM" and hunt["action"] == "CANCEL"
+        # A night El Fager slept through (now is Sep 15 noon) reads as not armed.
+        armed["trigger"]["run_date"] = "2026-09-14T02:00:00"
+        assert self._hunt(schedules=[armed])["when"] == ""
+
+    def test_while_it_runs_there_is_nothing_to_press(self):
+        hunt = self._hunt(schedules=[], hunting=True)
+        assert hunt["when"] == "RUNNING" and hunt["run"] is None
+
+    def test_run_arms_tonight_and_says_why_when_it_cannot(self, qapp, monkeypatch):
+        from tools import career_tool
+        import core.notifier as notifier
+        sent, pressed = [], []
+        monkeypatch.setattr(career_tool, "hunt_tonight",
+                            lambda: pressed.append(1) or "Not starting the job hunt: budget.")
+        monkeypatch.setattr(notifier, "get_notifier",
+                            lambda: type("N", (), {"send": lambda self, t: sent.append(t)})())
+        w = _make_cockpit(qapp)
+        w._run_automation({"run": ("job_hunt", "job_hunt")})
+        assert pressed == [1]
+        assert sent == ["Not starting the job hunt: budget."]
+        w.close()
+
     def test_a_check_row_offers_no_run_button(self, qapp):
         from ui.cockpit import _AutoRow
         watch = {"name": "Battery low", "when": "6 AM–12 AM", "detail": "Every minute",
@@ -680,12 +727,14 @@ class TestAutomationRows:
     def test_every_automation_is_listed_under_its_own_heading(self, qapp):
         import core.proactive as pa
         from PyQt6.QtWidgets import QLabel
+        _seed_schedules(self._jobs())
         w = _make_cockpit(qapp)
         w._refresh_rails()
         rows = w._auto_list.count()
         texts = [label.text() for label in w._auto_scroll.findChildren(QLabel)]
-        assert rows == len(w._automations()) + 2       # a heading over each group
+        assert rows == len(w._automations()) + 3       # a heading over each group
         assert f"SCHEDULED  ·  3" in texts
+        assert "ON REQUEST  ·  1" in texts
         assert f"WATCHING  ·  {len(pa.WATCHES)}" in texts
         assert "Prayer heads-up" in texts
         w.close()
@@ -770,6 +819,8 @@ class TestPanelTabs:
         w.close()
 
     def test_the_skills_tab_swaps_the_list(self, qapp):
+        _seed_schedules([{"id": "morning", "name": "Morning Briefing", "enabled": True,
+                          "trigger": {"type": "cron", "hour": 7, "minute": 30}}])
         w = _make_cockpit(qapp)
         w._refresh_readouts()
         assert "Morning Briefing" in self._texts(w)

@@ -24,14 +24,12 @@ DEFAULTS = {
     "big4_per_firm_per_month": 3,
     # People at target companies found and drafted a note for, per night.
     "referrals_per_day": 5,
-    # The autonomous task that runs the job hunt every night, once Mo turns it on.
-    "nightly_task_id": "",
     "search_terms": [
         "data analyst", "business analyst", "business intelligence", "power bi",
         "data analytics", "data science", "machine learning", "artificial intelligence",
         "AI engineer", "data analyst intern", "business analyst intern",
         "junior data analyst", "junior business analyst", "fresh graduate data analyst",
-        "graduate program",
+        "graduate program", "erp", "erp consultant", "sap", "odoo",
     ],
 }
 

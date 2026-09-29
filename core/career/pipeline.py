@@ -26,7 +26,7 @@ _FIELD_RE = re.compile(
 
 
 def _in_field(job: dict) -> bool:
-    return bool(_FIELD_RE.search(job["title"]))
+    return bool(_FIELD_RE.search(job["title"])) or profile.is_erp(job)
 
 
 # Postings asking this many years of experience or more aren't scored: in the
@@ -83,8 +83,10 @@ def _take_turns(firms: list, others: list) -> list:
 
 # The 26 Sep 2026 run at a daily target of 20 cost $0.97 in API calls: about
 # 5 cents for each job the target asks for (scoring twice that many, drafting).
-# Scoring and letters now go as Message Batches, at half price.
-_COST_PER_TARGET_JOB_USD = 0.025
+# Scoring and letters now go as Message Batches, at half price, but at higher
+# effort (scoring medium, letters and their check high). Provisional until a
+# high-effort run is measured.
+_COST_PER_TARGET_JOB_USD = 0.04
 
 
 def run_estimate() -> float:
@@ -105,7 +107,8 @@ def prepare_batch() -> str:
         _notify(summary)
         return summary
     prof = profile.load()
-    ptext = profile.as_text(prof)
+    def ptext(job: dict) -> str:    # from the CV it would be sent with
+        return profile.as_text(profile.for_job(prof, job))
     known = tracker.all_apps()
 
     # Jobs that scored well but didn't fit in an earlier day's target go first;
@@ -263,21 +266,25 @@ def review_text(limit: int = 15) -> str:
 
 
 def approve(skip: "list[str] | None" = None, only: "list[str] | None" = None) -> str:
-    """Approve the ready batch. `only` approves just those ids; everything
-    else in the batch -- and anything in `skip` -- is skipped."""
+    """Approve the ready batch. `only` approves just those ids and leaves the
+    rest ready, drafts and all, so Mo can come back and send them later;
+    anything in `skip` is skipped."""
     skip = set(skip or [])
     only = set(only) if only else None
-    approved = skipped = 0
+    approved = skipped = kept = 0
     for a in tracker.with_status("ready"):
-        if a["id"] in skip or (only is not None and a["id"] not in only):
-            tracker.update(a["id"], "skipped", "Mo unticked it")
+        if a["id"] in skip:
+            tracker.update(a["id"], "skipped", "Mo skipped it")
             skipped += 1
+        elif only is not None and a["id"] not in only:
+            kept += 1
         else:
             tracker.update(a["id"], "approved", "approved in review")
             approved += 1
     started = start_in_background(run_approved)
     tail = " Sending now in the background." if started else " A run is already going; they're queued."
-    return f"Approved {approved}, skipped {skipped}.{tail if approved else ''}"
+    saved = f", {kept} saved for later" if kept else ""
+    return f"Approved {approved}, skipped {skipped}{saved}.{tail if approved else ''}"
 
 
 # ── Send ─────────────────────────────────────────────────────────────────────
@@ -302,7 +309,7 @@ def run_approved(pause: bool = True) -> str:
             if linkedin_today >= s["linkedin_daily_cap"]:
                 continue              # stays approved; goes tomorrow
             linkedin_today += 1
-        status, note = appliers.apply(app, prof)
+        status, note = appliers.apply(app, profile.for_job(prof, app))
         tracker.update(app["id"], status, note, applied_at=datetime.now().isoformat(timespec="seconds"))
         counts[status] = counts.get(status, 0) + 1
         if pause and app["channel"] in appliers.BROWSER_CHANNELS:

@@ -2,12 +2,14 @@
 in core/career/; these only check inputs and say what happened."""
 from datetime import datetime, timedelta
 
-_NIGHTLY_AT = 2          # 02:00, so the batch is ready by morning
-_NIGHTLY_TASK = ("Run the nightly job hunt: call check_application_replies, then "
-                 "prepare_applications. Report in one or two sentences.")
+# Tonight's job hunt: armed from the AUTOMATIONS panel, run once by the
+# scheduler (which, unlike queued tasks, runs through the night), then gone.
+HUNT_JOB_ID = "job_hunt_tonight"
+_HUNT_AT = 2          # 02:00, so the batch is ready by morning
 
 
-def prepare_applications() -> str:
+def _over_budget() -> str:
+    """Why a run can't start this month, or "" when it can."""
     from core.career import pipeline
     from core.telemetry import cost_this_month, monthly_budget
     # A run the budget can't cover would be cut off halfway by the monthly cap.
@@ -16,12 +18,65 @@ def prepare_applications() -> str:
         return (f"Not starting the job hunt: this month has used ${spent:.2f} of the "
                 f"${budget:.2f} API budget, and a run costs about ${estimate:.2f}. "
                 "It can run on the 1st, or now with a lower daily target.")
+    return ""
+
+
+def prepare_applications() -> str:
+    from core.career import pipeline
+    refusal = _over_budget()
+    if refusal:
+        return refusal
     if not pipeline.start_in_background(pipeline.prepare_batch):
         return "The pipeline is already running -- the batch will be ready when it finishes."
     return ("Preparing today's batch in the background: searching the boards and the Big 4 "
             "career sites, scoring each job, and drafting applications. It's done at half "
             "price, so it usually takes under an hour and at most a day; "
             f"review it at {pipeline.review_url()} when it's done.")
+
+
+def hunt_tonight() -> str:
+    """The AUTOMATIONS button: arm one job hunt for 02:00 tonight, or take it
+    back if it's already armed. Never repeats on its own."""
+    from core import scheduler
+    sched = scheduler.get_instance() or scheduler.ElFagerScheduler()
+    if hunt_armed():
+        sched.remove_job(HUNT_JOB_ID)
+        return "Tonight's job hunt is off."
+    refusal = _over_budget()
+    if refusal:
+        return refusal
+    now = datetime.now()
+    at = now.replace(hour=_HUNT_AT, minute=0, second=0, microsecond=0)
+    if at <= now:
+        at += timedelta(days=1)
+    sched.add_job({"id": HUNT_JOB_ID, "name": "Job hunt", "enabled": True,
+                   "trigger": {"type": "date", "run_date": at.isoformat()},
+                   "action": {"type": "tool", "tool": "run_job_hunt", "args": {}}})
+    return "Job hunt set for tonight at 2 AM. The batch is ready by morning."
+
+
+def hunt_armed() -> bool:
+    """A hunt set for a time still to come. One El Fager slept through (the PC
+    was off at 02:00) is left in the file but no longer counts."""
+    from core import scheduler
+    now = datetime.now().isoformat()
+    return any(j.get("id") == HUNT_JOB_ID and j["trigger"]["run_date"] > now
+               for j in scheduler._load_schedules())
+
+
+def run_job_hunt() -> str:
+    """What the scheduler runs at 02:00: replies first, then the hunt. Says
+    nothing at that hour -- the batch reports itself when it's ready, and a
+    run that can't start says why on his phone."""
+    from core.career import pipeline
+    try:    # Gmail being down mustn't stop the hunt
+        check_application_replies()
+    except Exception:
+        pass
+    said = prepare_applications()
+    if not said.startswith("Preparing"):
+        pipeline._notify(said)
+    return ""
 
 
 def review_applications() -> str:
@@ -44,9 +99,9 @@ def check_application_replies() -> str:
     return pipeline.check_replies()
 
 
-def import_cv(path: str) -> str:
+def import_cv(path: str, erp: bool = False) -> str:
     from core.career import profile
-    return profile.import_cv(path)
+    return profile.import_cv(path, erp=erp)
 
 
 def set_application_answer(question: str, answer: str) -> str:
@@ -59,13 +114,12 @@ def interview_prep(company: str, role: str = "") -> str:
     return interview.prep(company, role)
 
 
-def application_settings(live: "bool | None" = None, nightly: "bool | None" = None,
+def application_settings(live: "bool | None" = None,
                          daily_target: "int | None" = None, min_score: "int | None" = None,
                          linkedin_daily_cap: "int | None" = None,
                          big4_per_firm_per_month: "int | None" = None,
                          referrals_per_day: "int | None" = None) -> str:
     from core.career import profile, store
-    notes = []
     if live and not profile.has_cv():
         return "Error: import your CV first (say 'import my CV from <path>') -- live mode sends it."
     changes = {k: v for k, v in {
@@ -73,37 +127,11 @@ def application_settings(live: "bool | None" = None, nightly: "bool | None" = No
         "linkedin_daily_cap": linkedin_daily_cap,
         "big4_per_firm_per_month": big4_per_firm_per_month,
         "referrals_per_day": referrals_per_day}.items() if v is not None}
-    if nightly is not None:
-        notes.append(_set_nightly(nightly))
     s = store.update_settings(**changes)
     mode = "LIVE -- approved applications are sent" if s["live"] else "practice -- nothing is sent"
-    notes.insert(0, (f"Mode: {mode}. Daily target {s['daily_target']}, minimum score "
-                     f"{s['min_score']}, LinkedIn cap {s['linkedin_daily_cap']}/day, "
-                     f"Big 4 cap {s['big4_per_firm_per_month']} per firm per month. "
-                     f"Nightly job hunt: {'on' if s['nightly_task_id'] else 'off'}."))
-    return " ".join(n for n in notes if n)
-
-
-def _set_nightly(on: bool) -> str:
-    from core.autonomous_tasks import AutonomousTaskManager
-    from core.career import store
-    tasks = AutonomousTaskManager()
-    current = store.settings()["nightly_task_id"]
-    if on:
-        if current:
-            return ""
-        now = datetime.now()
-        nxt = now.replace(hour=_NIGHTLY_AT, minute=0, second=0, microsecond=0)
-        if nxt <= now:
-            nxt += timedelta(days=1)
-        task = tasks.add(_NIGHTLY_TASK, delay_hours=(nxt - now).total_seconds() / 3600,
-                         recurring_hours=24)
-        store.update_settings(nightly_task_id=task["id"])
-        return f"Nightly job hunt on: every night at {_NIGHTLY_AT:02d}:00."
-    if current:
-        tasks.delete(current)
-        store.update_settings(nightly_task_id="")
-    return "Nightly job hunt off."
+    return (f"Mode: {mode}. Daily target {s['daily_target']}, minimum score "
+            f"{s['min_score']}, LinkedIn cap {s['linkedin_daily_cap']}/day, "
+            f"Big 4 cap {s['big4_per_firm_per_month']} per firm per month.")
 
 
 def graduate_programmes(check: bool = False) -> str:

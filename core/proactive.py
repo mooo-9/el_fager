@@ -365,12 +365,14 @@ class ProactiveEngine:
             return
         try:
             from core.career import programmes, referrals, tracker
-            ready = len(tracker.with_status("ready"))
+            # New drafts only: the ones Mo left unsent stay saved, not nagged about.
+            ready = len([a for a in tracker.reached_status_since(
+                "ready", datetime.now() - timedelta(days=1)) if a["status"] == "ready"])
             soon = programmes.closing_soon()
             pending = len(referrals.to_send())
             parts = []
             if ready:
-                parts.append(f"{ready} job applications are ready for your review")
+                parts.append(f"{ready} new job applications are ready for your review")
             for p in soon[:2]:
                 parts.append(f"{p['name']} closes in {programmes.days_left(p)} days")
             if pending:

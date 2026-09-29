@@ -4472,11 +4472,12 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Read Mo's CV (a PDF or Word file path) into the profile the job applications "
             "are scored and written from, and the file they attach. Use when he says "
-            "'import my CV from ...' or 'my new CV is at ...'."
+            "'import my CV from ...' or 'my new CV is at ...'. erp=true for his ERP CV, "
+            "used for ERP roles (SAP, Odoo, Dynamics...)."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"path": {"type": "string"}},
+            "properties": {"path": {"type": "string"}, "erp": {"type": "boolean"}},
             "required": ["path"]
         }
     },
@@ -4502,8 +4503,7 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Show or change the job-application settings; with no input it shows them. "
             "live=true sends approved applications for real (needs his CV imported), "
-            "live=false is practice mode. nightly=true prepares a batch every night at "
-            "02:00. daily_target, min_score (0-100), linkedin_daily_cap and "
+            "live=false is practice mode. daily_target, min_score (0-100), linkedin_daily_cap and "
             "big4_per_firm_per_month and referrals_per_day are numbers. Change only what "
             "Mo asked to change."
         ),
@@ -4511,7 +4511,6 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "live": {"type": "boolean"},
-                "nightly": {"type": "boolean"},
                 "daily_target": {"type": "integer"},
                 "min_score": {"type": "integer"},
                 "linkedin_daily_cap": {"type": "integer"},
@@ -5182,8 +5181,8 @@ _UNSEEN_CONFIRM = (
     "be confirmed in the same turn it was staged. Do not tell Mo it was sent. "
     "Tell him the draft is ready and ask him to say yes."
 )
-# Approving the job-application batch sends it under Mo's name. The nightly
-# job hunt runs as a background turn: it prepares the batch, only Mo approves.
+# Approving the job-application batch sends it under Mo's name. A job hunt
+# may run as a background turn: it prepares the batch, only Mo approves.
 _MO_ONLY_TOOLS = frozenset({"approve_applications"})
 _BACKGROUND_REFUSAL = (
     "NOT APPROVED — only Mo can approve applications, in his own conversation "

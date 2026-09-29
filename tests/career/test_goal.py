@@ -151,11 +151,15 @@ class TestMorningNudge:
 
     def test_says_what_is_waiting_once_a_morning(self, monkeypatch, tmp_path):
         engine, said, remote = self._engine(monkeypatch, tmp_path)
-        tracker.add({"url": "u", "title": "A", "status": "ready"})
+        tracker.add({"url": "u", "title": "A"})
+        tracker.update(tracker.job_id("u"), "ready", "drafted")
+        # One he left unsent days ago stays saved, not nagged about.
+        tracker.add({"url": "old", "title": "B", "status": "ready", "events": [
+            {"at": "2026-01-01T02:00:00", "status": "ready", "note": "drafted"}]})
         store.save("programmes.json", {"a": _programme("a", deadline=_in(2))})
         engine._check_job_hunt()
         engine._check_job_hunt()
-        assert said == ["Mo, 1 job applications are ready for your review; "
+        assert said == ["Mo, 1 new job applications are ready for your review; "
                         "a programme closes in 2 days."]
         assert remote == [True]
 

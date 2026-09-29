@@ -2,7 +2,7 @@
 
 Statuses, in order:
   skipped    scored too low, over a cap, or Mo unticked it
-  ready      drafted, waiting for Mo's morning review
+  ready      drafted, waiting for Mo; stays saved until he sends or skips it
   approved   Mo approved it; queued to send
   practice   approved in practice mode: nothing was sent
   applied    sent

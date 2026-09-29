@@ -44,11 +44,15 @@ class TestModels:
         ("Nestlé Egypt", "claude-opus-5"),
         ("Fawry", "claude-sonnet-5"), ("Vodafone Egypt", "claude-sonnet-5"),
         ("Some Startup", "claude-sonnet-5"), ("", "claude-sonnet-5")])
-    def test_scoring_and_letters(self, company, model):
+    def test_scoring(self, company, model):
         job = {"title": "Analyst", "company": company}
         assert _batch_models_used(lambda: scorer.score_all([job], "profile")) == {model}
-        assert _batch_models_used(
-            lambda: tailor.draft_all([{**job, "channel": "email"}], "profile")) == {model}
+
+    @pytest.mark.parametrize("tier,model", [
+        ("big4", "claude-opus-5"), ("top", "claude-sonnet-5"), ("", "claude-sonnet-5")])
+    def test_only_the_big4_get_their_letters_from_opus(self, tier, model):
+        job = {"title": "Analyst", "company": "IBM Egypt", "tier": tier, "channel": "email"}
+        assert _batch_models_used(lambda: tailor.draft_all([job], "profile")) == {model}
 
     def test_interview_prep_for_a_big4_firm_uses_opus(self):
         with patch("core.agents.research_agent.ResearchAgent.run", return_value=""):

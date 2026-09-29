@@ -5,8 +5,8 @@ import time
 
 MODEL = "claude-sonnet-5"
 # The Big 4, and the companies Mo picked ("opus" in companies.json), are the
-# goal: scoring, letters, interview prep and referral notes aimed at them get
-# the stronger model.
+# goal: scoring, interview prep and referral notes aimed at them get the
+# stronger model. Cover letters get it for the Big 4 only (tailor.py).
 PREMIUM_MODEL = "claude-opus-5"
 
 _client = None

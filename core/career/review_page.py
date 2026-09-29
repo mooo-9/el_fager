@@ -1,5 +1,6 @@
-"""The morning review: the night's drafted applications on one page, all
-ticked. Mo unticks what he doesn't want and approves the rest with one click.
+"""The morning review: every drafted application not yet sent, on one page,
+none ticked. Mo ticks the ones to send and presses Send; the rest stay saved
+here, letters and all, for him to send another day.
 Served by the dashboard at /jobs; the batch itself comes from /api/jobs with
 the dashboard token, so the drafts aren't readable without it."""
 from core.career import companies, pipeline, profile, programmes, referrals, store
@@ -17,6 +18,8 @@ def batch_json() -> dict:
             "missing": a.get("missing", []), "channel": a["channel"], "url": a["url"],
             "location": a.get("location", ""), "to": a.get("hr_email", ""),
             "subject": a["draft"]["subject"], "body": a["draft"]["body"],
+            "drafted": next((e["at"][:10] for e in reversed(a.get("events", []))
+                             if e["status"] == "ready"), ""),
         } for a in pipeline.ready_batch()],
         "tiers": list(companies.TIER_RANK),
         "closing": [{"name": p["name"], "days": programmes.days_left(p), "url": p["url"]}
@@ -88,7 +91,7 @@ __TOKENS__
 <div id="list"></div>
 <div id="refs"></div>
 <div class="bar"><span class="msg" id="msg"></span>
- <button class="go" id="go" onclick="approve()" disabled>Approve</button></div>
+ <button class="go" id="go" onclick="approve()" disabled>Send</button></div>
 <script>
 let data=null, filter='all';
 const $=id=>document.getElementById(id);
@@ -101,13 +104,13 @@ function token(){
 async function load(){
  const r=await fetch('/api/jobs',{headers:{'Authorization':'Bearer '+token()}});
  if(r.status===401){localStorage.removeItem('elf_token');$('head').textContent='Wrong token — reload to try again';return;}
- data=await r.json(); data.apps.forEach(a=>a.on=true); render();
+ data=await r.json(); data.apps.forEach(a=>a.on=false); render();
 }
 const CH={email:'email with CV',wuzzuf:'Wuzzuf apply',linkedin:'LinkedIn Easy Apply',site:'form — you press Submit'};
 function render(){
  const n=data.apps.length;
- $('head').textContent=n?`${n} applications to review`:'Nothing to review';
- $('sub').textContent=n?'Everything is ticked. Untick what you don’t want, then approve the rest.':'';
+ $('head').textContent=n?`${n} applications ready`:'Nothing to review';
+ $('sub').textContent=n?'Tick the ones to send, then press Send. The rest stay saved here for another day.':'';
  let b='';
  data.closing.forEach(p=>{b+=`<div class="banner hot"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> closes in ${p.days} day${p.days===1?'':'s'}. Apply on their site.</div>`;});
  if(data.mode==='practice')b+='<div class="banner">Practice mode: approving marks these as practice runs. Nothing is sent until your CV is imported and you switch to live.</div>';
@@ -122,15 +125,15 @@ function render(){
   <input type="checkbox" ${a.on?'checked':''} onchange="flip('${a.id}',this.checked)">
   <div class="main">
    <div class="t"><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>${a.tier==='big4'?'<span class="badge">Big 4</span>':a.tier==='top'?'<span class="badge">Top</span>':''}</div>
-   <div class="meta">${esc(a.company)}${a.location?' · '+esc(a.location):''} · <span class="score">${a.score}</span>/100 · ${esc(CH[a.channel]||a.channel)}${a.to?' → '+esc(a.to):''}</div>
+   <div class="meta">${esc(a.company)}${a.location?' · '+esc(a.location):''} · <span class="score">${a.score}</span>/100 · ${esc(CH[a.channel]||a.channel)}${a.to?' → '+esc(a.to):''}${a.drafted?' · drafted '+esc(a.drafted):''}</div>
    <div class="fit">${esc(a.fit)}</div>
    ${a.missing.length?`<div class="gap">They ask for: ${esc(a.missing.join('; '))}</div>`:''}
    <details><summary>Read the ${a.channel==='email'?'email':'cover letter'}</summary><pre>${esc(a.subject)}\n\n${esc(a.body)}</pre></details>
-  </div></div>`).join(''):'<div class="empty">The next batch is prepared overnight.</div>';
+  </div></div>`).join(''):'<div class="empty">Nothing saved. Press RUN on Job hunt in the Command Center’s AUTOMATIONS; the batch is ready by morning.</div>';
  renderRefs();
  const k=data.apps.filter(a=>a.on).length;
- $('go').disabled=!n; $('go').textContent=`Approve ${k}`;
- $('msg').textContent=n?`${n-k} will be skipped`:'';
+ $('go').disabled=!k; $('go').textContent=k?`Send ${k}`:'Send';
+ $('msg').textContent=n?`${n-k} stay saved`:'';
 }
 function renderRefs(){
  const r=data.referrals;
@@ -161,11 +164,11 @@ async function markRef(id,status){
 function flip(id,on){data.apps.find(a=>a.id===id).on=on;render();}
 function tick(on){data.apps.filter(a=>filter==='all'||a.tier===filter).forEach(a=>a.on=on);render();}
 async function approve(){
- $('go').disabled=true; $('msg').textContent='Approving…';
- const skip=data.apps.filter(a=>!a.on).map(a=>a.id);
+ $('go').disabled=true; $('msg').textContent='Sending…';
+ const only=data.apps.filter(a=>a.on).map(a=>a.id);
  const r=await fetch('/api/jobs_approve',{method:'POST',
-   headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:JSON.stringify({skip})});
- const j=await r.json(); data.apps=[]; render(); $('msg').textContent=j.result||j.error||'Done';
+   headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},body:JSON.stringify({only})});
+ const j=await r.json(); if(j.ok)data.apps=data.apps.filter(a=>!a.on); render(); $('msg').textContent=j.result||j.error||'Done';
 }
 load();
 </script></body></html>"""

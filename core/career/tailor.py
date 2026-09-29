@@ -44,31 +44,38 @@ _CHECK_SYSTEM = (
 )
 
 
-def draft_all(jobs: list, profile_text: str) -> list:
+def draft_all(jobs: list, profile_text) -> list:
     """{"subject", "body"} for each job (by its "channel"), in order, checked
     against the profile; None where Claude declined either step. The letters
-    go as one batch, then their checks as a second."""
+    go as one batch, then their checks as a second. `profile_text` is the
+    profile, or a function giving each job's (Mo's ERP CV for ERP roles)."""
     from core.career import claude
+    texts = [profile_text(job) if callable(profile_text) else profile_text for job in jobs]
     models, letter_asks = [], []
-    for job in jobs:
+    for job, ptext in zip(jobs, texts):
         shape = _SHAPE["email" if job.get("channel") == "email" else "form"]
         firm_note = ""
         if job.get("tier") == "big4":
             firm_note = ("\nThis is a Big 4 firm: name the service line the role belongs to "
                          "and why that line, in one sentence.")
-        models.append(claude.model_for(job.get("company_key") or job.get("company", "")))
+        # Opus writes only the Big 4's letters (Mo's call, for cost); Sonnet the rest.
+        models.append(claude.PREMIUM_MODEL if job.get("tier") == "big4" else claude.MODEL)
         letter_asks.append({
-            "prompt": (f"{shape}{firm_note}\n\nHis profile:\n{profile_text}\n\n"
+            "prompt": (f"{shape}{firm_note}\n\nHis profile:\n{ptext}\n\n"
                        f"Job: {job['title']} at {job.get('company') or 'the company'}\n\n"
                        f"Posting:\n{job.get('description') or '(not available)'}"),
-            "system": _SYSTEM, "schema": _SCHEMA, "effort": "medium", "model": models[-1],
+            # High effort: Mo checks these in the morning and wants them right, not
+            # fast. The room is for thinking; only what's used is billed.
+            "system": _SYSTEM, "schema": _SCHEMA, "effort": "high", "max_tokens": 16000,
+            "model": models[-1],
         })
     letters = claude.ask_batch(letter_asks)
     written = [i for i, letter in enumerate(letters) if letter is not None]
     checked = claude.ask_batch([{
-        "prompt": (f"His profile:\n{profile_text}\n\nThe letter:\n"
+        "prompt": (f"His profile:\n{texts[i]}\n\nThe letter:\n"
                    f"Subject: {letters[i]['subject']}\n\n{letters[i]['body']}"),
-        "system": _CHECK_SYSTEM, "schema": _SCHEMA, "effort": "low", "model": models[i],
+        "system": _CHECK_SYSTEM, "schema": _SCHEMA, "effort": "high", "max_tokens": 16000,
+        "model": models[i],
     } for i in written])
     out: list = [None] * len(jobs)
     for i, letter in zip(written, checked):

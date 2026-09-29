@@ -45,20 +45,23 @@ def hr_email(text: str) -> str:
     return ""
 
 
-def score_all(jobs: list, profile_text: str) -> list:
+def score_all(jobs: list, profile_text) -> list:
     """{"score", "fit", "missing", "level", "in_egypt"} for each job, in order,
     asked as one batch. The posting's own text is used when it was read;
-    otherwise the title decides."""
+    otherwise the title decides. `profile_text` is the profile, or a function
+    giving each job's (Mo's ERP CV for ERP roles)."""
     from core.career import claude
     asks = []
     for job in jobs:
         posting = job.get("description") or "(posting text unavailable -- judge from the title)"
+        ptext = profile_text(job) if callable(profile_text) else profile_text
         asks.append({
             "prompt": (f"Today is {date.today().isoformat()}.\n\n"
-                       f"Candidate profile:\n{profile_text}\n\n"
+                       f"Candidate profile:\n{ptext}\n\n"
                        f"Job: {job['title']} at {job.get('company') or 'unknown company'}, "
                        f"{job.get('location') or 'Egypt'}\n\nPosting:\n{posting}"),
-            "system": _SYSTEM, "schema": _SCHEMA, "effort": "low", "max_tokens": 4000,
+            # Mo would rather wait than miss a good job: batched, medium costs little.
+            "system": _SYSTEM, "schema": _SCHEMA, "effort": "medium", "max_tokens": 8000,
             "model": claude.model_for(job.get("company_key") or job.get("company", "")),
         })
     out = []

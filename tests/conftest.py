@@ -77,6 +77,15 @@ def _no_real_career_sites(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_schedules(monkeypatch, tmp_path):
+    """Mo's scheduled jobs (and tonight's job hunt, armed from the AUTOMATIONS
+    panel) live in data/schedules.json. A test must never arm or drop his."""
+    from core import scheduler
+    monkeypatch.setattr(scheduler, "_SCHEDULES_FILE", tmp_path / "schedules.json")
+    monkeypatch.setattr(scheduler, "_HISTORY_FILE", tmp_path / "schedule_history.jsonl")
+
+
+@pytest.fixture(autouse=True)
 def _isolated_career(monkeypatch, tmp_path):
     """Mo's CV profile, his applications and the pipeline's settings live in
     data/career/. A test's fake batch must never land in his morning review."""

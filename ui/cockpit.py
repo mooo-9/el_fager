@@ -471,12 +471,14 @@ def _clock(moment: datetime) -> str:
 
 
 def _automation_rows(schedules: list, history: list, tasks: list,
-                     skills: list, now: datetime) -> list:
+                     skills: list, now: datetime, hunting: bool = False) -> list:
     """Everything El Fager does without being asked, in two groups:
 
     scheduled — the scheduler's jobs and any skill put on a timer, soonest
     first, paused ones last; a skill that only runs on request is not an
     automation, so it stays off the list.
+    on request — the job hunt: armed by Mo for tonight only, never a timer;
+                 `hunting` while its batch is being prepared.
     watching  — the proactive engine's checks, in the order it runs them.
 
     Each row is {name, when, detail, state, run, kind}; state is ok, failed,
@@ -511,8 +513,12 @@ def _automation_rows(schedules: list, history: list, tasks: list,
     for entry in history:          # oldest first, so the newest run wins
         latest[entry.get("job_id")] = entry
 
-    rows = []
+    from tools.career_tool import HUNT_JOB_ID
+    rows, hunt = [], None
     for job in schedules:
+        if job.get("id") == HUNT_JOB_ID:      # shown as the ON REQUEST row
+            hunt = job
+            continue
         trigger = job.get("trigger") or {}
         kind = trigger.get("type")
         nxt = None
@@ -555,6 +561,19 @@ def _automation_rows(schedules: list, history: list, tasks: list,
     rows.sort(key=lambda r: (r["state"] == "paused", r["_next"] is None, r["_next"] or now))
     for r in rows:
         del r["_next"]
+
+    # Takes hours (half-price batches), so it runs overnight and is read in the
+    # morning; it only prepares, nothing is sent until Mo ticks it and sends.
+    if hunting:
+        when, detail, run = "RUNNING", "Searching and drafting · ready by morning", None
+    elif hunt and (at := local((hunt.get("trigger") or {}).get("run_date"))) and at > now:
+        when, detail, run = _clock(at), "Tonight only · press again to cancel", ("job_hunt", "job_hunt")
+    else:
+        hunt = None     # never armed, or armed for a night El Fager slept through
+        when, detail, run = "", "Press RUN · hunts tonight at 2 AM", ("job_hunt", "job_hunt")
+    rows.append({"name": "Job hunt", "when": when, "detail": detail, "state": "ok",
+                 "run": run, "kind": "on_request",
+                 **({"action": "CANCEL"} if hunt and not hunting else {})})
 
     from core.proactive import WATCHES
     for watch in WATCHES:
@@ -655,7 +674,7 @@ class _AutoRow(QWidget):
             1.0))
         grid.addWidget(self._when, 0, 2, Qt.AlignmentFlag.AlignRight)
 
-        self._run_btn = QPushButton("RUN")
+        self._run_btn = QPushButton(auto.get("action", "RUN"))
         self._run_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._run_btn.setStyleSheet(
             f"QPushButton {{ {_mono(9, tokens.EMBER, 1.6)}"
@@ -1512,7 +1531,8 @@ class CockpitWindow(QWidget):
 
     # ── The panel's two lists ─────────────────────────────────────────────
 
-    _HEADINGS = {"scheduled": "SCHEDULED", "watching": "WATCHING",
+    _HEADINGS = {"scheduled": "SCHEDULED", "on_request": "ON REQUEST",
+                 "watching": "WATCHING",
                  "taught": "TAUGHT SKILLS", "routine": "ROUTINES",
                  "app": "CONNECTED APPS"}
 
@@ -1567,7 +1587,7 @@ class CockpitWindow(QWidget):
             )
             self._auto_list.addWidget(empty)
         if not skills_tab:
-            on = sum(1 for r in rows if r["state"] != "paused")
+            on = sum(1 for r in rows if r["state"] != "paused" and r["kind"] != "on_request")
             self._auto_count.setText(f"{on} ON" if on else "")
 
     def _run_automation(self, auto: dict):
@@ -1577,6 +1597,14 @@ class CockpitWindow(QWidget):
         kind, key = auto["run"]
         if kind == "skill":
             self._start_pipeline(text_input=f"Run my skill '{key}'.")
+            return
+        if kind == "job_hunt":          # arms or cancels tonight's hunt: quick
+            from tools import career_tool
+            said = career_tool.hunt_tonight()
+            if said.startswith("Not starting"):
+                from core.notifier import get_notifier
+                get_notifier().send(said)
+            self._refresh_panel_list()
             return
         if key in self._running:
             return
@@ -1608,6 +1636,7 @@ class CockpitWindow(QWidget):
         try:
             from zoneinfo import ZoneInfo
             from core import autonomous_tasks, scheduler
+            from core.career import pipeline
             history = []
             if scheduler._HISTORY_FILE.exists():
                 for line in scheduler._HISTORY_FILE.read_text(encoding="utf-8").splitlines():
@@ -1618,7 +1647,8 @@ class CockpitWindow(QWidget):
             return _automation_rows(
                 scheduler._load_schedules(), history,
                 autonomous_tasks.AutonomousTaskManager().list_all(),
-                _skill_list(), datetime.now(ZoneInfo(scheduler._TZ)))
+                _skill_list(), datetime.now(ZoneInfo(scheduler._TZ)),
+                hunting=pipeline._busy.locked())
         except Exception:
             return []
 

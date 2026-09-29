@@ -961,9 +961,13 @@ class _Handler(BaseHTTPRequestHandler):
 
         if self.path == "/api/jobs_approve":
             from core.career import pipeline
-            skip = [str(i) for i in payload.get("skip", [])]
+            # Only what Mo ticked is sent; the rest stays saved on the page.
+            only = [str(i) for i in payload.get("only", [])]
+            if not only:
+                self._json(400, {"ok": False, "error": "Tick at least one application."})
+                return
             try:
-                self._json(200, {"ok": True, "result": pipeline.approve(skip=skip)})
+                self._json(200, {"ok": True, "result": pipeline.approve(only=only)})
             except Exception as e:
                 self._json(500, {"ok": False, "error": str(e)[:120]})
             return
