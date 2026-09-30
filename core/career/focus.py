@@ -21,6 +21,9 @@ def status_line() -> str:
             parts.append(f"{needs_you} forms waiting for him to press Submit in Comet")
         for p in programmes.closing_soon()[:2]:
             parts.append(f"{p['name']} closes in {programmes.days_left(p)} days")
+        follow = len(tracker.follow_ups_due())
+        if follow:
+            parts.append(f"{follow} applications due a follow-up")
         pending = len(referrals.to_send())
         if pending:
             parts.append(f"{pending} referral notes to send")

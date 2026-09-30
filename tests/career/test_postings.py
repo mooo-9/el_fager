@@ -24,6 +24,24 @@ class TestEachSourcesText:
             "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4301"
         assert text == "Build SQL reports."
 
+    def test_a_closed_linkedin_job_says_so(self):
+        page = ('<figure class="closed-job"><figcaption class="closed-job__flavor--closed">'
+                'No longer accepting applications</figcaption></figure>')
+        with patch.object(sources, "_get_text", return_value=page):
+            text = postings.text("https://eg.linkedin.com/jobs/view/x-4301")
+        assert text == "No longer accepting applications"
+
+    @pytest.mark.parametrize("status,closed", [(404, True), (410, True), (403, False)])
+    def test_a_posting_its_source_says_is_gone_reads_as_closed(self, status, closed):
+        """Gone is 404 or 410; a 403 is a block, not a closed job."""
+        import httpx
+        from core.career import liveness
+        err = httpx.HTTPStatusError("x", request=httpx.Request("GET", "https://x"),
+                                    response=httpx.Response(status))
+        with patch.object(sources, "_get_text", side_effect=err):
+            text = postings.text("https://eg.linkedin.com/jobs/view/x-4301")
+        assert liveness.closed(text) is closed
+
     def test_workday_reads_the_job_behind_its_page(self):
         detail = {"jobPostingInfo": {"jobDescription": _html("Train AI models.")}}
         with patch.object(sources, "_get_json", return_value=detail) as get:

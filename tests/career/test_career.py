@@ -160,6 +160,14 @@ class TestScorer:
         assert "within the next 3 months" in system and "fresh graduate" in system
 
 
+class TestRubric:
+    def test_career_ops_rules_reach_every_score(self):
+        """The condensed career-ops guide rides along with the scoring prompt."""
+        assert "Only **stated** and **structural** gaps" in scorer._SYSTEM
+        assert "1 year or 1.5 years is entry, never mid" in scorer._SYSTEM
+        assert len(scorer._SYSTEM) < 8000      # ~1.1k tokens, not career-ops' 27k
+
+
 class TestLetters:
     """The first practice run's letters stated real facts more strongly than
     the CV ("used Python" became "built pipelines", "Excellent or Above
@@ -321,6 +329,17 @@ class TestPrepareBatch:
         assert len(skipped) == 2
         assert skipped[0]["events"][-1]["note"] == "asks for 5+ years"
 
+    def test_closed_postings_are_skipped_before_scoring(self):
+        """A closed job costs a scoring call and a slot, and can't be applied to."""
+        jobs = [_job("Data Analyst", "Co", "https://www.linkedin.com/jobs/view/1", score=70,
+                     description="No longer accepting applications. Build SQL reports."),
+                _job("Data Analyst", "Co", "https://www.linkedin.com/jobs/view/2", score=70,
+                     description="Build SQL reports. Fresh graduates welcome.")]
+        _, scored = self._run(jobs, daily_target=1)
+        assert scored == ["https://www.linkedin.com/jobs/view/2"]
+        (skipped,) = tracker.with_status("skipped")
+        assert skipped["events"][-1]["note"] == "posting closed"
+
     def test_target_firms_and_everyone_else_share_the_scoring_slots(self):
         """Top firms went first, so in the first practice run not one Wuzzuf
         or LinkedIn data analyst job was scored. They take turns now."""
@@ -371,6 +390,52 @@ class TestPrepareBatch:
         _seed(_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1"))
         _, scored = self._run([_job("Analyst", "Co", "https://wuzzuf.net/jobs/p/1")])
         assert scored == []
+
+
+class TestEvaluateOne:
+    """A job link Mo found himself, judged on the spot (career-ops' "paste a job")."""
+    URL = "https://www.linkedin.com/jobs/view/data-analyst-at-valeo-77"
+
+    @pytest.fixture(autouse=True)
+    def _cv(self, tmp_path):
+        cv = tmp_path / "cv.pdf"
+        cv.write_bytes(b"%PDF")
+        profile.save({"cv_path": str(cv)})
+
+    def _fit(self, score):
+        return {"score": score, "fit": "SQL and Power BI match.", "missing": ["Tableau"],
+                "level": "entry", "in_egypt": True, "title": "Data Analyst",
+                "company": "Valeo Egypt"}
+
+    def test_a_fit_waits_for_the_next_job_hunt(self):
+        with patch.object(scorer, "read_description", return_value="Build SQL reports."), \
+             patch.object(scorer, "score_link", return_value=self._fit(80)):
+            out = pipeline.evaluate_one(self.URL)
+        assert out.startswith("Data Analyst at Valeo Egypt: 80/100.")
+        assert "Tableau" in out and "Worth applying" in out
+        (app,) = tracker.with_status("waiting")
+        assert app["company_key"] == "Valeo" and app["tier"] == "top"
+
+    def test_a_weak_fit_is_not_worth_sending(self):
+        with patch.object(scorer, "read_description", return_value="Build SQL reports."), \
+             patch.object(scorer, "score_link", return_value=self._fit(30)):
+            out = pipeline.evaluate_one(self.URL)
+        assert "Not worth sending: score 30 below 60." in out
+        assert tracker.with_status("skipped")
+
+    def test_a_closed_posting_is_not_scored(self):
+        with patch.object(scorer, "read_description",
+                          return_value="No longer accepting applications"), \
+             patch.object(scorer, "score_link") as score:
+            assert "closed" in pipeline.evaluate_one(self.URL)
+        score.assert_not_called()
+
+    def test_a_job_already_judged_is_not_scored_again(self):
+        tracker.add({"url": self.URL, "title": "Data Analyst", "company": "Valeo",
+                     "score": 75, "fit": "Good.", "status": "ready"})
+        with patch.object(scorer, "score_link") as score:
+            assert pipeline.evaluate_one(self.URL).startswith("Already judged")
+        score.assert_not_called()
 
 
 class TestApprove:
@@ -536,6 +601,34 @@ class TestReplies:
         assert "INTERVIEW: Analyst at Valeo" in first
         assert second == "No new replies from companies you applied to."
         notify.assert_called_once()
+
+
+class TestReplyStatus:
+    """career-ops' order: rejection, then automatic receipt, then interview."""
+    @pytest.mark.parametrize("text,status", [
+        ("Interview invitation: we'd like to invite you", "interview"),
+        ("Unfortunately we won't invite you to interview", "rejected"),
+        ("We will not be moving forward with your application", "rejected"),
+        ("Thank you for applying! If shortlisted we'll invite you to interview.", ""),
+        ("We received your application for Data Analyst", ""),
+        ("Quick question about your availability", "replied"),
+    ])
+    def test_reply_status(self, text, status):
+        assert pipeline._reply_status(text) == status
+
+    def test_a_receipt_keeps_the_application_waiting_for_its_follow_up(self):
+        (a,) = _seed(_job("Analyst", "Valeo", "https://wuzzuf.net/jobs/p/1", status="applied"))
+        service = TestReplies()._service([
+            {"id": "m9", "from": "Valeo Careers", "subject": "Thank you for applying",
+             "snippet": "Our team will review it and contact you for an interview"}])
+        with patch("tools.gmail_tool.GMAIL_AVAILABLE", True), \
+             patch("tools.gmail_tool.get_gmail_service", return_value=service), \
+             patch.object(pipeline, "_notify") as notify:
+            out = pipeline.check_replies()
+        assert out == "No new replies from companies you applied to."
+        assert tracker.all_apps()[a["id"]]["status"] == "applied"
+        assert tracker.all_apps()[a["id"]]["reply_ids"] == ["m9"]
+        notify.assert_not_called()
 
 
 class TestStatus:
@@ -787,3 +880,18 @@ class TestRepliesAfterAnInterview:
             pipeline.check_replies()
         app = tracker.all_apps()[a["id"]]
         assert app["status"] == "interview" and app["reply_ids"] == ["m3"]
+
+
+class TestAtsCheck:
+    """What a hiring system reading the CV's text would miss (career-ops' ATS check)."""
+    GOOD = ("Mohamed Ali\nmo@example.com\nEDUCATION\nGUC, Business Informatics\n"
+            "Work Experience\nQuadraTech intern\nTechnical Skills:\nSQL, Power BI\n")
+
+    def test_a_readable_cv_passes(self):
+        assert profile.ats_problems(self.GOOD) == []
+
+    def test_missing_headings_and_email_are_named(self):
+        text = "Mohamed Ali\nI studied at GUC and know SQL.\nMy experience is at QuadraTech."
+        assert profile.ats_problems(text) == [
+            "no 'Experience' heading", "no 'Education' heading", "no 'Skills' heading",
+            "no email address in its text"]

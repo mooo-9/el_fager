@@ -4540,6 +4540,57 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {"type": "object", "properties": {"company": {"type": "string"}}}
     },
     {
+        "name": "skill_gaps",
+        "description": (
+            "What the jobs El Fager scored keep asking for that Mo's CV doesn't show, most "
+            "asked first, with how many jobs asked. Use for 'what should I learn', 'what "
+            "skills am I missing', 'why am I not a fit'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "evaluate_job",
+        "description": (
+            "Judge one job posting Mo found himself, from its link: whether it's still "
+            "open, its fit score against his CV, what it asks that he lacks, and whether "
+            "it's worth applying. A fit is saved and gets its letter in the next job hunt. "
+            "Use for 'is this job worth it: <link>', 'check this posting'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"url": {"type": "string"}},
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "mark_followed_up",
+        "description": (
+            "Record that Mo followed up on a sent application (email to HR, or a message "
+            "to the recruiter or his contact there). app_id comes from application_status, "
+            "which lists the follow-ups due: a week after sending, then once more a week "
+            "later. Use for 'I followed up with Valeo'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"app_id": {"type": "string"}},
+            "required": ["app_id"]
+        }
+    },
+    {
+        "name": "import_linkedin_connections",
+        "description": (
+            "Import Mo's LinkedIn connections export (Connections.csv: LinkedIn Settings > "
+            "Data privacy > Get a copy of your data > Connections). Keeps only the people "
+            "at target companies; find_referrals then asks them first, before strangers. "
+            "Use for 'import my LinkedIn connections in my Downloads'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"]
+        }
+    },
+    {
         "name": "referral_list",
         "description": (
             "The referral notes waiting for Mo to send (id, person, company, profile link), "
@@ -4569,7 +4620,10 @@ TOOLS: list[dict[str, Any]] = [
             "Write an interview prep sheet for a company (and role if known): their "
             "interview stages, likely questions with answers drawn from Mo's CV, questions "
             "to ask, what to revise. Use for 'prepare me for my interview at X'. Then offer "
-            "to quiz him on the questions one at a time."
+            "a practice interview: play their interviewer and ask one question at a time, "
+            "with one follow-up when an answer is thin or strong. After each answer: what "
+            "landed, what to sharpen, and a stronger opening built only from his CV; say "
+            "so when he reuses the same story for a second question."
         ),
         "input_schema": {
             "type": "object",
@@ -4933,6 +4987,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "approve_applications", "application_status", "check_application_replies",
         "import_cv", "set_application_answer", "application_settings", "interview_prep",
         "graduate_programmes", "find_referrals", "referral_list", "mark_referral",
+        "import_linkedin_connections", "mark_followed_up", "evaluate_job", "skill_gaps",
     }),
 }
 
@@ -6651,7 +6706,9 @@ class Brain:
                           "approve_applications", "application_status",
                           "check_application_replies", "import_cv", "set_application_answer",
                           "application_settings", "interview_prep", "graduate_programmes",
-                          "find_referrals", "referral_list", "mark_referral"):
+                          "find_referrals", "referral_list", "mark_referral",
+                          "import_linkedin_connections", "mark_followed_up",
+                          "evaluate_job", "skill_gaps"):
                 from tools import career_tool
                 return getattr(career_tool, name)(**tool_input)
             elif name == "learn_skill":

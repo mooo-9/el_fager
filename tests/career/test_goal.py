@@ -3,7 +3,7 @@ graduate programme deadlines, referrals, and the job hunt raised first."""
 import json
 import threading
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from unittest.mock import MagicMock, patch
 
@@ -99,7 +99,7 @@ class TestReferrals:
         assert again == "No new people found to ask for a referral."
         (ref,) = referrals.to_send()
         assert ref["role"] == "Technology Consulting Graduate"
-        assert len(ref["note"]) == 300                   # LinkedIn's cap
+        assert len(ref["note"]) == 200                   # LinkedIn's free-account cap
         assert "went to the same university" in ask.call_args.args[0]
 
     def test_companies_with_applications_in_play_come_first(self):
@@ -108,6 +108,33 @@ class TestReferrals:
         order = referrals._companies_in_play()
         assert order[0] == "Valeo"
         assert order[1:5] == ["Deloitte", "PwC", "EY", "KPMG"]
+
+    def test_connections_export_keeps_only_target_companies(self, tmp_path):
+        csv_file = tmp_path / "Connections.csv"
+        csv_file.write_text(
+            "Notes:\n\"When exporting your connection data, you may notice...\"\n\n"
+            "First Name,Last Name,URL,Email Address,Company,Position,Connected On\n"
+            "Sara,Ali,https://www.linkedin.com/in/sara,,PwC Middle East,Associate,01 Sep 2026\n"
+            "Omar,Adel,https://www.linkedin.com/in/omar,,Some Startup,CEO,02 Sep 2026\n",
+            encoding="utf-8")
+        out = referrals.import_connections(str(csv_file))
+        assert out.startswith("1 of your connections work at target companies: PwC.")
+        assert [p["name"] for p in referrals.connections_at("PwC")] == ["Sara Ali"]
+        assert referrals.import_connections(str(tmp_path / "nope.csv")).startswith("Error")
+
+    def test_a_connection_is_asked_before_strangers_and_needs_no_note(self):
+        store.save("connections.json", [{"name": "Sara Ali", "headline": "Associate",
+                                          "url": "https://www.linkedin.com/in/sara",
+                                          "company": "PwC", "alumni": False, "connected": True}])
+        stranger = {"name": "Ahmed Hassan", "headline": "Associate",
+                    "url": "https://www.linkedin.com/in/a", "company": "PwC", "alumni": True}
+        with patch.object(referrals, "search_people", return_value=[stranger]), \
+             patch("core.career.claude.ask", return_value={"note": "N", "message": "M"}) as ask:
+            out = referrals.find("PwC", count=1)
+        assert out.startswith("1 people to ask for a referral: Sara Ali (PwC)")
+        (ref,) = referrals.to_send()
+        assert ref["note"] == "" and ref["connected"]
+        assert "already one of his connections" in ask.call_args.args[0]
 
     def test_mark(self):
         store.save("referrals.json", {"r1": {"id": "r1", "name": "Ahmed", "company": "PwC",
@@ -137,6 +164,43 @@ class TestFocus:
         assert "Business Informatics graduate" in SYSTEM_PROMPT
         assert "interview at one of the biggest companies in Cairo" in SYSTEM_PROMPT
         assert "student" not in SYSTEM_PROMPT.split("Personality:")[0]
+
+
+class TestFollowUps:
+    """A sent application with no answer is followed up a week later, once
+    more a week after that, then let go (career-ops' cadence)."""
+    def _sent(self, url, days_ago, **fields):
+        at = (datetime.now() - timedelta(days=days_ago)).isoformat(timespec="seconds")
+        return tracker.add({"url": url, "title": "Analyst", "company": "Valeo",
+                            "status": "applied", "applied_at": at, **fields})
+
+    def test_due_a_week_after_sending(self):
+        old = self._sent("u1", 8)
+        self._sent("u2", 3)
+        tracker.add({"url": "u3", "title": "B", "company": "EY", "status": "interview",
+                     "applied_at": "2026-01-01T00:00:00"})
+        assert [a["id"] for a in tracker.follow_ups_due()] == [old["id"]]
+
+    def test_once_more_a_week_later_then_never(self):
+        app = self._sent("u1", 30)
+        tracker.mark_followed_up(app["id"])
+        assert tracker.follow_ups_due() == []
+        later = datetime.now() + timedelta(days=8)
+        assert [a["id"] for a in tracker.follow_ups_due(later)] == [app["id"]]
+        tracker.mark_followed_up(app["id"])
+        assert tracker.follow_ups_due(datetime.now() + timedelta(days=60)) == []
+
+    def test_raised_in_status_and_every_turn(self):
+        app = self._sent("u1", 8, hr_email="hr@valeo.com")
+        from core.career import pipeline
+        assert f"{app['id']}: Analyst at Valeo (email hr@valeo.com)" in pipeline.status_text()
+        assert "1 applications due a follow-up" in focus.status_line()
+
+    def test_mark_tool(self):
+        from tools import career_tool
+        app = self._sent("u1", 8)
+        assert career_tool.mark_followed_up(app["id"]).endswith("due in 7 days.")
+        assert career_tool.mark_followed_up("nope").startswith("Error")
 
 
 class TestMorningNudge:
@@ -172,7 +236,9 @@ class TestMorningNudge:
 class TestTools:
     def test_programmes_tool_and_referral_tools_are_wired(self):
         from core.brain import _SLIM_TOOLS, _TOOL_GROUP_NAMES, _select_tools
-        new = {"graduate_programmes", "find_referrals", "referral_list", "mark_referral"}
+        new = {"graduate_programmes", "find_referrals", "referral_list", "mark_referral",
+               "import_linkedin_connections", "mark_followed_up", "evaluate_job",
+               "skill_gaps"}
         assert new <= {t["name"] for t in _SLIM_TOOLS}
         assert new <= _TOOL_GROUP_NAMES["jobs"]
         assert "application_status" in {t["name"] for t in _select_tools("daily briefing please")}

@@ -27,6 +27,7 @@ def batch_json() -> dict:
         "referrals": [{
             "id": r["id"], "name": r["name"], "headline": r.get("headline", ""),
             "company": r["company"], "url": r["url"], "alumni": bool(r.get("alumni")),
+            "connected": bool(r.get("connected")),
             "role": r.get("role", ""), "note": r["note"], "message": r["message"],
         } for r in referrals.to_send()],
     }
@@ -138,14 +139,14 @@ function render(){
 function renderRefs(){
  const r=data.referrals;
  $('refs').innerHTML=r.length?`<h2>People who could refer you</h2>
-  <div class="sub">Send these yourself on LinkedIn: connect with the note, then send the message once they accept.</div>`+
+  <div class="sub">Send these yourself on LinkedIn: connect with the note, then send the message once they accept. Your connections need only the message.</div>`+
   r.map(p=>`<div class="app"><div class="main">
-   <div class="t"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${p.alumni?'<span class="badge">Alumni</span>':''}</div>
+   <div class="t"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${p.connected?'<span class="badge">Connection</span>':p.alumni?'<span class="badge">Alumni</span>':''}</div>
    <div class="meta">${esc(p.headline||p.company)} · ${esc(p.company)}${p.role?' · for '+esc(p.role):''}</div>
-   <pre>${esc(p.note)}</pre>
-   <details><summary>Message after they accept</summary><pre>${esc(p.message)}</pre></details>
+   ${p.connected?`<pre>${esc(p.message)}</pre>`:`<pre>${esc(p.note)}</pre>
+   <details><summary>Message after they accept</summary><pre>${esc(p.message)}</pre></details>`}
    <div class="row">
-    <button class="chip" onclick="copyText('${p.id}','note')">Copy note</button>
+    ${p.connected?'':`<button class="chip" onclick="copyText('${p.id}','note')">Copy note</button>`}
     <button class="chip" onclick="copyText('${p.id}','message')">Copy message</button>
     <button class="chip" onclick="markRef('${p.id}','sent')">Mark sent</button>
     <button class="chip" onclick="markRef('${p.id}','skipped')">Skip</button>

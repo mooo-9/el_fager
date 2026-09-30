@@ -16,12 +16,17 @@ MAX_CHARS = 4000
 
 
 def text(url: str) -> str:
-    """The posting's text, capped; "" when its source couldn't be read."""
+    """The posting's text, capped; "" when its source couldn't be read. A
+    posting its source says is gone (404, 410) reads as closed."""
+    import httpx
     for pattern, read in _READERS:
         m = re.match(pattern, url)
         if m:
             try:
                 return _cap(read(url, m))
+            except httpx.HTTPStatusError as e:
+                return ("Job no longer available." if e.response.status_code in (404, 410)
+                        else "")
             except Exception:
                 return ""
     from tools.web_tool import fetch_page
@@ -41,9 +46,11 @@ def _plain(html: str) -> str:
 def _linkedin(url, m):
     from bs4 import BeautifulSoup
     page = sources._get_text(f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{m[1]}")
-    body = BeautifulSoup(page, "html.parser").select_one(
-        ".show-more-less-html__markup, .description__text")
-    return _plain(str(body)) if body else ""
+    soup = BeautifulSoup(page, "html.parser")
+    # A closed job keeps its page, with "No longer accepting applications" on top.
+    banner = soup.select_one(".closed-job__flavor--closed")
+    body = soup.select_one(".show-more-less-html__markup, .description__text")
+    return " ".join(_plain(str(t)) for t in (banner, body) if t)
 
 
 def _workday(url, m):

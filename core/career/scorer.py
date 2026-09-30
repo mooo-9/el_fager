@@ -1,6 +1,7 @@
 """How well one job fits Mo, from its posting and his profile."""
 import re
 from datetime import date
+from pathlib import Path
 
 
 # "send your CV to hr@company.com". Board and example addresses aren't HR.
@@ -31,6 +32,10 @@ _SYSTEM = (
     "still studying. 'missing' lists requirements the posting states that his profile "
     "doesn't show. Judge only from the posting and the profile given."
 )
+# career-ops' evaluation rules, condensed by Claude from its ~27k-token prompt to
+# ~1.1k tokens. Tried on 10 scored jobs: same order, tighter gaps, and it passed
+# an entry Power BI role the plain prompt had put at 58.
+_SYSTEM += "\n\n" + (Path(__file__).parent / "rubric.md").read_text(encoding="utf-8")
 
 
 def read_description(url: str) -> str:
@@ -43,6 +48,23 @@ def hr_email(text: str) -> str:
         if not any(bad in address.lower() for bad in _NOT_HR):
             return address.rstrip(".")
     return ""
+
+
+# A link Mo found himself comes with no title or company: the posting gives them.
+_LINK_SCHEMA = {**_SCHEMA,
+                "properties": {**_SCHEMA["properties"], "title": {"type": "string"},
+                               "company": {"type": "string"}},
+                "required": _SCHEMA["required"] + ["title", "company"]}
+
+
+def score_link(text: str, profile_text: str) -> "dict | None":
+    """score_all's judgement for one posting, asked now rather than batched,
+    plus its title and company as the posting names them."""
+    from core.career import claude
+    return claude.ask(
+        f"Today is {date.today().isoformat()}.\n\nCandidate profile:\n{profile_text}\n\n"
+        f"Posting (give its job title and company as it names them):\n{text}",
+        system=_SYSTEM, schema=_LINK_SCHEMA, effort="medium", max_tokens=8000)
 
 
 def score_all(jobs: list, profile_text) -> list:

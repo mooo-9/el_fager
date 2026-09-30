@@ -94,6 +94,27 @@ def application_status() -> str:
     return pipeline.status_text()
 
 
+def skill_gaps() -> str:
+    from core.career import gaps
+    return gaps.summary()
+
+
+def evaluate_job(url: str) -> str:
+    from core.career import pipeline
+    return pipeline.evaluate_one(url)
+
+
+def mark_followed_up(app_id: str) -> str:
+    from core.career import tracker
+    app = tracker.mark_followed_up(app_id)
+    if app is None:
+        return f"Error: no application '{app_id}'."
+    left = tracker.MAX_FOLLOW_UPS - len(app["followed_up"])
+    return (f"Follow-up on {app['title']} at {app.get('company')} noted. "
+            + (f"The next one is due in {tracker.FOLLOW_UP_DAYS} days." if left
+               else "That was the last one."))
+
+
 def check_application_replies() -> str:
     from core.career import pipeline
     return pipeline.check_replies()
@@ -146,6 +167,11 @@ def graduate_programmes(check: bool = False) -> str:
 def find_referrals(company: str = "") -> str:
     from core.career import referrals, store
     return referrals.find(company or None, count=store.settings()["referrals_per_day"])
+
+
+def import_linkedin_connections(path: str) -> str:
+    from core.career import referrals
+    return referrals.import_connections(path)
 
 
 def referral_list() -> str:

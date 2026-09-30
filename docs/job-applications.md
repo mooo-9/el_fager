@@ -48,7 +48,41 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
   `referrals_per_day` people at target companies (alumni of his university
   first; set it with "my university is ...") with a drafted connection note and
   referral request. They appear on the review page with Copy buttons; Mo sends
-  them himself and marks them sent.
+  them himself and marks them sent. **"Import my LinkedIn connections from
+  ...\Connections.csv"** (LinkedIn: Settings > Data privacy > Get a copy of your
+  data > Connections) keeps the people he knows at target companies; they're
+  asked first, with the message only (no connection note needed).
+- **Follow-ups** (`tracker.follow_ups_due`): a sent application with no answer is
+  due a follow-up a week later, and once more a week after that, then let go
+  (career-ops' cadence). It's in the job-hunt line and `application status`;
+  "I followed up with Valeo" records it.
+
+## Borrowed from career-ops
+
+- **"Is this job worth it: <link>"** (`evaluate_job`): a posting Mo found himself,
+  judged on the spot -- closed or open, score, what it asks that his CV lacks. A
+  fit waits for the next job hunt, which writes its letter.
+- **"What should I learn?"** (`skill_gaps`, `core/career/gaps.py`): the scored
+  jobs' "missing" lists grouped into skills, most asked first.
+- **Practice interview** after a prep sheet: one question at a time, then what
+  landed, what to sharpen and a stronger opening from his CV.
+- **CV check on import:** names a missing Experience / Education / Skills
+  heading or email that hiring systems look for.
+- **Replies:** a rejection is read before an interview mention, and an automatic
+  "we received your application" changes nothing (it used to read as an
+  interview).
+- **Connection notes** are kept under 200 characters, LinkedIn's free-account cap.
+
+- **Scoring rules** (`core/career/rubric.md`): career-ops' ~27k-token evaluation,
+  condensed by Claude to ~1.1k tokens and sent with every score (about $1.30 a
+  month more). Weigh only requirements the posting itself marks required; a
+  nice-to-have gap doesn't sink a score; name hard blockers. Tried on 10 scored
+  jobs: same order, tighter gaps, and it passed an entry Power BI role the plain
+  prompt had put at 58. Rewrite it by hand if a rule reads wrong.
+
+Kept El Fager's own: the scoring output (a short JSON, not career-ops' A-H
+report), cover letters (0 clichés from career-ops' list
+in the saved ones), tracking, referral drafting, the job sources.
 
 ## Where jobs come from
 
@@ -62,6 +96,9 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
   searched by name on LinkedIn and on their own career sites.
 - Target companies (`core/career/companies.json`) go first in the review: Big 4,
   then top employers in Egypt. Add a company there with its aliases.
+- Closed postings ("No longer accepting applications", filled, expired, 404) are
+  skipped before scoring (`core/career/liveness.py`, career-ops' patterns), so
+  no Claude call is spent on a job that can't be applied to.
 
 ## How applications go out
 

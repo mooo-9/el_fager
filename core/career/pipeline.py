@@ -6,7 +6,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from core.career import appliers, companies, profile, scorer, sources, store, tailor, tracker
+from core.career import (
+    appliers, companies, liveness, profile, scorer, sources, store, tailor, tracker,
+)
 
 _busy = threading.Lock()
 
@@ -48,7 +50,7 @@ def _years_asked(text: str) -> int:
 
 def _within_reach(jobs: list, budget: int) -> "tuple[list, int]":
     """Up to `budget` jobs in order, each carrying its posting text, passing
-    over postings that ask for _MAX_YEARS+ years (recorded as skipped).
+    over closed postings and ones that ask for _MAX_YEARS+ years (recorded as skipped).
     Reading a posting costs no Claude call; scoring it does."""
     kept, dropped = [], 0
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -61,7 +63,12 @@ def _within_reach(jobs: list, budget: int) -> "tuple[list, int]":
             for job, text in zip(chunk, texts):
                 job = {**job, "description": text}
                 years = _years_asked(text)
-                if years >= _MAX_YEARS:
+                if liveness.closed(text):
+                    _record({**job, "score": 0, "fit": "The posting is closed.",
+                             "missing": [], "channel": appliers.channel_for(job)},
+                            "skipped", "posting closed")
+                    dropped += 1
+                elif years >= _MAX_YEARS:
                     _record({**job, "score": 0, "fit": f"Asks for {years}+ years of experience.",
                              "missing": [], "channel": appliers.channel_for(job)},
                             "skipped", f"asks for {years}+ years")
@@ -124,14 +131,14 @@ def prepare_batch() -> str:
     new = (_take_turns([j for j in field if j["tier"]], [j for j in field if not j["tier"]])
            + [j for j in new if not _in_field(j)])
     # Scoring costs a Claude call per job: twice the target is enough to fill it.
-    new, too_senior = _within_reach(new, max(0, s["daily_target"] * 2 - len(waiting)))
+    new, passed_over = _within_reach(new, max(0, s["daily_target"] * 2 - len(waiting)))
     new = [_prepared(j) for j in new]
     scored = [{**app, **fit} for app, fit in zip(new, scorer.score_all(new, ptext))]
 
     candidates = sorted(waiting + scored,
                         key=lambda a: (companies.TIER_RANK[a["tier"]], -a["score"]))
     firm_counts = _big4_counts_this_month()
-    picked, skipped = [], too_senior
+    picked, skipped = [], passed_over
     for app in candidates:
         reason = _skip_reason(app, s, firm_counts)
         if reason:
@@ -222,6 +229,43 @@ def _big4_counts_this_month() -> dict:
                 and a.get("found_at", "") >= since:
             counts[a["company_key"]] = counts.get(a["company_key"], 0) + 1
     return counts
+
+
+def evaluate_one(url: str) -> str:
+    """A job Mo found himself, judged now: still open, how well it fits, what
+    it asks that he lacks. A fit waits for the next job hunt, which writes its
+    letter and puts it in his review with the rest."""
+    if not profile.has_cv():
+        return "Import your CV first ('import my CV from <path>'): scores need it."
+    known = tracker.all_apps().get(tracker.job_id(url))
+    if known and "score" in known:
+        return (f"Already judged: {known['title']} at {known.get('company')}, score "
+                f"{known['score']}/100 -- {known.get('fit', '')} Status: {known['status']}.")
+    text = scorer.read_description(url)
+    if not text:
+        return "Couldn't read that posting. Is the link to the job itself?"
+    if liveness.closed(text):
+        return "That posting is closed: it's no longer taking applications."
+    # ponytail: scored with the main CV; the ERP CV is chosen by title, which
+    # only the score tells us.
+    fit = scorer.score_link(text, profile.as_text())
+    if fit is None:
+        return "Couldn't judge that posting -- try again."
+    target = companies.match(fit["company"])
+    app = _prepared({"url": url, "title": fit["title"], "company": fit["company"],
+                     "location": "", "posted": "", "source": "Mo",
+                     "tier": target["tier"] if target else "",
+                     "company_key": target["name"] if target else fit["company"],
+                     "description": text})
+    app.update({k: fit[k] for k in ("score", "fit", "missing", "level", "in_egypt")})
+    reason = _skip_reason(app, store.settings(), _big4_counts_this_month())
+    _record(app, "skipped" if reason else "waiting", reason or "Mo's link; fits")
+    head = f"{app['title']} at {app['company']}: {app['score']}/100. {app['fit']}"
+    lacks = f" They ask for what your CV doesn't show: {'; '.join(app['missing'])}." \
+        if app["missing"] else ""
+    tail = (f" Not worth sending: {reason}." if reason else
+            " Worth applying: the next job hunt writes its letter and puts it in your review.")
+    return head + lacks + tail
 
 
 def _record(app: dict, status: str, note: str) -> None:
@@ -347,7 +391,23 @@ def start_in_background(fn) -> bool:
 _INTERVIEW_RE = re.compile(r"interview|assessment|shortlist|next step|invitation|schedule a call",
                            re.IGNORECASE)
 _REJECTED_RE = re.compile(r"unfortunately|regret|not been selected|other candidates|"
-                          r"not moving forward|not to proceed", re.IGNORECASE)
+                          r"not (?:be )?moving forward|not to proceed|position has been filled|"
+                          r"unable to offer", re.IGNORECASE)
+# "We received your application": no answer yet, whatever it says about interviews.
+_AUTO_RE = re.compile(r"thank you for (?:applying|your application)|application (?:was |has "
+                      r"been )?received|received your application|confirmation of (?:your )?"
+                      r"application|automatic reply", re.IGNORECASE)
+
+
+def _reply_status(text: str) -> str:
+    """What a reply says, in career-ops' order: a rejection first ("unfortunately
+    we won't invite you to interview" is a no), then an automatic receipt, which
+    is no answer (""), then an interview."""
+    if _REJECTED_RE.search(text):
+        return "rejected"
+    if _AUTO_RE.search(text):
+        return ""
+    return "interview" if _INTERVIEW_RE.search(text) else "replied"
 
 
 def check_replies() -> str:
@@ -374,8 +434,10 @@ def check_replies() -> str:
         app = _app_for(text, sent)
         if app is None:
             continue
-        status = ("interview" if _INTERVIEW_RE.search(text)
-                  else "rejected" if _REJECTED_RE.search(text) else "replied")
+        status = _reply_status(text)
+        if not status:      # a receipt: seen, still waiting for the answer
+            tracker.update(app["id"], reply_ids=app.get("reply_ids", []) + [ref["id"]])
+            continue
         if status == "replied" and app["status"] == "interview":
             status = "interview"      # a scheduling email doesn't undo the interview
         tracker.update(app["id"], status, headers.get("Subject", "")[:120],
@@ -411,9 +473,7 @@ def status_text() -> str:
         by[a.get("status")] = by.get(a.get("status"), 0) + 1
     week_ago = datetime.now() - timedelta(days=7)
     sent_week = len(tracker.reached_status_since("applied", week_ago))
-    follow = [a for a in tracker.with_status("applied")
-              if a.get("channel") == "email"
-              and a.get("applied_at", "9") < (datetime.now() - timedelta(days=10)).isoformat()]
+    follow = tracker.follow_ups_due()
 
     mode = "LIVE" if s["live"] and profile.has_cv() else "PRACTICE (nothing is sent)"
     lines = [f"Mode: {mode}. Daily target {s['daily_target']}, minimum score {s['min_score']}."]
@@ -424,8 +484,11 @@ def status_text() -> str:
     lines.append("Applications: " + ", ".join(f"{by[k]} {k}" for k in order if by.get(k)))
     lines.append(f"Sent in the last 7 days: {sent_week}.")
     if follow:
-        lines.append(f"{len(follow)} emailed 10+ days ago with no reply -- worth a follow-up: "
-                     + "; ".join(f"{a['title']} at {a.get('company')}" for a in follow[:5]))
+        lines.append(f"{len(follow)} sent a week or more ago with no answer -- time to follow "
+                     "up (id: job): " + "; ".join(
+                         f"{a['id']}: {a['title']} at {a.get('company')}"
+                         + (f" (email {a['hr_email']})" if a.get("hr_email") else "")
+                         for a in follow[:5]))
     missing = profile.missing_answers()
     if missing:
         lines.append("Answers still missing: " + ", ".join(missing))

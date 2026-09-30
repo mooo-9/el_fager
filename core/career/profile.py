@@ -118,9 +118,27 @@ def import_cv(path: str, erp: bool = False) -> str:
 
     missing = missing_answers(profile)
     note = f" Still missing: {', '.join(missing)}." if missing else ""
+    ats = ats_problems(text)
+    if ats:
+        note += " Hiring systems may misread it: " + "; ".join(ats) + "."
     which = "ERP CV (for ERP roles)" if erp else "CV"
     return (f"{which} imported: {cv_part['name'] or cv.name} -- {len(cv_part['skills'])} "
             f"skills, {len(cv_part['experience'])} experience entries.{note}")
+
+
+# The headings hiring systems split a CV by (career-ops' ATS check).
+_ATS_HEADINGS = {"Experience": r"experience|employment|internships?",
+                 "Education": r"education", "Skills": r"skills"}
+
+
+def ats_problems(text: str) -> list[str]:
+    """What an applicant-tracking system reading the CV's text would miss."""
+    problems = [f"no '{name}' heading" for name, words in _ATS_HEADINGS.items()
+                if not re.search(rf"^\W*[\w &]*\b(?:{words})\b[\w &]*:?\s*$", text,
+                                 re.IGNORECASE | re.MULTILINE)]
+    if not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", text):
+        problems.append("no email address in its text")
+    return problems
 
 
 def _cv_text(cv: Path) -> str:
