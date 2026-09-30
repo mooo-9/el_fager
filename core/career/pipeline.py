@@ -19,7 +19,8 @@ _BROWSER_PAUSE = (45, 120)
 _COUNTS_AS_APPLIED = ("ready", "approved", "practice", "applied", "needs_you",
                       "interview", "rejected", "replied")
 
-# Titles in Mo's field: AI, data analyst and business analyst roles. "Analyst"
+# Titles in Mo's field: AI, data analyst and business analyst roles (SAP/ERP
+# titles come in through profile.is_erp). "Analyst"
 # or "graduate" alone isn't: the first practice run spent 17 of 40 slots on
 # PepsiCo supply-chain and HR analysts.
 _FIELD_RE = re.compile(

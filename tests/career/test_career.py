@@ -56,7 +56,7 @@ class TestSettings:
         nightly scoring budget isn't spent on the old mix."""
         terms = set(store.settings()["search_terms"])
         assert {"data analyst", "business analyst", "power bi", "machine learning",
-                "artificial intelligence"} <= terms
+                "artificial intelligence", "AI engineer", "sap", "erp", "sap consultant"} <= terms
         assert not {"credit risk", "financial analyst", "IT support", "ERP SAP",
                     "software developer", "audit associate", "tax associate",
                     "internship", "fresh graduate"} & terms
@@ -165,6 +165,9 @@ class TestRubric:
         """The condensed career-ops guide rides along with the scoring prompt."""
         assert "Only **stated** and **structural** gaps" in scorer._SYSTEM
         assert "1 year or 1.5 years is entry, never mid" in scorer._SYSTEM
+        # An SAP/ERP role is on target, not a "function mismatch".
+        assert "AI engineering and AI roles, data analyst, business analyst, and SAP/ERP" \
+            in scorer._SYSTEM
         assert len(scorer._SYSTEM) < 8000      # ~1.1k tokens, not career-ops' 27k
 
 

@@ -168,7 +168,7 @@ class TestRun:
         assert out.startswith("No new jobs for data analyst, business analyst")
 
     def test_asked_for_no_role_it_searches_ai_data_and_ba(self):
-        assert "machine learning" in jsa.TARGET_ROLES
+        assert {"machine learning", "AI engineer", "SAP", "ERP"} <= set(jsa.TARGET_ROLES)
         assert not {"software developer", "IT support"} & set(jsa.TARGET_ROLES)
 
     def test_the_same_job_found_for_two_roles_is_listed_once(self):

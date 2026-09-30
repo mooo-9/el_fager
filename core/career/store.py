@@ -7,8 +7,8 @@ DIR = Path(__file__).parent.parent.parent / "data" / "career"
 
 _lock = threading.RLock()
 
-# Search terms cover Mo's targets: internships and entry-level AI, data
-# analyst and business analyst roles (his CV aims at these), plus graduate
+# Search terms cover Mo's targets: internships and entry-level AI engineering
+# and AI, data analyst, business analyst and SAP/ERP roles, plus graduate
 # programmes; the Big 4's data & analytics line comes in through them.
 DEFAULTS = {
     # Practice mode until Mo's CV is final: everything is found, scored and
@@ -30,6 +30,8 @@ DEFAULTS = {
         "AI engineer", "data analyst intern", "business analyst intern",
         "junior data analyst", "junior business analyst", "fresh graduate data analyst",
         "graduate program", "erp", "erp consultant", "sap", "odoo",
+        "machine learning engineer", "generative ai", "sap consultant", "junior sap",
+        "erp fresh graduate",
     ],
 }
 
