@@ -552,11 +552,11 @@ class TestSources:
         monkeypatch.setattr(companies, "premium", lambda: [])
         monkeypatch.setattr(companies, "with_career_sites", lambda: [])
         found = {
-            ("Wuzzuf", "data analyst"): [
+            ("LinkedIn", "data analyst"): [
                 {"title": "Data Analyst", "company": "PwC Middle East", "location": "", "posted": "",
-                 "url": "https://wuzzuf.net/jobs/p/1", "source": "Wuzzuf"},
+                 "url": "https://www.linkedin.com/jobs/view/1", "source": "LinkedIn"},
                 {"title": "Senior Data Analyst", "company": "Fawry", "location": "", "posted": "",
-                 "url": "https://wuzzuf.net/jobs/p/2", "source": "Wuzzuf"}],
+                 "url": "https://www.linkedin.com/jobs/view/2", "source": "LinkedIn"}],
         }
         with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
                    lambda self, src, term: found.get((src, term), [])):
@@ -568,13 +568,22 @@ class TestSources:
         monkeypatch.setattr(companies, "premium", lambda: [])
         monkeypatch.setattr(companies, "with_career_sites", lambda: [])
         found = [{"title": "Credit Risk Analyst", "company": "CIB Egypt", "location": "",
-                  "posted": "", "url": "https://wuzzuf.net/jobs/p/1", "source": "Wuzzuf"},
+                  "posted": "", "url": "https://www.linkedin.com/jobs/view/1", "source": "LinkedIn"},
                  {"title": "Credit Risk Analyst", "company": "Tamweely", "location": "",
-                  "posted": "", "url": "https://wuzzuf.net/jobs/p/2", "source": "Wuzzuf"}]
+                  "posted": "", "url": "https://www.linkedin.com/jobs/view/2", "source": "LinkedIn"}]
         with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
-                   lambda self, src, term: found if src == "Wuzzuf" else []):
+                   lambda self, src, term: found if src == "LinkedIn" else []):
             jobs = sources.gather({"search_terms": ["credit risk"]})
         assert [j["company"] for j in jobs] == ["Tamweely"]
+
+    def test_only_linkedin_is_searched_among_the_boards(self, monkeypatch):
+        """Mo dropped Wuzzuf, Bayt and Forasna from the job hunt."""
+        monkeypatch.setattr(companies, "with_career_sites", lambda: [])
+        asked = []
+        with patch("core.agents.job_search_agent.JobSearchAgent._from_source",
+                   lambda self, src, term: asked.append(src) or []):
+            sources.gather({"search_terms": ["data analyst", "business analyst"]})
+        assert asked and set(asked) == {"LinkedIn"}
 
     def test_no_bank_is_a_target(self):
         names = {c["name"] for c in companies.all_companies()}

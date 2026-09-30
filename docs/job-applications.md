@@ -7,8 +7,8 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
 ```
  job hunt (armed for 02:00)                   morning                     day
  check replies → gather → score → draft  ──►  review page /jobs  ──►  send (paced)
- (Gmail)         (boards,  (Claude,  (Claude)  Mo ticks, sends        email · Wuzzuf ·
-                  Big 4     min 60)                                   LinkedIn · site form
+ (Gmail)         (LinkedIn,(Claude,  (Claude)  Mo ticks, sends        email ·
+                  company   min 60)                                   LinkedIn · site form
                   sites)
 ```
 
@@ -52,13 +52,14 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
 
 ## Where jobs come from
 
-- Every search term (`search_terms` in `store.DEFAULTS`) on Wuzzuf, LinkedIn,
-  Bayt and Forasna.
-- The Big 4 by name on Wuzzuf and LinkedIn, plus their own sites: Deloitte's
+- Every search term (`search_terms` in `store.DEFAULTS`) on LinkedIn
+  (`SOURCES` in `job_search_agent.py`). Wuzzuf, Bayt and Forasna are skipped,
+  in the job hunt and in "find me jobs" alike.
+- The Big 4 by name on LinkedIn, plus their own sites: Deloitte's
   Middle East careers site, PwC's Workday, EY's student and careers sites.
 - Mo's other picks, treated like the Big 4 (`"opus": true` in `companies.json`):
   IBM, Accenture, Schneider Electric, P&G, Siemens, Microsoft and Nestlé —
-  searched by name on the boards and on their own career sites.
+  searched by name on LinkedIn and on their own career sites.
 - Target companies (`core/career/companies.json`) go first in the review: Big 4,
   then top employers in Egypt. Add a company there with its aliases.
 

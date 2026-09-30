@@ -1,6 +1,6 @@
-"""Where the pipeline finds jobs: every search term on every job board, the
-Big 4 and Mo's other picks by name on the boards, and every target company's
-own career site that can be read."""
+"""Where the pipeline finds jobs: every search term on LinkedIn, the Big 4
+and Mo's other picks by name on LinkedIn, and every target company's own
+career site that can be read."""
 import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -28,7 +28,7 @@ def gather(settings: dict) -> list[dict]:
     calls = [(agent._from_source, (src, term))
              for term in settings["search_terms"] for src in SOURCES]
     for firm in companies.premium():
-        calls += [(_board_by_name, (agent, src, firm)) for src in ("Wuzzuf", "LinkedIn")]
+        calls += [(_board_by_name, (agent, src, firm)) for src in SOURCES]
     for firm in companies.with_career_sites():
         for key, reader in READERS.items():
             calls += [(globals()[reader], (entry, firm)) for entry in firm.get(key, [])]
