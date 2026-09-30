@@ -32,7 +32,11 @@ _RENDER_TIMEOUT_MS = 20000
 # The listing LinkedIn's own logged-out jobs page loads. f_E=1,2 is internship
 # and entry level; f_TPR=r604800 is the past week.
 _LINKEDIN_URL = ("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-                 "?keywords={q}&location=Egypt&f_E=1%2C2&f_TPR=r604800&start=0")
+                 "?keywords={q}&location=Egypt&f_E=1%2C2&f_TPR=r604800&start={start}")
+# It answers 10 at a time; the first page alone left 35 of data analyst's 45
+# postings that week unread.
+_LINKEDIN_PAGE = 10
+_LINKEDIN_PAGES = 3
 
 # Site searched, and the path a single job's page has there. Listing pages
 # ("Data Analyst Jobs in Cairo") come back from the same searches and are
@@ -98,8 +102,13 @@ class JobSearchAgent(BaseAgent):
         direct = {"LinkedIn": (_LINKEDIN_URL, _parse_linkedin)}.get(source)
         if direct:
             url, parse = direct
-            html = self._fetch(url.format(q=urllib.parse.quote(role)))
-            jobs = parse(html) if html else []
+            jobs = []
+            for start in range(0, _LINKEDIN_PAGE * _LINKEDIN_PAGES, _LINKEDIN_PAGE):
+                html = self._fetch(url.format(q=urllib.parse.quote(role), start=start))
+                page = parse(html) if html else []
+                jobs += page
+                if len(page) < _LINKEDIN_PAGE:
+                    break
             if jobs:
                 return jobs
         return self._web_search(source, role)

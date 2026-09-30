@@ -4554,12 +4554,12 @@ TOOLS: list[dict[str, Any]] = [
             "Judge one job posting Mo found himself, from its link: whether it's still "
             "open, its fit score against his CV, what it asks that he lacks, and whether "
             "it's worth applying. A fit is saved and gets its letter in the next job hunt. "
-            "Use for 'is this job worth it: <link>', 'check this posting'."
+            "Use for 'is this job worth it: <link>', 'check this posting', 'check the job "
+            "I copied'. Leave url out when Mo gives none: the link he copied is used."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"url": {"type": "string"}},
-            "required": ["url"]
+            "properties": {"url": {"type": "string"}}
         }
     },
     {
@@ -4582,12 +4582,12 @@ TOOLS: list[dict[str, Any]] = [
             "Import Mo's LinkedIn connections export (Connections.csv: LinkedIn Settings > "
             "Data privacy > Get a copy of your data > Connections). Keeps only the people "
             "at target companies; find_referrals then asks them first, before strangers. "
-            "Use for 'import my LinkedIn connections in my Downloads'."
+            "Use for 'import my LinkedIn connections'. Leave path out unless Mo names a "
+            "file: the newest export in Downloads (the CSV or LinkedIn's zip) is used."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"path": {"type": "string"}},
-            "required": ["path"]
+            "properties": {"path": {"type": "string"}}
         }
     },
     {
@@ -5114,6 +5114,10 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "big 4", "big four", "recruiter", "military status", "expected salary",
         "graduate program", "graduate programme", "referral", "referrals",
         "briefing", "good morning", "sabah el kheir", "start my day",
+        "refer me", "linkedin", "connections", "followed up", "follow up", "follow-up",
+        "opening", "openings", "position", "positions", "posting", "career", "careers",
+        "sap", "erp", "odoo", "what should i learn", "skills am i missing",
+        "skill gap", "skill gaps",
     ],
 }
 

@@ -17,7 +17,9 @@ import csv
 import hashlib
 import io
 import re
+import zipfile
 from datetime import datetime
+from pathlib import Path
 
 from core.career import companies, profile, store, tracker
 
@@ -59,14 +61,41 @@ def _save(refs: dict) -> None:
     store.save(_FILE, refs)
 
 
-def import_connections(path: str) -> str:
-    """Read LinkedIn's Connections.csv export and keep the people at target
+# Where LinkedIn's export lands: Connections.csv, or the zip it comes in.
+DOWNLOADS = Path.home() / "Downloads"
+
+
+def _find_export() -> "Path | None":
+    """The newest Connections.csv or LinkedIn data-export zip in Downloads."""
+    found = [p for p in DOWNLOADS.glob("*") if p.name.lower() == "connections.csv"
+             or (p.suffix.lower() == ".zip" and "linkedin" in p.name.lower())]
+    return max(found, key=lambda p: p.stat().st_mtime, default=None)
+
+
+def _read_export(path: Path) -> str:
+    if path.suffix.lower() != ".zip":
+        return path.read_text(encoding="utf-8-sig")
+    with zipfile.ZipFile(path) as z:
+        name = next((n for n in z.namelist() if n.lower().endswith("connections.csv")), None)
+        if name is None:
+            raise OSError("no Connections.csv inside it -- ask LinkedIn for the Connections export")
+        return z.read(name).decode("utf-8-sig")
+
+
+def import_connections(path: "str | None" = None) -> str:
+    """Read LinkedIn's Connections.csv export (or the zip it comes in; without
+    a path, the newest one in Downloads) and keep the people at target
     companies. The export opens with a "Notes:" preamble, so the header row is
     found by its columns, not its position."""
+    file = Path(path) if path else _find_export()
+    if file is None:
+        return ("No LinkedIn export in Downloads. On LinkedIn: Settings > Data privacy > "
+                "Get a copy of your data > Connections. LinkedIn emails the file; save it "
+                "to Downloads and ask again.")
     try:
-        text = open(path, encoding="utf-8-sig").read()
-    except OSError as e:
-        return f"Error: couldn't read {path}: {e}"
+        text = _read_export(file)
+    except (OSError, zipfile.BadZipFile) as e:
+        return f"Error: couldn't read {file.name}: {e}"
     rows = list(csv.reader(io.StringIO(text)))
     head = next((i for i, r in enumerate(rows)
                  if {"first name", "company"} <= {c.strip().lower() for c in r}), None)

@@ -360,7 +360,7 @@ class ProactiveEngine:
     def _check_job_hunt(self) -> None:
         """Morning: the job hunt is Mo's main goal, so what's waiting on him
         there comes first -- the batch to review, programme deadlines within a
-        week (to his phone too), referral notes to send."""
+        week (to his phone too), referral notes to send, follow-ups due."""
         if self._cooldown("job_hunt", 20):
             return
         try:
@@ -370,9 +370,13 @@ class ProactiveEngine:
                 "ready", datetime.now() - timedelta(days=1)) if a["status"] == "ready"])
             soon = programmes.closing_soon()
             pending = len(referrals.to_send())
+            follow = tracker.follow_ups_due()
             parts = []
             if ready:
                 parts.append(f"{ready} new job applications are ready for your review")
+            if follow:
+                parts.append(f"{len(follow)} applications are due a follow-up: "
+                             + ", ".join(sorted({a.get('company') or '?' for a in follow})))
             for p in soon[:2]:
                 parts.append(f"{p['name']} closes in {programmes.days_left(p)} days")
             if pending:

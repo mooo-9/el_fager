@@ -48,18 +48,20 @@ Code: `core/career/`, `core/agents/job_search_agent.py`, `tools/career_tool.py`.
   `referrals_per_day` people at target companies (alumni of his university
   first; set it with "my university is ...") with a drafted connection note and
   referral request. They appear on the review page with Copy buttons; Mo sends
-  them himself and marks them sent. **"Import my LinkedIn connections from
-  ...\Connections.csv"** (LinkedIn: Settings > Data privacy > Get a copy of your
-  data > Connections) keeps the people he knows at target companies; they're
+  them himself and marks them sent. **"Import my LinkedIn connections"**
+  (LinkedIn: Settings > Data privacy > Get a copy of your data > Connections;
+  the newest Connections.csv or LinkedIn zip in Downloads is found) keeps the people he knows at target companies; they're
   asked first, with the message only (no connection note needed).
 - **Follow-ups** (`tracker.follow_ups_due`): a sent application with no answer is
   due a follow-up a week later, and once more a week after that, then let go
-  (career-ops' cadence). It's in the job-hunt line and `application status`;
+  (career-ops' cadence). It's in the job-hunt line, the morning nudge and
+  `application status`;
   "I followed up with Valeo" records it.
 
 ## Borrowed from career-ops
 
-- **"Is this job worth it: <link>"** (`evaluate_job`): a posting Mo found himself,
+- **"Is this job worth it: <link>"** or **"check the job I copied"** (`evaluate_job`;
+  with no link said, the copied one is used): a posting Mo found himself,
   judged on the spot -- closed or open, score, what it asks that his CV lacks. A
   fit waits for the next job hunt, which writes its letter.
 - **"What should I learn?"** (`skill_gaps`, `core/career/gaps.py`): the scored

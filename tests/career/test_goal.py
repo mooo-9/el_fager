@@ -122,6 +122,22 @@ class TestReferrals:
         assert [p["name"] for p in referrals.connections_at("PwC")] == ["Sara Ali"]
         assert referrals.import_connections(str(tmp_path / "nope.csv")).startswith("Error")
 
+    def test_without_a_path_the_export_in_downloads_is_found_even_zipped(
+            self, monkeypatch, tmp_path):
+        """Mo says 'import my LinkedIn connections'; the file LinkedIn emailed
+        him is a zip in Downloads."""
+        import zipfile
+        monkeypatch.setattr(referrals, "DOWNLOADS", tmp_path)
+        assert referrals.import_connections().startswith("No LinkedIn export in Downloads")
+        with zipfile.ZipFile(tmp_path / "Basic_LinkedInDataExport_09-30-2026.zip", "w") as z:
+            z.writestr("Connections.csv",
+                       "Notes:\n\nFirst Name,Last Name,URL,Email Address,Company,Position,"
+                       "Connected On\nSara,Ali,https://www.linkedin.com/in/sara,,KPMG Egypt,"
+                       "Auditor,01 Sep 2026\n")
+        from tools import career_tool
+        assert career_tool.import_linkedin_connections().startswith(
+            "1 of your connections work at target companies: KPMG.")
+
     def test_a_connection_is_asked_before_strangers_and_needs_no_note(self):
         store.save("connections.json", [{"name": "Sara Ali", "headline": "Associate",
                                           "url": "https://www.linkedin.com/in/sara",
@@ -227,6 +243,13 @@ class TestMorningNudge:
                         "a programme closes in 2 days."]
         assert remote == [True]
 
+    def test_follow_ups_due_are_said_too(self, monkeypatch, tmp_path):
+        engine, said, _ = self._engine(monkeypatch, tmp_path)
+        tracker.add({"url": "u", "title": "A", "company": "Valeo", "status": "applied",
+                     "applied_at": (datetime.now() - timedelta(days=8)).isoformat()})
+        engine._check_job_hunt()
+        assert said == ["Mo, 1 applications are due a follow-up: Valeo."]
+
     def test_quiet_when_nothing_waits(self, monkeypatch, tmp_path):
         engine, said, _ = self._engine(monkeypatch, tmp_path)
         engine._check_job_hunt()
@@ -243,6 +266,28 @@ class TestTools:
         assert new <= _TOOL_GROUP_NAMES["jobs"]
         assert "application_status" in {t["name"] for t in _select_tools("daily briefing please")}
         assert new <= {t["name"] for t in _select_tools("who can give me a referral at PwC")}
+
+    @pytest.mark.parametrize("message", [
+        "is this job worth it https://www.linkedin.com/jobs/view/1", "what should I learn",
+        "what skills am I missing", "import my linkedin connections from my downloads",
+        "I followed up with Valeo", "who can refer me at KPMG", "any AI engineer openings",
+        "find me SAP jobs"])
+    def test_how_mo_asks_reaches_the_job_tools(self, message):
+        """Live, 'what should I learn' and 'I followed up with Valeo' loaded no
+        job tool, so El Fager couldn't act on them."""
+        from core.brain import _select_tools
+        assert "evaluate_job" in {t["name"] for t in _select_tools(message)}
+
+    def test_check_the_job_i_copied(self):
+        """Mo can't say a link aloud: the one he copied is judged."""
+        from tools import career_tool
+        with patch("tools.clipboard_tool.get_clipboard_text",
+                   return_value="look https://www.linkedin.com/jobs/view/42 thanks"), \
+             patch("core.career.pipeline.evaluate_one", return_value="ok") as ev:
+            assert career_tool.evaluate_job() == "ok"
+        ev.assert_called_once_with("https://www.linkedin.com/jobs/view/42")
+        with patch("tools.clipboard_tool.get_clipboard_text", return_value="[Clipboard is empty]"):
+            assert career_tool.evaluate_job().startswith("No job link given or copied")
 
     def test_mark_referral_dispatch(self):
         from core.brain import Brain

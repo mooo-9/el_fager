@@ -92,6 +92,19 @@ class TestRun:
         agent.run("")
         assert set(searched) == {"LinkedIn"} and agent.renders == []
 
+    def test_linkedin_is_read_past_its_first_ten(self):
+        """The first page alone left 35 of a week's 45 data analyst postings unread."""
+        card = LINKEDIN_HTML.split("<li>")[1].split("</li>")[0]
+        def page(start):
+            return "".join("<li>" + card.replace("111", f"{start + i}") + "</li>"
+                           for i in range(10))
+        agent = _agent({})
+        asked = []
+        agent._fetch = lambda url: asked.append(url) or page(int(url.rsplit("start=", 1)[1]))
+        jobs = agent._from_source("LinkedIn", "data analyst")
+        assert len(jobs) == 30 and len({j["url"] for j in jobs}) == 30
+        assert [u.rsplit("start=", 1)[1] for u in asked] == ["0", "10", "20"]
+
     def test_senior_roles_are_left_out(self):
         out = _agent({"LinkedIn": LINKEDIN_HTML}).run("data analyst")
         assert "Senior Data Analyst" not in out

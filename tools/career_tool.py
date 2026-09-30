@@ -99,8 +99,16 @@ def skill_gaps() -> str:
     return gaps.summary()
 
 
-def evaluate_job(url: str) -> str:
+def evaluate_job(url: str = "") -> str:
+    """Mo can't say a link aloud: with none given, the one he copied is used."""
+    import re
     from core.career import pipeline
+    if not url:
+        from tools.clipboard_tool import get_clipboard_text
+        m = re.search(r"https?://\S+", get_clipboard_text())
+        if not m:
+            return "No job link given or copied. Copy the posting's link, then ask again."
+        url = m.group(0)
     return pipeline.evaluate_one(url)
 
 
@@ -169,9 +177,9 @@ def find_referrals(company: str = "") -> str:
     return referrals.find(company or None, count=store.settings()["referrals_per_day"])
 
 
-def import_linkedin_connections(path: str) -> str:
+def import_linkedin_connections(path: str = "") -> str:
     from core.career import referrals
-    return referrals.import_connections(path)
+    return referrals.import_connections(path or None)
 
 
 def referral_list() -> str:
