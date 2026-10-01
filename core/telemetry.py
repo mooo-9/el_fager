@@ -60,11 +60,13 @@ def estimate_cost(model: str, usage) -> float:
 
 
 def record_api_usage(source: str, model: str, usage, latency_ms: float,
-                     tools_used: list[str] | None = None, batch: bool = False) -> None:
+                     tools_used: list[str] | None = None, batch: bool = False,
+                     subscription: bool = False) -> None:
     """Append one usage record. Swallows every error by design. A Message
-    Batch answer (batch=True) is billed at half price."""
+    Batch answer (batch=True) is billed at half price; one Claude Code
+    answered on Mo's subscription (subscription=True) costs the API nothing."""
     try:
-        cost = estimate_cost(model, usage)
+        cost = 0.0 if subscription else estimate_cost(model, usage)
         entry = {
             "timestamp": datetime.now().isoformat(),
             "source": source,
@@ -81,6 +83,8 @@ def record_api_usage(source: str, model: str, usage, latency_ms: float,
         }
         if batch:
             entry["batch"] = True
+        if subscription:
+            entry["subscription"] = True
         _TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
         day = datetime.now().strftime("%Y-%m-%d")
         with (_TELEMETRY_DIR / f"{day}.jsonl").open("a", encoding="utf-8") as f:

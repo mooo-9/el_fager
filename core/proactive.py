@@ -45,6 +45,8 @@ WATCHES = [
      "when": "6 AM–12 AM", "detail": "Every minute · one step at a time"},
     {"check": "_check_api_budget", "name": "API budget",
      "when": "6 AM–12 AM", "detail": "Monthly · at 80% of the API budget, and when it runs out"},
+    {"check": "_check_whatsapp_replies", "name": "WhatsApp replies",
+     "when": "All hours", "detail": "Every minute while El Fager waits on you · reads your WhatsApp answer"},
     {"check": "_check_job_hunt", "name": "Job hunt",
      "when": "7–11 AM", "detail": "Mornings · applications to review, programmes closing"},
     {"check": "_check_deadlines", "name": "Deadlines",
@@ -213,6 +215,10 @@ class ProactiveEngine:
         now  = datetime.now()
         hour = now.hour
 
+        # Day or night: whatever waits on Mo's WhatsApp answer goes on as soon
+        # as he replies. Nothing is read until a question waits.
+        self._check_whatsapp_replies()
+
         if not (6 <= hour <= 23):
             return          # sleep hours — stay quiet
 
@@ -356,6 +362,13 @@ class ProactiveEngine:
             # Reported, not swallowed: a silent except is what let a broken
             # import hide here for two months.
             print(f"[Proactive] event check error: {e}")
+
+    def _check_whatsapp_replies(self) -> None:
+        try:
+            from core import ask_mo
+            ask_mo.check_reply()
+        except Exception as e:
+            print(f"[Proactive] WhatsApp reply check error: {e}")
 
     def _check_job_hunt(self) -> None:
         """Morning: the job hunt is Mo's main goal, so what's waiting on him
@@ -581,12 +594,16 @@ class ProactiveEngine:
                     refreshed = mgr.last_finished()
                     if refreshed and refreshed["id"] == active["id"] \
                             and refreshed["status"] == "blocked":
-                        self._deliver(
-                            f"Mo, mission '{active['goal']}' is stuck at step "
-                            f"{step['n']} ({step['description'][:60]}). "
-                            f"I tried twice. Tell me how to proceed.",
-                            remote=True,
-                        )
+                        stuck = (f"Mission '{active['goal']}' is stuck at step "
+                                 f"{step['n']} ({step['description'][:60]}): {str(e)[:120]}. "
+                                 "I tried twice.")
+                        self._deliver(f"Mo, {stuck} Tell me how to proceed.")
+                        try:      # asked on WhatsApp too; his reply resumes it
+                            from core import ask_mo
+                            ask_mo.ask("mission", active["id"], f"{stuck} Reply with how to "
+                                       "go on, or 'stop'.")
+                        except Exception:
+                            pass
                     return
             if mgr.get_active() is None:
                 finished = mgr.last_finished()
@@ -719,7 +736,7 @@ class ProactiveEngine:
                 return
             self._state[key] = month
             self._save_state()
-            self._deliver(text)
+            self._deliver(text, remote=key == "api_budget_used_up")
         except Exception:
             pass
 
@@ -744,7 +761,8 @@ class ProactiveEngine:
                 self._deliver(
                     "Mo, Google login tokens are about to expire: "
                     + ", ".join(stale)
-                    + ". Say 'check my email' or 'check my calendar' to re-auth before they break."
+                    + ". Say 'check my email' or 'check my calendar' to re-auth before they break.",
+                    remote=True,
                 )
             else:
                 self._reset_cooldown("oauth_tokens")

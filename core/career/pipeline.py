@@ -98,8 +98,11 @@ _COST_PER_TARGET_JOB_USD = 0.04
 
 
 def run_estimate() -> float:
-    """What one prepare_batch run is expected to cost, in USD."""
-    return store.settings()["daily_target"] * _COST_PER_TARGET_JOB_USD
+    """What one prepare_batch run is expected to cost the API, in USD: nothing
+    when Claude Code answers on Mo's subscription."""
+    from core.career import claude
+    return 0.0 if claude.code_available() else \
+        store.settings()["daily_target"] * _COST_PER_TARGET_JOB_USD
 
 
 def prepare_batch() -> str:
@@ -131,8 +134,12 @@ def prepare_batch() -> str:
     field = [j for j in new if _in_field(j)]
     new = (_take_turns([j for j in field if j["tier"]], [j for j in field if not j["tier"]])
            + [j for j in new if not _in_field(j)])
-    # Scoring costs a Claude call per job: twice the target is enough to fill it.
-    new, passed_over = _within_reach(new, max(0, s["daily_target"] * 2 - len(waiting)))
+    # Scoring costs a Claude call per job. On the API, twice the target; on
+    # Claude Code it costs the budget nothing, and twice left a night of 10 at
+    # 3 ready (most jobs scored turned out mid or senior level), so four times.
+    from core.career import claude
+    reach = s["daily_target"] * (4 if claude.code_available() else 2)
+    new, passed_over = _within_reach(new, max(0, reach - len(waiting)))
     new = [_prepared(j) for j in new]
     scored = [{**app, **fit} for app, fit in zip(new, scorer.score_all(new, ptext))]
 
@@ -163,6 +170,10 @@ def prepare_batch() -> str:
             ready += 1
 
     extras = _nightly_extras(s)
+    from core.career import claude as _claude
+    if _claude.code_available() and _claude.last_code_error:
+        extras += (f" Claude Code wasn't answering ({_claude.last_code_error}), so tonight ran "
+                   "on the paid API: open Claude Code and log in.")
     big4 = sum(1 for a, d in drafted if d and a["tier"] == "big4")
     top = sum(1 for a, d in drafted if d and a["tier"] == "top")
     mode = "" if s["live"] and profile.has_cv() else " (practice mode: nothing will be sent)"
@@ -195,6 +206,11 @@ def _nightly_extras(s: dict, referrals: bool = True) -> str:
             found = refs.find(count=s["referrals_per_day"])
             if not found.startswith("No new"):
                 notes.append(found)
+    except Exception:
+        pass
+    try:
+        from core.career import gaps
+        gaps.refresh()          # so "what should I learn" answers at once
     except Exception:
         pass
     return " ".join(notes)
@@ -328,8 +344,24 @@ def approve(skip: "list[str] | None" = None, only: "list[str] | None" = None) ->
             approved += 1
     started = start_in_background(run_approved)
     tail = " Sending now in the background." if started else " A run is already going; they're queued."
+    if approved and _comet_restart_ahead():
+        tail += " Comet will close and reopen once to connect; your tabs come back."
     saved = f", {kept} saved for later" if kept else ""
     return f"Approved {approved}, skipped {skipped}{saved}.{tail if approved else ''}"
+
+
+def _comet_restart_ahead() -> bool:
+    """A live browser send is coming and Comet has no debugging port yet, so it
+    will be closed and reopened with one: Mo hears that before it happens."""
+    if not (store.settings()["live"] and profile.has_cv()):
+        return False
+    if not any(a["channel"] in appliers.BROWSER_CHANNELS for a in tracker.with_status("approved")):
+        return False
+    try:
+        from tools import comet_tool
+        return not comet_tool.cdp_alive()
+    except Exception:
+        return False
 
 
 # ── Send ─────────────────────────────────────────────────────────────────────
@@ -363,12 +395,65 @@ def run_approved(pause: bool = True) -> str:
     summary = _counts_text(counts) or "Nothing approved to send."
     if counts:
         _notify("Job applications: " + summary)
+    asked = "; ".join(f"'{_question(a)}' ({a.get('company') or '?'})"
+                      for a in blocked_questions()[:3])
+    if asked:
+        summary += f". A form asks: {asked} -- tell El Fager the answer and it tries again"
+    _ask_mo_what_stopped()
     return summary
+
+
+def _ask_mo_what_stopped() -> None:
+    """Each application waiting on Mo, asked on WhatsApp; his reply sends it on."""
+    try:
+        from core import ask_mo
+        for a in tracker.with_status("needs_you"):
+            where = f"{a.get('company') or 'The'} form for {a['title']}"
+            question = _question(a)
+            if question:
+                ask_mo.ask("job_form", question, f"{where} asks: \"{question}\" -- reply with "
+                           "your answer and I'll send it again.")
+            else:
+                note = a["events"][-1]["note"] if a.get("events") else "needs you"
+                ask_mo.ask("job_signin", a["id"], f"{where} stopped: {note[:160]}. Sort it out "
+                           "in Comet (sign in or make the account), then reply 'done' and "
+                           "I'll send it again.")
+    except Exception:
+        pass
+
+
+def blocked_questions() -> list[dict]:
+    """Applications a form stopped on a question the facts don't answer."""
+    return [a for a in tracker.with_status("needs_you")
+            if _question(a)]
+
+
+def _question(app: dict) -> str:
+    note = app["events"][-1]["note"] if app.get("events") else ""
+    if not note.upper().startswith("BLOCKED:") or "account" in note.lower():
+        return ""
+    return note.split(":", 1)[1].strip()
+
+
+def retry(only_questions: bool = False, question: str = "") -> str:
+    """Send again the applications that stopped for Mo: after he answered the
+    question a form asked (`question`: only the forms that asked it), or signed
+    in or made the account a site wanted."""
+    apps = blocked_questions() if only_questions or question else tracker.with_status("needs_you")
+    if question:
+        apps = [a for a in apps if _question(a) == question]
+    for a in apps:
+        tracker.update(a["id"], "approved", "retrying for Mo")
+    if not apps:
+        return "Nothing is waiting to be retried."
+    started = start_in_background(run_approved)
+    return (f"Retrying {len(apps)} application(s)"
+            + (" now." if started else " after the run that's going now."))
 
 
 def _counts_text(counts: dict) -> str:
     words = {"applied": "sent", "practice": "practice runs (not sent)",
-             "needs_you": "waiting for you in Comet", "failed": "failed"}
+             "needs_you": "waiting on you (a question or a sign-in)", "failed": "failed"}
     return ", ".join(f"{n} {words.get(k, k)}" for k, n in counts.items())
 
 
@@ -493,7 +578,36 @@ def status_text() -> str:
     missing = profile.missing_answers()
     if missing:
         lines.append("Answers still missing: " + ", ".join(missing))
+    lines.append(readiness())
     return "\n".join(lines)
+
+
+def readiness() -> str:
+    """What the hunt and the sending lean on, each in a word, so a problem shows
+    before a night or a Send runs into it. One quick call asks Twilio whether
+    the last WhatsApp alert arrived; the rest is local state."""
+    from pathlib import Path
+    from core.career import claude
+    from tools import comet_tool, gmail_tool
+    if not claude.code_available():
+        code = "not installed (the job hunt uses the paid API)"
+    elif claude.last_code_error:
+        code = f"last call failed ({claude.last_code_error}; the API stood in)"
+    else:
+        code = "ready (free, on your subscription)"
+    gmail = "connected" if gmail_tool.GMAIL_AVAILABLE and Path(gmail_tool.TOKEN_PATH).exists() \
+        else "not connected (email applications can't go)"
+    try:
+        comet = "connected" if comet_tool.cdp_alive() else \
+            "will close and reopen once when you press Send (your tabs come back)"
+    except Exception:
+        comet = "unknown"
+    try:
+        from core.notifier import get_notifier
+        whatsapp = get_notifier().delivery_problem() or "reaching you"
+    except Exception:
+        whatsapp = "unknown"
+    return f"Claude Code: {code}. Gmail: {gmail}. Comet: {comet}. WhatsApp: {whatsapp}."
 
 
 def _notify(text: str) -> None:

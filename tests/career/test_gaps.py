@@ -35,3 +35,14 @@ def test_an_index_claude_invents_is_ignored():
     with patch("core.career.claude.ask",
                return_value={"groups": [{"skill": "SAP", "items": [0, 1, 99, -1]}]}):
         assert "SAP (2 jobs)" in gaps.summary()
+
+
+def test_the_nightly_answer_is_kept_and_given_at_once():
+    """Through Claude Code the grouping took a minute: too long to wait by voice."""
+    for n in range(5):
+        _scored(n, ["SAP"])
+    with patch("core.career.claude.ask",
+               return_value={"groups": [{"skill": "SAP", "items": [0, 1]}]}) as ask:
+        gaps.refresh()
+        assert "SAP (2 jobs)" in gaps.summary()
+    assert ask.call_count == 1

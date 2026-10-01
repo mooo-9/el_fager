@@ -30,6 +30,9 @@ def batch_json() -> dict:
             "connected": bool(r.get("connected")),
             "role": r.get("role", ""), "note": r["note"], "message": r["message"],
         } for r in referrals.to_send()],
+        # Forms that stopped on a question: answered here, they're sent again.
+        "waiting": [{"id": a["id"], "title": a["title"], "company": a.get("company") or "",
+                     "question": pipeline._question(a)} for a in pipeline.blocked_questions()],
     }
 
 
@@ -59,6 +62,8 @@ __TOKENS__
    padding:12px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start}
  .app.off{opacity:.45}
  .app input{width:18px;height:18px;margin-top:3px;accent-color:var(--accent-ember);flex:0 0 auto}
+ .app input.answer{width:100%;height:auto;margin:8px 0;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--stroke-hairline);background:var(--surface-0);color:var(--text-hi);font:inherit}
  .main{flex:1;min-width:0}
  .t{font-size:15px;font-weight:600;overflow-wrap:anywhere}
  .t a{color:inherit;text-decoration:none}
@@ -89,6 +94,7 @@ __TOKENS__
 <div class="sub" id="sub"></div>
 <div id="banners"></div>
 <div class="chips" id="chips"></div>
+<div id="waiting"></div>
 <div id="list"></div>
 <div id="refs"></div>
 <div class="bar"><span class="msg" id="msg"></span>
@@ -107,7 +113,7 @@ async function load(){
  if(r.status===401){localStorage.removeItem('elf_token');$('head').textContent='Wrong token — reload to try again';return;}
  data=await r.json(); data.apps.forEach(a=>a.on=false); render();
 }
-const CH={email:'email with CV',wuzzuf:'Wuzzuf apply',linkedin:'LinkedIn Easy Apply',site:'form — you press Submit'};
+const CH={email:'email with CV',wuzzuf:'Wuzzuf apply',linkedin:'LinkedIn apply',site:'company form'};
 function render(){
  const n=data.apps.length;
  $('head').textContent=n?`${n} applications ready`:'Nothing to review';
@@ -132,6 +138,7 @@ function render(){
    <details><summary>Read the ${a.channel==='email'?'email':'cover letter'}</summary><pre>${esc(a.subject)}\n\n${esc(a.body)}</pre></details>
   </div></div>`).join(''):'<div class="empty">Nothing saved. Press RUN on Job hunt in the Command Center’s AUTOMATIONS; the batch is ready by morning.</div>';
  renderRefs();
+ renderWaiting();
  const k=data.apps.filter(a=>a.on).length;
  $('go').disabled=!k; $('go').textContent=k?`Send ${k}`:'Send';
  $('msg').textContent=n?`${n-k} stay saved`:'';
@@ -151,6 +158,26 @@ function renderRefs(){
     <button class="chip" onclick="markRef('${p.id}','sent')">Mark sent</button>
     <button class="chip" onclick="markRef('${p.id}','skipped')">Skip</button>
    </div></div></div>`).join(''):'';
+}
+function renderWaiting(){
+ const w=data.waiting||[];
+ $('waiting').innerHTML=w.length?`<h2>A form needs your answer</h2>
+  <div class="sub">Answer once: every form after gets it too, and these are sent again.</div>`+
+  w.map((q,i)=>`<div class="app"><div class="main">
+   <div class="t">${esc(q.question)}</div>
+   <div class="meta">${esc(q.title)} · ${esc(q.company)}</div>
+   <input class="answer" id="ans${i}" placeholder="Your answer">
+   <div class="row"><button class="chip" onclick="answer(${i})">Save and send again</button></div>
+  </div></div>`).join(''):'';
+}
+async function answer(i){
+ const q=data.waiting[i], a=$('ans'+i).value.trim();
+ if(!a){$('msg').textContent='Type the answer first';return;}
+ const r=await fetch('/api/jobs_answer',{method:'POST',
+   headers:{'Content-Type':'application/json','Authorization':'Bearer '+token()},
+   body:JSON.stringify({question:q.question,answer:a})});
+ const j=await r.json(); $('msg').textContent=j.result||j.error||'';
+ if(j.ok){data.waiting=data.waiting.filter(x=>x.question!==q.question);renderWaiting();}
 }
 async function copyText(id,field){
  const p=data.referrals.find(x=>x.id===id);

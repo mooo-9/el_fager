@@ -104,6 +104,30 @@ def _no_real_career_claude(monkeypatch):
         raise RuntimeError("real Claude calls from the job hunt are off in tests")
 
     monkeypatch.setattr(claude, "_get_client", blocked)
+    # Claude Code answers on Mo's real subscription: no test starts it. A test
+    # of that path gives _code_exe a fake and patches subprocess.run.
+    monkeypatch.setattr(claude, "_code_exe", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_ask_mo(monkeypatch, tmp_path):
+    """The questions waiting on Mo's WhatsApp reply live in data/ask_mo.json.
+    A test's question must never sit in his real queue."""
+    from core import ask_mo
+    monkeypatch.setattr(ask_mo, "_FILE", tmp_path / "ask_mo.json")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_whatsapp_alerts(monkeypatch):
+    """Phone alerts go to Mo's real WhatsApp through Twilio, and some modules
+    load .env (with the Twilio keys) when imported. No test may send one or
+    read his replies: here El Fager has no keys. A test of the sending gives
+    its own notifier keys and patches httpx."""
+    from core import notifier
+    for key in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM",
+                "WHATSAPP_PHONE"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(notifier, "_INSTANCE", None)     # rebuilt without the keys
 
 
 @pytest.fixture(autouse=True)

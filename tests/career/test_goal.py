@@ -261,7 +261,7 @@ class TestTools:
         from core.brain import _SLIM_TOOLS, _TOOL_GROUP_NAMES, _select_tools
         new = {"graduate_programmes", "find_referrals", "referral_list", "mark_referral",
                "import_linkedin_connections", "mark_followed_up", "evaluate_job",
-               "skill_gaps"}
+               "skill_gaps", "retry_applications"}
         assert new <= {t["name"] for t in _SLIM_TOOLS}
         assert new <= _TOOL_GROUP_NAMES["jobs"]
         assert "application_status" in {t["name"] for t in _select_tools("daily briefing please")}
@@ -326,3 +326,23 @@ class TestReviewPageReferrals:
                                               "Authorization": "Bearer k"})
         assert json.loads(urllib.request.urlopen(req, timeout=5).read())["ok"] is True
         assert referrals.to_send() == []
+
+    def test_a_form_question_is_answered_on_the_page_and_sent_again(self, server):
+        """Mo answers from his phone; the application that stopped goes again."""
+        from core.career import pipeline
+        tracker.add({"url": "https://v.com/1", "title": "Analyst", "company": "Valeo",
+                     "status": "approved", "channel": "site"})
+        tracker.update(tracker.job_id("https://v.com/1"), "needs_you", "BLOCKED: Driving licence?")
+        req = urllib.request.Request(f"{server}/api/jobs", headers={"Authorization": "Bearer k"})
+        data = json.loads(urllib.request.urlopen(req, timeout=5).read())
+        assert data["waiting"] == [{"id": tracker.job_id("https://v.com/1"), "title": "Analyst",
+                                    "company": "Valeo", "question": "Driving licence?"}]
+        req = urllib.request.Request(f"{server}/api/jobs_answer", method="POST",
+                                     data=json.dumps({"question": "Driving licence?",
+                                                      "answer": "Yes"}).encode(),
+                                     headers={"Content-Type": "application/json",
+                                              "Authorization": "Bearer k"})
+        with patch.object(pipeline, "start_in_background", return_value=True):
+            out = json.loads(urllib.request.urlopen(req, timeout=5).read())
+        assert out["ok"] and out["result"].endswith("Retrying 1 application(s) now.")
+        assert profile.load()["extra_answers"] == {"Driving licence?": "Yes"}

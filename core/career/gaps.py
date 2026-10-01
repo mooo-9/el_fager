@@ -1,7 +1,14 @@
 """What the jobs keep asking for that Mo's CV doesn't show (career-ops'
 upskill): every scored job's "missing" list, grouped into skills by one
-Claude call and counted here, so the counts are real."""
-from core.career import claude, profile, tracker
+Claude call and counted here, so the counts are real.
+
+The nightly hunt works it out (refresh()) and keeps it, so asking by voice
+answers at once: through Claude Code the grouping takes about a minute."""
+from datetime import datetime
+
+from core.career import claude, profile, store, tracker
+
+_FILE = "skill_gaps.json"
 
 _MIN_JOBS = 5
 _SHOWN = 8
@@ -27,6 +34,19 @@ _SYSTEM = (
 
 
 def summary() -> str:
+    """The one the last hunt worked out; worked out now when there's none yet."""
+    kept = store.load(_FILE, {})
+    return kept.get("text") or refresh()
+
+
+def refresh() -> str:
+    text = _work_out()
+    if not text.startswith(("Couldn't", "Only")):
+        store.save(_FILE, {"text": text, "at": datetime.now().isoformat(timespec="seconds")})
+    return text
+
+
+def _work_out() -> str:
     jobs = [a for a in tracker.all_apps().values() if "score" in a and a.get("missing")]
     if len(jobs) < _MIN_JOBS:
         return (f"Only {len(jobs)} scored jobs name a gap so far; ask again after a few "

@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pathlib import Path
 
 from core.career import (
     appliers, companies, pipeline, profile, scorer, sources, store, tracker,
@@ -74,8 +75,12 @@ class TestProfile:
         assert profile.set_answer("military status", "Exempted").startswith("Saved")
         assert "military_status" not in profile.missing_answers()
 
-    def test_an_unknown_question_is_refused(self):
-        assert profile.set_answer("favourite colour", "blue").startswith("Error")
+    def test_any_other_question_a_form_asks_is_kept_word_for_word(self):
+        """A form asking what the usual questions don't cover used to dead-end."""
+        assert profile.set_answer("Do you have a valid driving licence?", "Yes") == \
+            "Saved for application forms: Do you have a valid driving licence? = Yes"
+        assert profile.load()["extra_answers"] == {"Do you have a valid driving licence?": "Yes"}
+        assert profile.set_answer("x", " ").startswith("Error")
 
     def test_before_a_cv_the_profile_says_so(self):
         assert "No CV imported yet" in profile.as_text()
@@ -502,18 +507,30 @@ class TestAppliers:
                 "channel": channel, "draft": {"subject": "Application", "body": "COVER LETTER"},
                 **extra}
 
-    def test_a_site_form_is_left_for_mo_to_submit(self):
-        task = appliers.browser_task(self._app("site"), {"answers": {"military_status": "Exempted"}})
-        assert "do NOT press the final Submit" in task
+    def test_an_approved_site_form_is_filled_and_submitted(self):
+        """Mo approving it in the review is the go-ahead: El Fager does the rest."""
+        task = appliers.browser_task(self._app("site"), {
+            "answers": {"military_status": "Exempted"},
+            "extra_answers": {"Do you have a driving licence?": "Yes"}})
+        assert "and submit" in task and "do NOT press" not in task
         assert "Military status (exempted / completed / postponed): Exempted" in task
+        assert "- Do you have a driving licence?: Yes" in task
         assert "COVER LETTER" in task
+
+    def test_linkedin_without_easy_apply_goes_on_to_the_employers_form(self):
+        """Most LinkedIn jobs only link out; those used to stop as 'no Easy Apply'."""
+        task = appliers.browser_task(self._app("linkedin"), {"answers": {}})
+        assert "complete the application on the employer's site" in task
+        assert "BLOCKED: no Easy Apply" not in task
 
     def test_browser_results_map_to_statuses(self, tmp_path):
         cv = tmp_path / "cv.pdf"
         cv.write_bytes(b"%PDF")
         prof = {"cv_path": str(cv), "answers": {}}
         for said, status in [("SUBMITTED - done", "applied"),
-                             ("READY FOR REVIEW", "needs_you"),
+                             ("Application already submitted successfully as confirmed", "applied"),
+                             ("The application was not submitted successfully", "failed"),
+                             ("Application confirmed received.", "applied"),
                              ("BLOCKED: expected salary", "needs_you"),
                              ("Browser task completed (reached max steps).", "failed")]:
             with patch("core.agents.browser_agent.BrowserAgent.run", return_value=said) as run, \
@@ -523,12 +540,16 @@ class TestAppliers:
             assert run.call_args.kwargs["close_tab"] is True
             assert run.call_args.kwargs["telemetry_source"] == "career"
 
-    def test_a_site_form_stays_open_in_comet(self, tmp_path):
+    def test_the_form_steps_go_to_claude_code_and_the_tab_closes(self, tmp_path):
         cv = tmp_path / "cv.pdf"
         cv.write_bytes(b"%PDF")
-        with patch("core.agents.browser_agent.BrowserAgent.run", return_value="READY FOR REVIEW") as run:
+        with patch("core.agents.browser_agent.BrowserAgent.run", return_value="SUBMITTED") as run:
             appliers.apply_in_browser(self._app("site"), {"cv_path": str(cv), "answers": {}})
-        assert run.call_args.kwargs["close_tab"] is False
+        kw = run.call_args.kwargs
+        assert kw["close_tab"] is True and kw["telemetry_source"] == "career"
+        with patch("core.career.claude.ask", return_value='{"status": "done"}') as ask:
+            assert kw["ask_fn"]("SYSTEM", "PROMPT", "PNG") == '{"status": "done"}'
+        assert ask.call_args.kwargs["image"] == "PNG" and ask.call_args.args == ("PROMPT",)
 
     def test_email_goes_with_the_cv_attached(self, tmp_path):
         cv = tmp_path / "Mohamed CV.pdf"
@@ -604,6 +625,78 @@ class TestReplies:
         assert "INTERVIEW: Analyst at Valeo" in first
         assert second == "No new replies from companies you applied to."
         notify.assert_called_once()
+
+
+class TestSmoothness:
+    def test_status_says_whether_everything_the_hunt_needs_is_there(self):
+        from core.career import claude
+        with patch("tools.comet_tool.cdp_alive", return_value=False):
+            line = pipeline.readiness()
+        assert "Claude Code: not installed" in line   # the suite never finds claude.exe
+        assert "Comet: will close and reopen once" in line
+        claude.last_code_error = "Not logged in"
+        try:
+            with patch.object(claude, "_code_exe", return_value=Path("C:/x/claude.exe")), \
+                 patch("tools.comet_tool.cdp_alive", return_value=True):
+                assert "last call failed (Not logged in" in pipeline.readiness()
+        finally:
+            claude.last_code_error = ""
+        assert "Claude Code:" in pipeline.status_text()
+
+    def test_mo_hears_before_comet_restarts(self):
+        (a,) = _seed(_job("Analyst", "Valeo", "https://v.com/1"))
+        store.update_settings(live=True)
+        with patch.object(profile, "has_cv", return_value=True), \
+             patch.object(pipeline, "start_in_background", return_value=True), \
+             patch("tools.comet_tool.cdp_alive", return_value=False):
+            assert pipeline.approve().endswith("Comet will close and reopen once to connect; "
+                                               "your tabs come back.")
+
+
+class TestBlockedApplications:
+    """A form question El Fager can't answer, or a site wanting an account,
+    stops one application; Mo's answer or sign-in sends it again."""
+    def _blocked(self, url, note):
+        (a,) = _seed(_job("Analyst", "Valeo", url, status="approved"))
+        tracker.update(a["id"], "needs_you", note)
+        return a
+
+    def test_answering_the_question_saves_it_and_retries(self):
+        from tools import career_tool
+        a = self._blocked("https://v.com/1", "BLOCKED: Do you have a driving licence?")
+        b = self._blocked("https://v.com/2", "BLOCKED: needs an account on Workday")
+        assert "Do you have a driving licence?" in focus_line()
+        with patch.object(pipeline, "start_in_background", return_value=True) as start:
+            out = career_tool.set_application_answer("Do you have a driving licence?", "Yes")
+        assert out.endswith("Retrying 1 application(s) now.")
+        start.assert_called_once_with(pipeline.run_approved)
+        assert tracker.all_apps()[a["id"]]["status"] == "approved"
+        assert tracker.all_apps()[b["id"]]["status"] == "needs_you"
+
+    def test_the_phone_alert_says_the_question(self):
+        """'1 waiting on you' told Mo nothing he could answer from his phone."""
+        (a,) = _seed(_job("Analyst", "Valeo", "https://v.com/1", status="approved"))
+        store.update_settings(live=True)
+        with patch.object(profile, "has_cv", return_value=True), \
+             patch.object(appliers, "apply", return_value=("needs_you", "BLOCKED: Driving licence?")), \
+             patch.object(pipeline, "_notify"), \
+             patch.object(pipeline, "_ask_mo_what_stopped") as ask:
+            out = pipeline.run_approved(pause=False)
+        assert "A form asks: 'Driving licence?' (Valeo) -- tell El Fager the answer" in out
+        ask.assert_called_once()        # and on WhatsApp, where he can reply
+
+    def test_retry_after_signing_in_sends_them_all_again(self):
+        from tools import career_tool
+        self._blocked("https://v.com/2", "BLOCKED: needs an account on Workday")
+        assert "retry_applications" in focus_line()
+        with patch.object(pipeline, "start_in_background", return_value=True):
+            assert career_tool.retry_applications() == "Retrying 1 application(s) now."
+        assert career_tool.retry_applications() == "Nothing is waiting to be retried."
+
+
+def focus_line():
+    from core.career import focus
+    return focus.status_line()
 
 
 class TestReplyStatus:

@@ -156,13 +156,19 @@ def _cv_text(cv: Path) -> str:
 
 
 def set_answer(key: str, answer: str) -> str:
-    key = key.strip().lower().replace(" ", "_")
-    if key not in ANSWER_KEYS:
-        return f"Error: unknown question '{key}'. Known: {', '.join(ANSWER_KEYS)}."
+    """One of the usual questions, or any other a form asked (kept word for
+    word in "extra_answers" and given to every form from then on)."""
+    known = key.strip().lower().replace(" ", "_")
     profile = load()
-    profile.setdefault("answers", {})[key] = answer.strip()
+    if known in ANSWER_KEYS:
+        profile.setdefault("answers", {})[known] = answer.strip()
+        save(profile)
+        return f"Saved: {ANSWER_KEYS[known]} = {answer.strip()}"
+    if not key.strip() or not answer.strip():
+        return "Error: give both the question and the answer."
+    profile.setdefault("extra_answers", {})[key.strip()] = answer.strip()
     save(profile)
-    return f"Saved: {ANSWER_KEYS[key]} = {answer.strip()}"
+    return f"Saved for application forms: {key.strip()} = {answer.strip()}"
 
 
 def missing_answers(profile: "dict | None" = None) -> list[str]:

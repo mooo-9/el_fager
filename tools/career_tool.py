@@ -29,8 +29,8 @@ def prepare_applications() -> str:
     if not pipeline.start_in_background(pipeline.prepare_batch):
         return "The pipeline is already running -- the batch will be ready when it finishes."
     return ("Preparing today's batch in the background: searching the boards and the Big 4 "
-            "career sites, scoring each job, and drafting applications. It's done at half "
-            "price, so it usually takes under an hour and at most a day; "
+            "career sites, scoring each job, and drafting applications. Claude Code does the "
+            "thinking on your subscription, so it usually takes a few minutes; "
             f"review it at {pipeline.review_url()} when it's done.")
 
 
@@ -134,8 +134,23 @@ def import_cv(path: str, erp: bool = False) -> str:
 
 
 def set_application_answer(question: str, answer: str) -> str:
-    from core.career import profile
-    return profile.set_answer(question, answer)
+    """Saved for every form from now on; an application that stopped on a
+    question tries again with it."""
+    from core.career import pipeline, profile
+    saved = profile.set_answer(question, answer)
+    if saved.startswith("Error") or not pipeline.blocked_questions():
+        return saved
+    # A usual fact (salary, notice...) may be what any stopped form asked, in
+    # its own words; anything else unblocks only the forms that asked it.
+    known = question.strip().lower().replace(" ", "_") in profile.ANSWER_KEYS
+    retried = pipeline.retry(only_questions=True) if known else \
+        pipeline.retry(question=question.strip())
+    return f"{saved}. {retried}"
+
+
+def retry_applications() -> str:
+    from core.career import pipeline
+    return pipeline.retry()
 
 
 def interview_prep(company: str, role: str = "") -> str:

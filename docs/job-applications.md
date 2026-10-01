@@ -108,12 +108,42 @@ in the saved ones), tracking, referral drafting, the job sources.
 |----------|-----------------------------------|--------------|
 | email    | the posting gives an HR address   | Gmail from Mo's account, CV attached |
 | wuzzuf   | Wuzzuf posting                    | applied in Mo's signed-in Comet, tab closed after |
-| linkedin | LinkedIn posting                  | Easy Apply in Comet, max `linkedin_daily_cap`/day |
-| site     | anything else (company sites, Bayt, Forasna) | form filled in Comet and left open — **Mo presses Submit** |
+| linkedin | LinkedIn posting                  | Easy Apply, or its Apply button through to the employer's form, in Comet; max `linkedin_daily_cap`/day |
+| site     | anything else (company sites)     | the employer's form filled in **and submitted** in Comet |
+
+Mo ticking an application and pressing Send in the review is the go-ahead:
+El Fager fills every field, uploads the CV, pastes the letter, goes page by page
+and submits. Each form step is decided by Claude Code on his subscription (the
+API when it can't), from a screenshot plus the page's own field list, several
+fields a step (`core/agents/browser_agent.py`). A tab the Apply button opens is
+followed. Live test on a 2-page form: 7 steps, 45 s, every field right.
+
+When it can't finish, the application waits as `needs_you` and the job-hunt
+line says why:
+- **A question the facts don't answer** ("Do you hold a driving licence?"):
+  El Fager asks Mo; his answer is saved word for word for every form after
+  (`extra_answers`), and the application is retried by itself.
+- **A site that needs an account** or a sign-in: Mo makes it once in Comet, then
+  "retry my applications".
+- The question also shows on the review page ("A form needs your answer") with a
+  box to answer it from his phone.
+- **On WhatsApp** (`core/ask_mo.py`): the question, or the sign-in a site wants,
+  goes to Mo's WhatsApp; he replies there ("Yes", "done", or "skip") and El Fager
+  reads the reply from Twilio within a minute, day or night, saves it and sends
+  the application again. One question on his phone at a time. The same channel
+  carries everything else that waits on him: a stuck mission (his reply says how
+  to go on, or "stop"), and any background task's question (the brain's `ask_mo`
+  tool; his answer comes back to it as a new task).
+
+"Application status" ends with what the hunt leans on: Claude Code (ready, or
+why its last call failed), Gmail, and Comet (connected, or "will close and
+reopen once when you press Send"; Send says so too). "What should I learn" is
+worked out by the nightly hunt and answered at once. With Claude Code the hunt
+scores four times the daily target (twice on the API): a night of 10 went from
+3 ready to 9.
 
 Browser applications are spaced 45–120 s apart. Every send goes to the Trust
-Ledger. A form question the facts don't cover stops that application as
-`needs_you` instead of guessing.
+Ledger.
 
 ## Guard rails
 
@@ -127,8 +157,13 @@ Ledger. A form question the facts don't cover stops that application as
 - **Cost:** scoring, letters, interview prep and referral notes use
   `claude-sonnet-5`, and `claude-opus-5` when they're for the Big 4 or one of
   Mo's picks above (`core/career/claude.py`) -- except letters, which get Opus
-  for the Big 4 only. Scoring and letters go as Message Batches, at half price.
-  A run of 10 is about $0.40. Nothing is
+  for the Big 4 only. **Every question goes to Claude Code first**
+  (`claude.exe -p`, stripped to a bare model call, without the API key), so it
+  runs on Mo's Claude subscription and costs the $10 API budget nothing; a run of
+  10 takes minutes. The API answers only what Claude Code can't (not installed,
+  logged out, over the plan's limit, wrong-shaped answer): as Message Batches at
+  half price, about $0.40 for 10. Telemetry marks subscription calls
+  `"subscription": true` at $0. Nothing is
   scored or drafted until the CV is imported; programme deadlines are still
   checked. Logged under "career" in telemetry; the usage audit shows the spend.
 

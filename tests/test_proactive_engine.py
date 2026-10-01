@@ -102,11 +102,16 @@ class TestWatchesCatalogue:
 
 
 class TestRunChecksWindows:
-    def test_sleep_hours_run_nothing(self, engine):
+    def test_sleep_hours_run_nothing_but_a_waiting_whatsapp_answer(self, engine):
+        """Whatever waits on Mo's WhatsApp reply goes on as soon as he replies,
+        night or day; everything else sleeps."""
         mocks = _patch_all_checks(engine)
         _run_checks_at(engine, datetime(2026, 7, 1, 3, 0))  # 3 AM
-        for m in mocks.values():
-            m.assert_not_called()
+        for name, m in mocks.items():
+            if name == "_check_whatsapp_replies":
+                m.assert_called_once()
+            else:
+                m.assert_not_called()
 
     def test_always_on_checks_run_midday(self, engine):
         mocks = _patch_all_checks(engine)

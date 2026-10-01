@@ -4264,6 +4264,21 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "ask_mo",
+        "description": (
+            "Ask Mo a question on WhatsApp when you can't go on without him and he isn't "
+            "talking to you right now -- in a background task or a mission step. His reply "
+            "comes back to you as a new background task with his answer. One clear question; "
+            "never for things you can decide yourself, and never while he's talking to you "
+            "(then just ask him)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"question": {"type": "string"}},
+            "required": ["question"]
+        }
+    },
+    {
         "name": "send_notification",
         "description": "Send a message to Mo's WhatsApp via CallMeBot. Use when Mo asks to be pinged, notified, or sent a WhatsApp from El Fager.",
         "input_schema": {
@@ -4484,10 +4499,12 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "set_application_answer",
         "description": (
-            "Save Mo's answer to a question job application forms ask. question is one of: "
-            "phone, email, linkedin_url, military_status, graduation_year, gpa, "
-            "expected_salary, availability, english_level, willing_to_relocate. Use when he "
-            "says e.g. 'my military status is exempted'."
+            "Save Mo's answer to a question job application forms ask, used by every form "
+            "from then on. question is one of phone, email, linkedin_url, military_status, "
+            "graduation_year, gpa, expected_salary, availability, english_level, "
+            "willing_to_relocate -- or, for anything else a form asked, the form's question "
+            "word for word. An application that stopped on that question is retried. Use "
+            "when he says e.g. 'my military status is exempted'."
         ),
         "input_schema": {
             "type": "object",
@@ -4497,6 +4514,15 @@ TOOLS: list[dict[str, Any]] = [
             },
             "required": ["question", "answer"]
         }
+    },
+    {
+        "name": "retry_applications",
+        "description": (
+            "Send again the applications that stopped waiting for Mo -- a site needed him "
+            "to sign in or make an account, or a form asked something. Use when he says "
+            "'I signed in, try again' or 'retry my applications'."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
     },
     {
         "name": "application_settings",
@@ -4824,6 +4850,8 @@ _CORE_NAMES: frozenset[str] = frozenset({
     "screen_agent", "browser_agent",
     "research_agent", "file_agent", "health_agent",
     "run_skill", "list_skills", "learn_skill",
+    # Background tasks and mission steps carry no keywords, and may need Mo.
+    "ask_mo",
     # A yes can arrive in a turn with no history (typed turns reset after
     # each one), so the way to act on a staged action is always on offer.
     "confirm_staged_action", "cancel_staged_action",
@@ -4988,6 +5016,7 @@ _TOOL_GROUP_NAMES: dict[str, frozenset[str]] = {
         "import_cv", "set_application_answer", "application_settings", "interview_prep",
         "graduate_programmes", "find_referrals", "referral_list", "mark_referral",
         "import_linkedin_connections", "mark_followed_up", "evaluate_job", "skill_gaps",
+        "retry_applications",
     }),
 }
 
@@ -5117,7 +5146,7 @@ _GROUP_TRIGGERS: dict[str, list[str]] = {
         "refer me", "linkedin", "connections", "followed up", "follow up", "follow-up",
         "opening", "openings", "position", "positions", "posting", "career", "careers",
         "sap", "erp", "odoo", "what should i learn", "skills am i missing",
-        "skill gap", "skill gaps",
+        "skill gap", "skill gaps", "retry", "signed in", "is the job hunt ready",
     ],
 }
 
@@ -6681,6 +6710,14 @@ class Brain:
             elif name == "delete_autonomous_task":
                 from tools.autonomous_task_tool import delete_autonomous_task as _del_at
                 return _del_at(**tool_input)
+            elif name == "ask_mo":
+                from core import ask_mo
+                question = str(tool_input.get("question", "")).strip()
+                if not question:
+                    return "Error: no question."
+                ask_mo.ask("task", question, question)
+                return ("Asked Mo on WhatsApp. His answer will come back to you as a new "
+                        "task; stop here for now.")
             elif name == "send_notification":
                 from tools.notify_tool import send_notification as _send_notif
                 return _send_notif(**tool_input)
@@ -6712,7 +6749,7 @@ class Brain:
                           "application_settings", "interview_prep", "graduate_programmes",
                           "find_referrals", "referral_list", "mark_referral",
                           "import_linkedin_connections", "mark_followed_up",
-                          "evaluate_job", "skill_gaps"):
+                          "evaluate_job", "skill_gaps", "retry_applications"):
                 from tools import career_tool
                 return getattr(career_tool, name)(**tool_input)
             elif name == "learn_skill":
